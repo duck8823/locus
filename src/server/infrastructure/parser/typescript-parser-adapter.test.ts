@@ -99,6 +99,36 @@ export function keepValue(value: number): number {
     expect(diff.items).toEqual([]);
   });
 
+  it("detects token-boundary changes that alter operator semantics", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export function compute(a: number, b: number): number {
+  return a + ++b;
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export function compute(a: number, b: number): number {
+  return a+++b;
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("function::<root>::compute");
+    expect(diff.items[0]?.changeType).toBe("modified");
+    expect(diff.items[0]?.bodySummary).toBe("Body changed");
+  });
+
   it("supports only TypeScript snapshots", () => {
     const adapter = new TypeScriptParserAdapter();
 
@@ -407,6 +437,38 @@ export declare function fetchUser(id: number): Promise<User>;
 
     expect(diff.items).toHaveLength(1);
     expect(diff.items[0]?.symbolKey).toBe("function::<root>::fetchUser");
+    expect(diff.items[0]?.bodySummary).toBe("Signature changed");
+  });
+
+  it("tracks declaration-only class method signature changes", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      filePath: "types/repository.d.ts",
+      revision: "before",
+      content: `
+export declare abstract class Repository {
+  abstract findById(id: string): Promise<User>;
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      filePath: "types/repository.d.ts",
+      revision: "after",
+      content: `
+export declare abstract class Repository {
+  abstract findById(id: number): Promise<User>;
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("method::Repository::instance::findById");
+    expect(diff.items[0]?.changeType).toBe("modified");
     expect(diff.items[0]?.bodySummary).toBe("Signature changed");
   });
 

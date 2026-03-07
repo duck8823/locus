@@ -50,17 +50,17 @@ function isTriviaToken(token: ts.SyntaxKind): boolean {
 function normalizeCode(text: string): string {
   const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, text);
   let token = scanner.scan();
-  let normalized = "";
+  const normalizedTokens: string[] = [];
 
   while (token !== ts.SyntaxKind.EndOfFileToken) {
     if (!isTriviaToken(token)) {
-      normalized += scanner.getTokenText();
+      normalizedTokens.push(scanner.getTokenText());
     }
 
     token = scanner.scan();
   }
 
-  return normalized;
+  return JSON.stringify(normalizedTokens);
 }
 
 function toLineNumber(sourceFile: ts.SourceFile, position: number): number {
@@ -378,10 +378,6 @@ function collectClassMemberCallables(
 
   for (const member of classDeclaration.members) {
     if (ts.isMethodDeclaration(member)) {
-      if (!member.body) {
-        continue;
-      }
-
       const displayName = readName(member.name);
       const methodScope = inferMethodScope(member);
 
