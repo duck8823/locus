@@ -439,4 +439,42 @@ export declare function parseValue(input: number): string;
     expect(diff.items[0]?.changeType).toBe("modified");
     expect(diff.items[0]?.bodySummary).toBe("Signature changed");
   });
+
+  it("keeps existing overload implementations matched when a new overload is inserted", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      filePath: "types/format.d.ts",
+      revision: "before",
+      content: `
+export function format(input: string): string;
+export function format(input: number): string;
+export function format(input: string | number): string {
+  return String(input);
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      filePath: "types/format.d.ts",
+      revision: "after",
+      content: `
+export function format(input: boolean): string;
+export function format(input: string): string;
+export function format(input: number): string;
+export function format(input: string | number): string {
+  return String(input);
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.changeType).toBe("added");
+    expect(diff.items[0]?.symbolKey).toBe("function::<root>::format");
+    expect(diff.items[0]?.bodySummary).toBe("Callable added");
+    expect(typeof diff.items[0]?.metadata?.instanceDiscriminator).toBe("string");
+  });
 });
