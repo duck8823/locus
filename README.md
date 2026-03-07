@@ -81,10 +81,11 @@ All external integrations use OAuth, so Locus works with your existing authentic
 
 The repository now includes the first executable artifact: `@locus/semantic-diff`.
 
-- Callable-level semantic diffs for JavaScript / TypeScript
+- Temporary JS/TS spike for callable-level semantic diffs
 - Comment-only and whitespace-only changes are ignored
 - CLI output available in both human-readable and JSON formats
 - CI runs build + test on every push / pull request
+- Long-term parser / language selection remains intentionally open
 
 ### Quickstart
 
@@ -95,7 +96,7 @@ npm test
 npm run semantic-diff -- path/to/before.ts path/to/after.ts
 ```
 
-Product scope and architectural decisions live in [`docs/mvp.md`](docs/mvp.md) and [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md). Japanese counterparts are available in [`docs/mvp.ja.md`](docs/mvp.ja.md) and [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md).
+Product scope and architectural decisions live in [`docs/mvp.md`](docs/mvp.md) and [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md). They intentionally keep the long-term parser / language choice open. Japanese counterparts are available in [`docs/mvp.ja.md`](docs/mvp.ja.md) and [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md).
 
 ## Roadmap
 

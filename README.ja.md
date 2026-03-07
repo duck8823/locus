@@ -86,10 +86,11 @@ Locusは最初から拡張可能な設計で作られています：
 
 現在のリポジトリには、最初の実行可能な成果物として `@locus/semantic-diff` を追加しています。
 
-- JavaScript / TypeScript の関数・メソッド単位セマンティックDiff
+- callable 単位 semantic diff を検証するための暫定 JS/TS スパイク
 - コメントだけ・空白だけの変更は無視
 - CLI で人間向け表示と JSON 出力の両方を提供
 - push / pull request ごとに build + test を走らせる CI を追加
+- 長期的な parser / 言語選定は意図的に未確定のままにしている
 
 ### クイックスタート
 
@@ -100,7 +101,7 @@ npm test
 npm run semantic-diff -- path/to/before.ts path/to/after.ts
 ```
 
-MVP の境界と技術判断は [`docs/mvp.ja.md`](docs/mvp.ja.md) と [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md) にまとめています。英語版は [`docs/mvp.md`](docs/mvp.md) と [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md) です。
+MVP の境界と技術判断は [`docs/mvp.ja.md`](docs/mvp.ja.md) と [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md) にまとめています。どちらも長期的な parser / 言語選定を固定しない前提です。英語版は [`docs/mvp.md`](docs/mvp.md) と [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md) です。
 
 ## ロードマップ
 

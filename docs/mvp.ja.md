@@ -25,8 +25,9 @@
    - 変更ファイルと patch metadata を取得する
    - 後続の解析に使える snapshot 形式へ正規化する
 2. **Semantic diff v0**
-   - まずは JavaScript / TypeScript を対象にする
-   - 関数 / メソッド / 関数を値に持つ class property 単位で扱う
+   - 言語非依存の semantic change contract を定義する
+   - 最初の縦切り検証は 1 つの暫定 parser / 言語の組み合わせで行う
+   - 最初の検証では関数 / メソッド / 関数を値に持つ class property 単位で扱う
    - コメントだけ・空白だけの変更は無視する
 3. **Architecture context v0**
    - import とディレクトリ規約から dependency graph を構築する
@@ -38,18 +39,19 @@
 
 - GitLab / Bitbucket 対応
 - Confluence / Jira / Notion 連携
-- JS / TS を超える多言語パース
+- このフェーズでの多言語の本格対応
+- このフェーズで長期的な parser family や実装言語を固定すること
 - GitHub へのレビューコメント自動書き戻し
 - リアルタイム共同編集
 - 本番課金・テナンシー周りの設計
 
 ## 配送スライス
 
-### Slice 1 — Parser と semantic diff engine
+### Slice 1 — Semantic-diff contract と parser spike
 
-- before / after snapshot をパースする
-- 安定した change record を出力する
-- 主要な JS / TS callable 形式をテストでカバーする
+- parser adapter と semantic change contract を定義する
+- adapter 境界の背後に 1 つの暫定 probe 実装を置く
+- probe 言語の主要 callable 形式をテストでカバーする
 
 ### Slice 2 — GitHub adapter
 
@@ -77,7 +79,8 @@
 
 | リスク | なぜ重要か | 対策 |
 | --- | --- | --- |
-| パーサー網羅性が進捗を止める | 構文対応漏れは信頼をすぐに損なう | JS / TS から始め、parser interface を差し替え可能に保つ |
+| パーサー網羅性が進捗を止める | 構文対応漏れは信頼をすぐに損なう | まずは 1 つの暫定スパイクから始め、parser contract を差し替え可能に保つ |
+| 暫定スパイクが最終的な基盤選定だと誤解される | 多言語ロードマップに対して偶発的なロックインが起きる | parser / 実装言語を固定する前に ADR を必須にする |
 | Architecture map がノイジーになる | グラフが読みにくいとレビューで無視される | 最初は直近 neighbor のみ表示する |
 | GitHub ingestion と analysis が密結合する | 将来のコードホスト追加コストが高くなる | provider-agnostic な snapshot contract を保つ |
 | UI を早く作りすぎる | 見た目でコア信号の弱さをごまかしてしまう | UI より先に CLI と fixture で精度を検証する |

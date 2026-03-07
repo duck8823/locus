@@ -25,8 +25,9 @@ Help reviewers understand the *meaning* of a pull request faster than they can w
    - fetch changed files and patch metadata
    - normalize snapshots for downstream analysis
 2. **Semantic diff v0**
-   - JavaScript / TypeScript support first
-   - function / method / function-valued class property granularity
+   - define a language-agnostic semantic change contract
+   - validate the first vertical slice with one temporary parser / language combination
+   - function / method / function-valued class property granularity in the first validation slice
    - ignore comment-only and whitespace-only changes
 3. **Architecture context v0**
    - dependency graph from imports and directory heuristics
@@ -38,18 +39,19 @@ Help reviewers understand the *meaning* of a pull request faster than they can w
 
 - GitLab / Bitbucket support
 - Confluence / Jira / Notion integrations
-- Multi-language parsing beyond JS / TS
+- Multi-language production support in this phase
+- Locking the long-term parser family or implementation language in this phase
 - Writing review comments back to GitHub automatically
 - Real-time collaboration
 - Production billing / tenancy concerns
 
 ## Delivery Slices
 
-### Slice 1 — Parser and semantic diff engine
+### Slice 1 — Semantic-diff contract and parser spike
 
-- parse before / after snapshots
-- emit stable change records
-- cover major JS / TS callable forms with tests
+- define parser adapter and semantic change contracts
+- ship one temporary probe implementation behind the adapter boundary
+- cover major callable forms for the probe language with tests
 
 ### Slice 2 — GitHub adapter
 
@@ -77,7 +79,8 @@ Help reviewers understand the *meaning* of a pull request faster than they can w
 
 | Risk | Why it matters | Mitigation |
 | --- | --- | --- |
-| Parser coverage stalls progress | Missing syntax support erodes trust quickly | start with JS / TS, keep parser interface replaceable |
+| Parser coverage stalls progress | Missing syntax support erodes trust quickly | start with one temporary spike, keep parser contracts replaceable |
+| A temporary spike gets mistaken for the final platform choice | accidental lock-in would fight the multi-language roadmap | require ADR before locking parser or implementation language |
 | Architecture map becomes noisy | reviewers will ignore it if the graph is unreadable | show only immediate neighbors first |
 | GitHub ingestion and analysis get tightly coupled | future host support becomes expensive | keep a provider-agnostic snapshot contract |
 | Building UI too early hides core signal problems | polish can mask weak analysis | validate with CLI and fixtures before UI work |

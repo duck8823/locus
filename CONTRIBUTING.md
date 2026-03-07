@@ -9,6 +9,7 @@ Locus is still in the prototype phase. The current goal is to validate the revie
 - Ship thin vertical slices that prove product value.
 - Keep architectural decisions explicit in `docs/adr/`.
 - Prefer parser / integration abstractions over hard-coding provider details.
+- Treat the current parser / implementation language choice as provisional until an ADR explicitly fixes it.
 - Add tests for every semantic-diff regression you fix.
 
 ## Local Development
@@ -30,13 +31,14 @@ JSON output is available with `--json`.
 ## Repository Layout
 
 - `docs/` — product and architecture decisions
-- `packages/semantic-diff` — current executable prototype for function-level semantic diffs
+- `packages/semantic-diff` — current executable semantic-diff spike behind the parser contract
 
 ## Change Policy
 
 Open or update an ADR before making one of these changes:
 
 - replacing the parser strategy
+- locking the long-term parser family or implementation language
 - introducing a new persistence layer
 - coupling GitHub ingestion directly to the diff engine
 - broadening the MVP beyond the scope in `docs/mvp.md`

@@ -1,4 +1,4 @@
-# ADR 0001: プロトタイプ先行の MVP 提供
+# ADR 0001: parser / 言語選定を固定しないプロトタイプ先行 MVP 提供
 
 > English: [0001-prototype-first-mvp.md](0001-prototype-first-mvp.md)
 
@@ -7,74 +7,76 @@
 
 ## Context
 
-Locus には現在プロダクトの位置づけはあるものの、実行可能な成果物がありません。長期的な architecture-map プロダクトの余地を残しつつ、曖昧さを素早く減らせる進め方が必要です。
+Locus には現在プロダクトの位置づけはあるものの、実行可能な成果物がありません。長期的な多言語対応の方向性を残しつつ、曖昧さを素早く減らせる進め方が必要です。
 
 ## Decision
 
-まず **プロトタイプ先行の CLI package** を作り、JavaScript / TypeScript に対する semantic diff の価値を検証します。上流の連携はすべて明示的な adapter の背後に置きます。
+まず **プロトタイプ先行の CLI package** を作り、semantic-diff contract とレビュアー体験を早期に検証します。上流の連携はすべて明示的な adapter の背後に置きます。
 
-parser layer については **差し替え可能な parser interface** を採用し、最初の adapter は Babel の JS / TS parser で実装します。これにより UX をすぐに検証できます。semantic-diff contract が安定した後の多言語対応では、引き続き Tree-sitter を本命候補とします。
+このフェーズでは、長期的な parser family や実装言語を **固定しません**。最初の parser / 言語実装は、adapter 境界の背後にある **捨て可能なスパイク** として扱い、リポジトリ全体の設計判断とは見なしません。
 
 ## 検討した案
 
-### Option A — プロトタイプ先行の semantic-diff engine（採用）
+### Option A — parser / 言語の確定を遅らせたプロトタイプ先行 semantic-diff engine（採用）
 
 - まず CLI と test fixture を作る
-- コア信号の信頼性が確認できるまで GitHub / storage / UI は後回しにする
-- parser と provider の境界を最初から明示する
+- parser / provider の境界を最初から明示する
+- 最初の parser / 言語実装は、評価基準を満たすまで暫定扱いにする
 
-### Option B — 先にフル web application skeleton を作る
+### Option B — parser / 言語を先に固定したプロトタイプ先行
+
+- 同じく prototype は作るが、parser family と実装言語を最初から長期判断として宣言する
+- 短期的には説明が楽だが、多言語要件の根拠が揃う前にロックインを生む
+
+### Option C — 先にフル web application skeleton を作る
 
 - analysis engine を検証する前に web / API / DB を立ち上げる
 - 目に見える進捗は出るが、大半がプロダクト検証ではなく足場コードになる
-
-### Option C — GitHub App integration を先に作る
-
-- semantic grouping の品質を検証する前に PR ingestion と hosted flow を優先する
-- end-to-end の物語は強いが、analysis quality の弱さが見えにくい
 
 ## Rationale
 
 ### Signal までの速さ
 
-Option A は、Locus がレビュアーにとって本当に重要な変更を検出できるかを最短で見極められます。
+Option A でも、Locus がレビュアーにとって重要な変更を検出できるかを最短で見極められます。
+
+### 早すぎるロックインを避ける
+
+Locus は多言語対応を目指しています。精度や保守コストのデータがない段階で parser family や実装言語を固定するのは設計ミスです。
 
 ### 技術リスク
 
-このプロダクトで最も難しいのは CRUD や OAuth ではなく semantic grouping です。Option A はそこを正面から潰します。
+このプロダクトで最も難しいのは CRUD や OAuth ではなく semantic grouping です。Option A はそこを正面から潰しつつ、最初のスパイクを最終基盤だと誤認しない進め方です。
 
 ### 再利用性
 
-独立した engine は将来 web app、GitHub App、local CLI、IDE integration のいずれにも転用できます。UI 先行の土台には同じ移植性がありません。
-
-### 変更コスト
-
-parser と provider の contract を分離しておけば、semantic core を作り直さずに Tree-sitter、GitHub、GitLab、Bitbucket へ広げられます。
+明示的な contract を持つ standalone engine は、将来 web app、GitHub App、local CLI、IDE integration に転用できます。上位 contract が安定していれば、下位の捨て可能スパイクは許容できます。
 
 ## リスクと対策
 
 | リスク | 対策 |
 | --- | --- |
-| CLI 先行だとプロダクトらしさが弱く見える | 出力を安定化し fixture-driven にして、将来 UI がそのまま利用できる形にする |
-| Babel 先行が長期の Tree-sitter 方針からズレる | parser 出力を `collectCallables` / snapshot contract の背後に閉じ込める |
-| JS / TS に絞ることで判断が早すぎる | MVP 境界を明記し、信号品質が証明されるまで拡張しない |
+| 最初のスパイクが最終アーキテクチャだと誤解される | 暫定実装であることを文書化し、parser / 実装言語を固定する前に ADR を必須にする |
+| 捨て可能スパイクが非効率に見える | adapter 境界を狭く保ち、置き換えコストを制御する |
+| 初期言語の偏りがロードマップを歪める | 明示的な評価基準を先に置き、実 fixture が揃った段階で再評価する |
 
 ## 採用条件
 
-- semantic-diff record は provider 非依存のまま保つ。
+- semantic-diff record と snapshot contract は provider 非依存のまま保つ。
 - parser 固有ロジックが上位レイヤーへ漏れない。
-- prototype に構文形式を追加するたびに regression test を付ける。
+- 最初の実装を置き換えても上位 contract を変えずに済む。
+- 長期的な parser family や実装言語を固定する前に ADR 承認を必須にする。
+- 現在のスパイクに構文形式を追加するたびに regression test を付ける。
 
 ## 却下条件
 
 以下のいずれかが起きたら、この ADR は見直します。
 
-- prototype ではレビュアーが必要とする callable-level changes を表現できない
-- Babel parser の制約が JS / TS MVP を実質的に阻害する
-- 最初の顧客シグナルとして、analysis engine より hosted GitHub workflow が必須だと判断された
+- adapter 境界のせいで十分な速度で前進できない
+- 暫定スパイクではレビュアーが必要とする callable-level changes を表現できない
+- MVP を出すためには parser / 言語を早期固定する必要があるという根拠が揃う
 
 ## 次のアクション
 
-1. JS / TS semantic-diff CLI をテスト付きで提供する。
-2. GitHub ingestion が生成すべき PR snapshot contract を定義する。
+1. 現在のスパイクを adapter contract の背後に置いたまま fixture で検証する。
+2. 長期的な parser / 言語選定をする前に、評価基準を定義する。
 3. 実際の pull request 由来の fixture を追加し、UI を作る前に精度を評価する。
