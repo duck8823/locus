@@ -31,7 +31,7 @@ export interface SourceSnapshot {
   snapshotId: string
   fileId: string
   filePath: string
-  language: string | 'unknown'
+  language: string | null
   revision: 'before' | 'after'
   content: string
   metadata: {
@@ -46,7 +46,7 @@ export interface SourceSnapshot {
 
 ### 補足
 - `fileId` は、同一 file の before/after で安定している必要があります
-- `language` は ingestion 時点では `unknown` でもよく、後から解決してよいです
+- `language` は ingestion 時点では `null` でもよく、後から解決してよいです
 - rename detection により `filePath` が変わっても、review session 内の `fileId` は維持します
 - GitHub の pull request number のような provider 固有 ID は、core contract の形に直接入れず、`providerMetadata` か安定した string reference に写像して扱います
 
@@ -153,7 +153,7 @@ export interface UnsupportedFileAnalysis {
   reviewId: string
   fileId: string
   filePath: string
-  language: string | 'unknown'
+  language: string | null
   reason: 'unsupported_language' | 'parser_failed' | 'binary_file'
   detail?: string
 }

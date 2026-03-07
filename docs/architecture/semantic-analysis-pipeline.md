@@ -31,7 +31,7 @@ export interface SourceSnapshot {
   snapshotId: string
   fileId: string
   filePath: string
-  language: string | 'unknown'
+  language: string | null
   revision: 'before' | 'after'
   content: string
   metadata: {
@@ -46,7 +46,7 @@ export interface SourceSnapshot {
 
 ### Notes
 - `fileId` must stay stable across before/after versions of the same file.
-- `language` may be unknown at ingestion time and resolved later.
+- `language` may be `null` at ingestion time and resolved later.
 - rename detection may update `filePath`, but `fileId` should remain stable for the review session.
 - provider-specific identifiers such as GitHub pull request numbers should live under `providerMetadata` or be mapped into stable string references, not into the core contract shape.
 
@@ -153,7 +153,7 @@ export interface UnsupportedFileAnalysis {
   reviewId: string
   fileId: string
   filePath: string
-  language: string | 'unknown'
+  language: string | null
   reason: 'unsupported_language' | 'parser_failed' | 'binary_file'
   detail?: string
 }
