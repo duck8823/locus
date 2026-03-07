@@ -15,7 +15,7 @@
 関連ドキュメント:
 - [セマンティック分析パイプライン](semantic-analysis-pipeline.ja.md)
 
-## Runtime overview
+## Runtime 概要
 
 ```text
 Browser

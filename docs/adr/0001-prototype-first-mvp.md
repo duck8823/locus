@@ -20,6 +20,7 @@ Do **not** lock the long-term parser family or implementation language in this p
 ### Option A — Prototype-first implementation with deferred parser/language commitment (chosen)
 
 - Build the first vertical slice early
+- The first vertical slice means one web shell route backed by one parser-driven review flow end to end
 - Keep parser / provider boundaries explicit from day one
 - Treat the first parser / language implementation as provisional until the evaluation criteria are met
 

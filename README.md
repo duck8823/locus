@@ -84,7 +84,7 @@ This repository is currently **documentation-first**, but the implementation dir
 What is already decided:
 - the product surface is a **web application**
 - the first implementation target is **TypeScript + Next.js App Router**
-- the server follows a **layered architecture** inspired by the conceptual rules in the referenced Go standards
+- the server follows a **Go-inspired layered architecture** based on the conceptual rules captured in our ADRs
 - semantic analysis must cross a **parser adapter + common IR** boundary
 
 What is intentionally still open:

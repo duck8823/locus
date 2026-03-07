@@ -135,6 +135,8 @@ export interface SemanticChangeGroup {
 }
 ```
 
+`dominantLayer` は、architecture enrichment の段階でディレクトリ規約や将来の architecture metadata から推定できる場合にだけ埋めます。推定できないときは未設定のままにします。
+
 ### 初期 grouping 戦略
 - まず file 単位でまとめる
 - parser が container relationship を返せる場合は近接 symbol をマージしてよい

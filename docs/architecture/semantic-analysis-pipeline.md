@@ -135,6 +135,8 @@ export interface SemanticChangeGroup {
 }
 ```
 
+`dominantLayer` is filled by the architecture-enrichment stage when directory heuristics or future architecture metadata can infer a likely layer. It may stay undefined when that inference is unavailable.
+
 ### Initial grouping strategy
 - group by file first
 - optionally merge adjacent symbols when the parser reports a container relationship

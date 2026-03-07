@@ -39,6 +39,8 @@
    - semantic change list、detail pane、progress state を1画面にまとめる
    - Next.js App Router を用いた Backend for Frontend (BFF) 形式のサーバー面
 
+上の番号付き機能は MVP のスコープを示すもので、実装順ではありません。実装の進め方は後段の Delivery Slices で別に定義します。
+
 ### 対象外
 
 - GitLab / Bitbucket 対応

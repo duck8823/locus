@@ -39,6 +39,8 @@ Help reviewers understand the *meaning* of a pull request faster than they can w
    - semantic change list, detail pane, and progress state in one screen
    - Backend for Frontend (BFF)-style server surface using Next.js App Router
 
+The numbered capabilities above define MVP scope, not implementation order. The delivery sequence is defined separately below.
+
 ### Out of scope
 
 - GitLab / Bitbucket support
