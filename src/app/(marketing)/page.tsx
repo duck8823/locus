@@ -4,10 +4,9 @@ import { startDemoSessionAction } from "@/server/presentation/actions/start-demo
 import { startGitHubDemoSessionAction } from "@/server/presentation/actions/start-github-demo-session-action";
 
 export default function MarketingPage() {
-  const hasGitHubDemoConfig =
-    Boolean(process.env.LOCUS_GITHUB_DEMO_OWNER) &&
-    Boolean(process.env.LOCUS_GITHUB_DEMO_REPO) &&
-    Boolean(process.env.LOCUS_GITHUB_DEMO_PR_NUMBER);
+  const defaultGitHubOwner = process.env.LOCUS_GITHUB_DEMO_OWNER ?? "";
+  const defaultGitHubRepository = process.env.LOCUS_GITHUB_DEMO_REPO ?? "";
+  const defaultGitHubPullRequestNumber = process.env.LOCUS_GITHUB_DEMO_PR_NUMBER ?? "";
 
   return (
     <main className={styles.page}>
@@ -27,30 +26,53 @@ export default function MarketingPage() {
                   Open demo review workspace
                 </button>
               </form>
-              <form action={startGitHubDemoSessionAction}>
-                <button
-                  className={styles.secondaryButton}
-                  disabled={!hasGitHubDemoConfig}
-                  title={
-                    hasGitHubDemoConfig
-                      ? "Ingest configured GitHub PR snapshots into a review workspace."
-                      : "Set LOCUS_GITHUB_DEMO_OWNER / REPO / PR_NUMBER to enable."
-                  }
-                  type="submit"
-                >
-                  Open GitHub PR demo
-                </button>
-              </form>
               <Link className={styles.secondaryLink} href="/settings/connections">
                 View connection stubs
               </Link>
             </div>
-            {!hasGitHubDemoConfig ? (
-              <p className={styles.demoHint}>
-                Set <code>LOCUS_GITHUB_DEMO_OWNER</code>, <code>LOCUS_GITHUB_DEMO_REPO</code>, and{" "}
-                <code>LOCUS_GITHUB_DEMO_PR_NUMBER</code> to enable the live GitHub demo flow.
-              </p>
-            ) : null}
+            <form action={startGitHubDemoSessionAction} className={styles.githubDemoForm}>
+              <label className={styles.githubDemoField}>
+                <span>GitHub owner</span>
+                <input
+                  autoComplete="off"
+                  defaultValue={defaultGitHubOwner}
+                  name="owner"
+                  placeholder="octocat"
+                  required
+                  type="text"
+                />
+              </label>
+              <label className={styles.githubDemoField}>
+                <span>Repository</span>
+                <input
+                  autoComplete="off"
+                  defaultValue={defaultGitHubRepository}
+                  name="repository"
+                  placeholder="Hello-World"
+                  required
+                  type="text"
+                />
+              </label>
+              <label className={styles.githubDemoField}>
+                <span>PR number</span>
+                <input
+                  autoComplete="off"
+                  defaultValue={defaultGitHubPullRequestNumber}
+                  min={1}
+                  name="pullRequestNumber"
+                  placeholder="123"
+                  required
+                  type="number"
+                />
+              </label>
+              <button className={styles.secondaryButton} type="submit">
+                Open GitHub PR demo
+              </button>
+            </form>
+            <p className={styles.demoHint}>
+              Public repositories work without <code>GITHUB_TOKEN</code>, but rate limits are lower.
+              Environment variables are optional defaults.
+            </p>
           </div>
 
           <aside className={styles.sidePanel}>
@@ -97,7 +119,7 @@ export default function MarketingPage() {
             <p>
               The workspace is ready for fixture-backed review sessions and the
               first parser-driven semantic analysis slice. It can now ingest a
-              configured GitHub pull request into semantic groups.
+              GitHub pull request into semantic groups from form input.
             </p>
             <ul>
               <li>Review state persistence</li>

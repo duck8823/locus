@@ -8,14 +8,40 @@ import { getDependencies } from "@/server/composition/dependencies";
 
 const demoViewerCookieName = "locus-demo-viewer";
 
-function readRequiredEnvironmentVariable(name: string): string {
-  const value = process.env[name];
+function readTrimmedFormValue(formData: FormData, name: string): string {
+  const value = formData.get(name);
 
-  if (!value || value.trim().length === 0) {
-    throw new Error(`${name} must be set to use the GitHub pull request demo.`);
+  if (typeof value !== "string") {
+    return "";
   }
 
   return value.trim();
+}
+
+function readOptionalEnvironmentVariable(name: string): string {
+  const value = process.env[name];
+  return value?.trim() ?? "";
+}
+
+function readRequiredValue(params: {
+  formData: FormData;
+  formFieldName: string;
+  envName: string;
+  label: string;
+}): string {
+  const formValue = readTrimmedFormValue(params.formData, params.formFieldName);
+
+  if (formValue.length > 0) {
+    return formValue;
+  }
+
+  const envValue = readOptionalEnvironmentVariable(params.envName);
+
+  if (envValue.length > 0) {
+    return envValue;
+  }
+
+  throw new Error(`${params.label} is required.`);
 }
 
 function createReviewId(owner: string, repository: string, pullRequestNumber: number): string {
@@ -24,14 +50,29 @@ function createReviewId(owner: string, repository: string, pullRequestNumber: nu
     .replaceAll(/[^a-z0-9-]/g, "-");
 }
 
-export async function startGitHubDemoSessionAction(): Promise<void> {
-  const owner = readRequiredEnvironmentVariable("LOCUS_GITHUB_DEMO_OWNER");
-  const repository = readRequiredEnvironmentVariable("LOCUS_GITHUB_DEMO_REPO");
-  const pullRequestNumberRaw = readRequiredEnvironmentVariable("LOCUS_GITHUB_DEMO_PR_NUMBER");
+export async function startGitHubDemoSessionAction(formData: FormData): Promise<void> {
+  const owner = readRequiredValue({
+    formData,
+    formFieldName: "owner",
+    envName: "LOCUS_GITHUB_DEMO_OWNER",
+    label: "GitHub owner",
+  });
+  const repository = readRequiredValue({
+    formData,
+    formFieldName: "repository",
+    envName: "LOCUS_GITHUB_DEMO_REPO",
+    label: "GitHub repository",
+  });
+  const pullRequestNumberRaw = readRequiredValue({
+    formData,
+    formFieldName: "pullRequestNumber",
+    envName: "LOCUS_GITHUB_DEMO_PR_NUMBER",
+    label: "GitHub pull request number",
+  });
   const pullRequestNumber = Number.parseInt(pullRequestNumberRaw, 10);
 
   if (!Number.isInteger(pullRequestNumber) || pullRequestNumber <= 0) {
-    throw new Error("LOCUS_GITHUB_DEMO_PR_NUMBER must be a positive integer.");
+    throw new Error("GitHub pull request number must be a positive integer.");
   }
 
   const viewerName = "Demo reviewer";
