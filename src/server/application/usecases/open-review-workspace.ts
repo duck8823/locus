@@ -1,6 +1,7 @@
 import type { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
 import { createSeedReviewSession } from "@/server/application/services/review-session-seed";
+import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 
 export interface OpenReviewWorkspaceInput {
   reviewId: string;
@@ -10,6 +11,7 @@ export interface OpenReviewWorkspaceInput {
 
 export interface OpenReviewWorkspaceDependencies {
   reviewSessionRepository: ReviewSessionRepository;
+  parserAdapters: ParserAdapter[];
 }
 
 export class OpenReviewWorkspaceUseCase {
@@ -17,15 +19,16 @@ export class OpenReviewWorkspaceUseCase {
 
   async execute({ reviewId, viewerName, openedAt }: OpenReviewWorkspaceInput): Promise<ReviewSession> {
     const timestamp = openedAt ?? new Date().toISOString();
-    const { reviewSessionRepository } = this.dependencies;
+    const { reviewSessionRepository, parserAdapters } = this.dependencies;
 
     let reviewSession = await reviewSessionRepository.findByReviewId(reviewId);
 
     if (!reviewSession) {
-      reviewSession = createSeedReviewSession({
+      reviewSession = await createSeedReviewSession({
         reviewId,
         viewerName,
         createdAt: timestamp,
+        parserAdapters,
       });
     }
 

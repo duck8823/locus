@@ -1,56 +1,94 @@
+import { analyzeSourceSnapshots } from "@/server/application/services/analyze-source-snapshots";
+import { createSeedSourceSnapshotPairs } from "@/server/application/services/seed-source-snapshot-fixture";
+import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 import { ReviewSession, type ReviewGroupRecord } from "@/server/domain/entities/review-session";
+import type { SemanticChange, SemanticChangeGroup } from "@/server/domain/value-objects/semantic-change";
 
 export interface CreateSeedReviewSessionInput {
   reviewId: string;
   viewerName: string;
   createdAt: string;
+  parserAdapters: ParserAdapter[];
 }
 
-function createSeedGroups(): ReviewGroupRecord[] {
-  return [
-    {
-      groupId: "workspace-route",
-      title: "Review workspace route",
-      summary: "Initial App Router page that renders the review workspace shell.",
-      filePath: "src/app/(workspace)/reviews/[reviewId]/page.tsx",
-      status: "in_progress",
-      upstream: ["route:workspace-review-page", "state:viewer-cookie"],
-      downstream: ["usecase:open-review-workspace", "dto:review-workspace"],
-    },
-    {
-      groupId: "review-session-domain",
-      title: "Review session aggregate",
-      summary: "Domain state that tracks selection, progress, and reopenable review metadata.",
-      filePath: "src/server/domain/entities/review-session.ts",
-      status: "unread",
-      upstream: ["usecase:open-review-workspace", "usecase:mark-review-group-status"],
-      downstream: ["repository:review-session", "dto:review-workspace"],
-    },
-    {
-      groupId: "file-repository",
-      title: "File-backed review session repository",
-      summary: "Temporary persistence boundary used to reopen the first workspace without losing state.",
-      filePath: "src/server/infrastructure/db/file-review-session-repository.ts",
-      status: "unread",
-      upstream: ["port:review-session-repository", "composition:dependencies"],
-      downstream: ["storage:.locus-data/review-sessions", "usecase:open-review-workspace"],
-    },
-  ];
+function summarizeSemanticChanges(changes: SemanticChange[]): string {
+  if (changes.length === 0) {
+    return "No semantic changes detected.";
+  }
+
+  const labels = changes
+    .slice(0, 3)
+    .map((change) => `${change.symbol.displayName} (${change.change.type})`)
+    .join(", ");
+
+  if (changes.length <= 3) {
+    return labels;
+  }
+
+  return `${labels}, +${changes.length - 3} more`;
 }
 
-export function createSeedReviewSession({
+function toReviewGroupRecord(
+  group: SemanticChangeGroup,
+  semanticChanges: SemanticChange[],
+): ReviewGroupRecord {
+  const groupedChanges = semanticChanges.filter((change) =>
+    group.semanticChangeIds.includes(change.semanticChangeId),
+  );
+  const firstChange = groupedChanges[0];
+  const filePath = firstChange?.after?.filePath ?? firstChange?.before?.filePath ?? group.fileIds[0] ?? "unknown";
+  const outgoing = new Set<string>();
+  const incoming = new Set<string>();
+
+  for (const semanticChange of groupedChanges) {
+    for (const nodeId of semanticChange.architecture?.outgoingNodeIds ?? []) {
+      outgoing.add(nodeId);
+    }
+
+    for (const nodeId of semanticChange.architecture?.incomingNodeIds ?? []) {
+      incoming.add(nodeId);
+    }
+  }
+
+  return {
+    groupId: group.groupId,
+    title: group.title,
+    summary: summarizeSemanticChanges(groupedChanges),
+    filePath,
+    status: group.status,
+    upstream: [...incoming],
+    downstream: [...outgoing],
+    dominantLayer: group.dominantLayer,
+    fileIds: [...group.fileIds],
+    semanticChangeIds: [...group.semanticChangeIds],
+  };
+}
+
+export async function createSeedReviewSession({
   reviewId,
   viewerName,
   createdAt,
-}: CreateSeedReviewSessionInput): ReviewSession {
+  parserAdapters,
+}: CreateSeedReviewSessionInput): Promise<ReviewSession> {
+  const analysisResult = await analyzeSourceSnapshots({
+    reviewId,
+    snapshotPairs: createSeedSourceSnapshotPairs(reviewId),
+    parserAdapters,
+  });
+  const groups = analysisResult.groups.map((group) =>
+    toReviewGroupRecord(group, analysisResult.semanticChanges),
+  );
+
   return ReviewSession.create({
     reviewId,
-    title: "Demo review workspace",
+    title: "Demo semantic review workspace",
     repositoryName: "duck8823/locus",
-    branchLabel: "feat/web-shell-skeleton",
+    branchLabel: "feat/semantic-analysis-spike",
     viewerName,
-    groups: createSeedGroups(),
-    selectedGroupId: "workspace-route",
+    groups,
+    semanticChanges: analysisResult.semanticChanges,
+    unsupportedFileAnalyses: analysisResult.unsupportedFiles,
+    selectedGroupId: groups[0]?.groupId ?? null,
     lastOpenedAt: createdAt,
     lastReanalyzeRequestedAt: null,
   });

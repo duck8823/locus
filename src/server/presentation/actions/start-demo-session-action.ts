@@ -19,8 +19,8 @@ export async function startDemoSessionAction(): Promise<void> {
     maxAge: 60 * 60 * 24 * 30,
   });
 
-  const { reviewSessionRepository } = getDependencies();
-  const useCase = new OpenReviewWorkspaceUseCase({ reviewSessionRepository });
+  const { reviewSessionRepository, parserAdapters } = getDependencies();
+  const useCase = new OpenReviewWorkspaceUseCase({ reviewSessionRepository, parserAdapters });
   await useCase.execute({ reviewId: demoReviewId, viewerName });
 
   redirect(`/reviews/${demoReviewId}`);

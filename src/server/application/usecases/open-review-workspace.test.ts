@@ -4,6 +4,7 @@ import { SelectReviewGroupUseCase } from "@/server/application/usecases/select-r
 import { MarkReviewGroupStatusUseCase } from "@/server/application/usecases/mark-review-group-status";
 import { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
+import { DeterministicSeedParserAdapter } from "@/server/application/testing/deterministic-seed-parser-adapter";
 
 class InMemoryReviewSessionRepository implements ReviewSessionRepository {
   private readonly store = new Map<string, ReturnType<ReviewSession["toRecord"]>>();
@@ -21,7 +22,10 @@ class InMemoryReviewSessionRepository implements ReviewSessionRepository {
 describe("OpenReviewWorkspaceUseCase", () => {
   it("seeds the first workspace when it does not exist", async () => {
     const repository = new InMemoryReviewSessionRepository();
-    const useCase = new OpenReviewWorkspaceUseCase({ reviewSessionRepository: repository });
+    const useCase = new OpenReviewWorkspaceUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new DeterministicSeedParserAdapter()],
+    });
 
     const session = await useCase.execute({
       reviewId: "demo-review",
@@ -29,13 +33,19 @@ describe("OpenReviewWorkspaceUseCase", () => {
       openedAt: "2026-03-07T00:00:00.000Z",
     });
 
-    expect(session.toRecord().groups).toHaveLength(3);
-    expect(session.toRecord().selectedGroupId).toBe("workspace-route");
+    const record = session.toRecord();
+    expect(record.groups.length).toBeGreaterThan(0);
+    expect(record.selectedGroupId).toBe(record.groups[0]?.groupId ?? null);
+    expect(record.semanticChanges?.length ?? 0).toBeGreaterThan(0);
+    expect(record.unsupportedFileAnalyses).toHaveLength(1);
   });
 
   it("persists selection and status across reopen", async () => {
     const repository = new InMemoryReviewSessionRepository();
-    const openUseCase = new OpenReviewWorkspaceUseCase({ reviewSessionRepository: repository });
+    const openUseCase = new OpenReviewWorkspaceUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new DeterministicSeedParserAdapter()],
+    });
     const selectUseCase = new SelectReviewGroupUseCase({ reviewSessionRepository: repository });
     const markUseCase = new MarkReviewGroupStatusUseCase({ reviewSessionRepository: repository });
 
@@ -44,10 +54,15 @@ describe("OpenReviewWorkspaceUseCase", () => {
       viewerName: "Demo reviewer",
       openedAt: "2026-03-07T00:00:00.000Z",
     });
-    await selectUseCase.execute({ reviewId: "demo-review", groupId: "file-repository" });
+    const seeded = await repository.findByReviewId("demo-review");
+    const groupId = seeded?.toRecord().groups[1]?.groupId ?? seeded?.toRecord().groups[0]?.groupId;
+
+    expect(groupId).toBeDefined();
+
+    await selectUseCase.execute({ reviewId: "demo-review", groupId: groupId! });
     await markUseCase.execute({
       reviewId: "demo-review",
-      groupId: "file-repository",
+      groupId: groupId!,
       status: "reviewed",
     });
 
@@ -58,10 +73,8 @@ describe("OpenReviewWorkspaceUseCase", () => {
     });
 
     const record = reopened.toRecord();
-    expect(record.selectedGroupId).toBe("file-repository");
-    expect(record.groups.find((group) => group.groupId === "file-repository")?.status).toBe(
-      "reviewed",
-    );
+    expect(record.selectedGroupId).toBe(groupId);
+    expect(record.groups.find((group) => group.groupId === groupId)?.status).toBe("reviewed");
     expect(record.lastOpenedAt).toBe("2026-03-07T01:30:00.000Z");
   });
 });
