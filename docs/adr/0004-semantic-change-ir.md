@@ -51,7 +51,7 @@ The IR must be able to represent at least:
 
 ## Parser adapter contract
 
-The following types are the **minimum canonical adapter contract**. The pipeline document may add persistence-oriented fields around them, but higher layers should remain compatible with this core shape.
+The following types are the **minimum canonical adapter contract**. The pipeline document may add persistence-oriented fields around them, but higher layers should remain compatible with this core shape. See [Semantic Analysis Pipeline](../architecture/semantic-analysis-pipeline.md) for those pipeline-level extensions.
 
 ```ts
 export interface SourceSnapshot {

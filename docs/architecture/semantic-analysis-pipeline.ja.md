@@ -206,10 +206,13 @@ parser-native な raw AST blob は、デフォルトでは main relational table
 - 後段の import reference 構築に必要な構造を取れる
 - coverage 不足時に明示的に fail できる
 
-## 推奨する実装順序
+## 実装順メモ
 
+文書横断の正本となる実装順は [`../mvp.ja.md`](../mvp.ja.md) に置きます。特に Slice 1 で Web shell と server boundary を先に固めてから、parser spike に進みます。
+
+そのうえで、Slice 2 と Slice 3 の内部順序としては次が妥当です。
 1. `SourceSnapshot` と `SemanticChange` の型を定義する
 2. それらに対する fixture-driven test を先に作る
 3. `ParserAdapter` を 1 つ実装する
 4. `SemanticChangeGroup` と `UnsupportedFileAnalysis` を保存する
-5. grouped DTO を Web workspace に流し込む
+5. Slice 1 で作った Web workspace フローへ grouped DTO を流し込む

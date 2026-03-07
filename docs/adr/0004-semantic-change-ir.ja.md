@@ -51,7 +51,7 @@ IR は少なくとも次を表現できる必要があります。
 
 ## Parser adapter contract
 
-以下の型を **最小の正本 adapter contract** とします。pipeline 文書では persistence 向けの追加フィールドを持たせてもよいですが、上位レイヤーはこの core shape と互換である必要があります。
+以下の型を **最小の正本 adapter contract** とします。pipeline 文書では persistence 向けの追加フィールドを持たせてもよいですが、上位レイヤーはこの core shape と互換である必要があります。pipeline レベルの拡張は [セマンティック分析パイプライン](../architecture/semantic-analysis-pipeline.ja.md) を参照してください。
 
 ```ts
 export interface SourceSnapshot {

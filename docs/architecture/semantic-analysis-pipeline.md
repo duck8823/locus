@@ -206,10 +206,13 @@ A candidate parser/language combination is acceptable for the first spike if it 
 - expose enough structure to build import references later
 - fail explicitly when coverage is missing
 
-## Suggested first implementation order
+## Delivery-order note
 
+The canonical cross-document implementation order lives in [`../mvp.md`](../mvp.md). In particular, Slice 1 establishes the web shell and server boundaries before parser-spike work begins.
+
+Within Slice 2 and Slice 3, a reasonable sub-order is:
 1. Define `SourceSnapshot` and `SemanticChange` types.
 2. Implement fixture-driven tests against those types.
 3. Add one `ParserAdapter` implementation.
 4. Persist `SemanticChangeGroup` and `UnsupportedFileAnalysis`.
-5. Feed the grouped DTOs into the web workspace.
+5. Feed the grouped DTOs into the web workspace flow created in Slice 1.
