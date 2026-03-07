@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
-import type { SourceSnapshotPair } from "@/server/domain/value-objects/source-snapshot";
+import type { SourceSnapshot, SourceSnapshotPair } from "@/server/domain/value-objects/source-snapshot";
 import type {
   SemanticChange,
   SemanticChangeGroup,
@@ -45,13 +45,21 @@ function inferDominantLayer(filePath: string): string | undefined {
 
 function selectAdapter(
   adapters: ParserAdapter[],
-  representative: SourceSnapshotPair["before"] | SourceSnapshotPair["after"],
+  snapshots: Array<SourceSnapshot | null>,
 ): ParserAdapter | null {
-  if (!representative) {
-    return null;
+  for (const snapshot of snapshots) {
+    if (!snapshot) {
+      continue;
+    }
+
+    const adapter = adapters.find((candidate) => candidate.supports(snapshot));
+
+    if (adapter) {
+      return adapter;
+    }
   }
 
-  return adapters.find((adapter) => adapter.supports(representative)) ?? null;
+  return null;
 }
 
 export async function analyzeSourceSnapshots({
@@ -77,7 +85,7 @@ export async function analyzeSourceSnapshots({
       continue;
     }
 
-    const adapter = selectAdapter(parserAdapters, representative);
+    const adapter = selectAdapter(parserAdapters, [pair.after, pair.before]);
 
     if (!adapter) {
       unsupportedFiles.push({
@@ -91,8 +99,22 @@ export async function analyzeSourceSnapshots({
     }
 
     try {
-      const before = pair.before ? await adapter.parse(pair.before) : null;
-      const after = pair.after ? await adapter.parse(pair.after) : null;
+      const before =
+        pair.before && adapter.supports(pair.before) ? await adapter.parse(pair.before) : null;
+      const after = pair.after && adapter.supports(pair.after) ? await adapter.parse(pair.after) : null;
+
+      if (!before && !after) {
+        unsupportedFiles.push({
+          reviewId,
+          fileId: pair.fileId,
+          filePath: pair.filePath,
+          language: representative.language,
+          reason: "unsupported_language",
+          detail: `No supported revision for adapter ${adapter.adapterName}.`,
+        });
+        continue;
+      }
+
       const diff = await adapter.diff({ before, after });
 
       for (const item of diff.items) {

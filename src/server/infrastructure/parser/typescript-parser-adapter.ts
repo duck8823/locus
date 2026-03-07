@@ -204,6 +204,34 @@ function isCallableInitializer(
   return !!initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer));
 }
 
+function resolveCallableExpression(
+  expression: ts.Expression | undefined,
+): ts.ArrowFunction | ts.FunctionExpression | null {
+  if (!expression) {
+    return null;
+  }
+
+  let current: ts.Expression = expression;
+
+  while (true) {
+    if (isCallableInitializer(current)) {
+      return current;
+    }
+
+    if (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) || ts.isTypeAssertionExpression(current)) {
+      current = current.expression;
+      continue;
+    }
+
+    if (ts.isSatisfiesExpression(current)) {
+      current = current.expression;
+      continue;
+    }
+
+    return null;
+  }
+}
+
 function hasDefaultModifier(node: { modifiers?: ts.NodeArray<ts.ModifierLike> }): boolean {
   return node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword) ?? false;
 }
@@ -283,7 +311,9 @@ function collectVariableCallableDeclarations(
   const callables: ParsedCallable[] = [];
 
   for (const declaration of statement.declarationList.declarations) {
-    if (!isCallableInitializer(declaration.initializer)) {
+    const callableInitializer = resolveCallableExpression(declaration.initializer);
+
+    if (!callableInitializer) {
       continue;
     }
 
@@ -299,15 +329,44 @@ function collectVariableCallableDeclarations(
         kind: "function",
         displayName,
         containerPath,
-        parameters: declaration.initializer.parameters,
-        signatureText: extractSignatureText(sourceFile, declaration, declaration.initializer.body),
-        body: declaration.initializer.body,
+        parameters: callableInitializer.parameters,
+        signatureText: extractSignatureText(sourceFile, declaration, callableInitializer.body),
+        body: callableInitializer.body,
         regionNode: declaration,
       }),
     );
   }
 
   return callables;
+}
+
+function collectExportAssignmentCallable(
+  sourceFile: ts.SourceFile,
+  statement: ts.ExportAssignment,
+  containerPath: string[],
+): ParsedCallable[] {
+  if (statement.isExportEquals) {
+    return [];
+  }
+
+  const callableExpression = resolveCallableExpression(statement.expression);
+
+  if (!callableExpression) {
+    return [];
+  }
+
+  return [
+    createCallable({
+      sourceFile,
+      kind: "function",
+      displayName: "default",
+      containerPath,
+      parameters: callableExpression.parameters,
+      signatureText: extractSignatureText(sourceFile, callableExpression, callableExpression.body),
+      body: callableExpression.body,
+      regionNode: statement,
+    }),
+  ];
 }
 
 function collectClassMemberCallables(
@@ -415,6 +474,10 @@ function collectCallablesFromStatement(
 
   if (ts.isVariableStatement(statement)) {
     return collectVariableCallableDeclarations(sourceFile, statement, containerPath);
+  }
+
+  if (ts.isExportAssignment(statement)) {
+    return collectExportAssignmentCallable(sourceFile, statement, containerPath);
   }
 
   if (ts.isModuleDeclaration(statement)) {

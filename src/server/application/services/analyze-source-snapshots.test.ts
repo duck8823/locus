@@ -41,6 +41,65 @@ class FailingParserAdapter implements ParserAdapter {
   }
 }
 
+class TransitionAwareParserAdapter implements ParserAdapter {
+  readonly language = "typescript";
+  readonly adapterName = "transition-aware-adapter";
+
+  supports(file: SourceSnapshot): boolean {
+    return file.language === "typescript";
+  }
+
+  async parse(snapshot: SourceSnapshot): Promise<ParsedSnapshot> {
+    return {
+      snapshotId: snapshot.snapshotId,
+      adapterName: this.adapterName,
+      language: this.language,
+      raw: snapshot,
+    };
+  }
+
+  async diff(input: { before: ParsedSnapshot | null; after: ParsedSnapshot | null }): Promise<ParserDiffResult> {
+    const beforeSnapshot = input.before?.raw as SourceSnapshot | undefined;
+    const afterSnapshot = input.after?.raw as SourceSnapshot | undefined;
+
+    if (beforeSnapshot && !afterSnapshot) {
+      return {
+        adapterName: this.adapterName,
+        language: this.language,
+        items: [
+          {
+            symbolKey: "function::<root>::migratedCallable",
+            displayName: "migratedCallable",
+            kind: "function",
+            changeType: "removed",
+            beforeRegion: {
+              filePath: beforeSnapshot.filePath,
+              startLine: 1,
+              endLine: 3,
+            },
+          },
+        ],
+      };
+    }
+
+    return {
+      adapterName: this.adapterName,
+      language: this.language,
+      items: [],
+    };
+  }
+
+  capabilities(): ParserCapabilities {
+    return {
+      callableDiff: true,
+      importGraph: false,
+      renameDetection: false,
+      moveDetection: false,
+      typeAwareSummary: false,
+    };
+  }
+}
+
 describe("analyzeSourceSnapshots", () => {
   it("creates semantic changes, groups, and unsupported file records", async () => {
     const result = await analyzeSourceSnapshots({
@@ -96,5 +155,42 @@ describe("analyzeSourceSnapshots", () => {
         reviewId: "demo-review",
       },
     ]);
+  });
+
+  it("keeps removals when a file transitions from supported to unsupported language", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "migration-review",
+      snapshotPairs: [
+        {
+          fileId: "file-language-migration",
+          filePath: "src/migrated-file.ts",
+          before: {
+            snapshotId: "migration-review:file-language-migration:before",
+            fileId: "file-language-migration",
+            filePath: "src/migrated-file.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export function migratedCallable() { return 1; }",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "migration-review:file-language-migration:after",
+            fileId: "file-language-migration",
+            filePath: "docs/migrated-file.md",
+            language: "markdown",
+            revision: "after",
+            content: "# migrated",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new TransitionAwareParserAdapter()],
+    });
+
+    expect(result.semanticChanges).toHaveLength(1);
+    expect(result.semanticChanges[0]?.change.type).toBe("removed");
+    expect(result.groups).toHaveLength(1);
+    expect(result.groups[0]?.fileIds).toEqual(["file-language-migration"]);
+    expect(result.unsupportedFiles).toEqual([]);
   });
 });

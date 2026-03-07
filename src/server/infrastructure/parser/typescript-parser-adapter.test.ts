@@ -320,4 +320,33 @@ export default class {
     expect(diff.items[0]?.symbolKey).toBe("method::default::instance::execute");
     expect(diff.items[0]?.changeType).toBe("modified");
   });
+
+  it("tracks callable default export assignments", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export default (() => {
+  return 1;
+}) as () => number;
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export default (() => {
+  return 2;
+}) as () => number;
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("function::<root>::default");
+    expect(diff.items[0]?.changeType).toBe("modified");
+  });
 });
