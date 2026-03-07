@@ -52,7 +52,7 @@ export interface SourceSnapshot {
 
 ## Parser contracts
 
-`ParserAdapter` の正本インターフェースは [ADR 0004](../adr/0004-semantic-change-ir.ja.md) に置きます。この文書では、その adapter 境界の周りで保存・正規化する parser payload contract を定義します。
+`ParserAdapter` の最小正本 contract は [ADR 0004](../adr/0004-semantic-change-ir.ja.md) に置きます。この文書では、その contract を前提に pipeline が使う persistence 向け拡張フィールドを定義します。
 
 ```ts
 export interface ParsedSnapshot {
@@ -179,6 +179,7 @@ export interface ArchitectureEdge {
 ```
 
 `fromNodeId`、`toNodeId`、`outgoingNodeIds`、`incomingNodeIds` は、すべて同じ architecture node ID 空間を使います。`fileId` や `symbolKey` ではありません。
+これらの node ID は architecture enrichment の段階で割り当てます。
 
 MVP では graph を浅く保ちます。
 - immediate outgoing neighbor

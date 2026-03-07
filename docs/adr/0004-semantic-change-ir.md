@@ -51,7 +51,38 @@ The IR must be able to represent at least:
 
 ## Parser adapter contract
 
+The following types are the **minimum canonical adapter contract**. The pipeline document may add persistence-oriented fields around them, but higher layers should remain compatible with this core shape.
+
 ```ts
+export interface SourceSnapshot {
+  snapshotId: string
+  fileId: string
+  filePath: string
+  language: string | null
+  revision: 'before' | 'after'
+  content: string
+}
+
+export interface ParsedSnapshot {
+  snapshotId: string
+  adapterName: string
+  language: string
+  raw: unknown
+}
+
+export interface ParserDiffResult {
+  adapterName: string
+  language: string
+  items: ParserDiffItem[]
+}
+
+export interface ParserDiffItem {
+  symbolKey: string
+  displayName: string
+  kind: 'function' | 'method' | 'class' | 'module' | 'unknown'
+  changeType: 'added' | 'removed' | 'modified' | 'moved' | 'renamed'
+}
+
 export interface ParserAdapter {
   readonly language: string
   readonly adapterName: string

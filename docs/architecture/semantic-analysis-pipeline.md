@@ -52,7 +52,7 @@ export interface SourceSnapshot {
 
 ## Parser contracts
 
-The canonical `ParserAdapter` interface is defined in [ADR 0004](../adr/0004-semantic-change-ir.md). This document defines the parser payload contracts that the pipeline stores and normalizes around that adapter boundary.
+The canonical minimum `ParserAdapter` contract is defined in [ADR 0004](../adr/0004-semantic-change-ir.md). This document extends those payloads with persistence-oriented fields used by the pipeline.
 
 ```ts
 export interface ParsedSnapshot {
@@ -179,6 +179,7 @@ export interface ArchitectureEdge {
 ```
 
 `fromNodeId`, `toNodeId`, `outgoingNodeIds`, and `incomingNodeIds` all use the same architecture-node identifier space. They are not `fileId` or `symbolKey` values.
+Those node IDs are assigned by the architecture-enrichment stage.
 
 For MVP, keep the graph shallow:
 - immediate outgoing neighbors

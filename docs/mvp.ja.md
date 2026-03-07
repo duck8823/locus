@@ -37,7 +37,6 @@
 5. **Web review workspace v0**
    - 単一 pull request を対象にした認証付き review workspace
    - semantic change list、detail pane、progress state を1画面にまとめる
-   - Backend for Frontend (BFF) 形式のサーバー面
 
 上の番号付き機能は MVP のスコープを示すもので、実装順ではありません。実装の進め方は後段の Delivery Slices で別に定義します。
 

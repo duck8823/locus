@@ -37,7 +37,6 @@ Help reviewers understand the *meaning* of a pull request faster than they can w
 5. **Web review workspace v0**
    - authenticated review workspace for a single pull request
    - semantic change list, detail pane, and progress state in one screen
-   - Backend for Frontend (BFF)-style server surface
 
 The numbered capabilities above define MVP scope, not implementation order. The delivery sequence is defined separately below.
 

@@ -51,7 +51,38 @@ IR は少なくとも次を表現できる必要があります。
 
 ## Parser adapter contract
 
+以下の型を **最小の正本 adapter contract** とします。pipeline 文書では persistence 向けの追加フィールドを持たせてもよいですが、上位レイヤーはこの core shape と互換である必要があります。
+
 ```ts
+export interface SourceSnapshot {
+  snapshotId: string
+  fileId: string
+  filePath: string
+  language: string | null
+  revision: 'before' | 'after'
+  content: string
+}
+
+export interface ParsedSnapshot {
+  snapshotId: string
+  adapterName: string
+  language: string
+  raw: unknown
+}
+
+export interface ParserDiffResult {
+  adapterName: string
+  language: string
+  items: ParserDiffItem[]
+}
+
+export interface ParserDiffItem {
+  symbolKey: string
+  displayName: string
+  kind: 'function' | 'method' | 'class' | 'module' | 'unknown'
+  changeType: 'added' | 'removed' | 'modified' | 'moved' | 'renamed'
+}
+
 export interface ParserAdapter {
   readonly language: string
   readonly adapterName: string

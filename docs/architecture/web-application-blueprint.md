@@ -211,6 +211,8 @@ Use Server Actions only when all of the following are true:
 - no public API semantics are required
 - the action still delegates immediately to an application use case
 
+Queueing background work is acceptable here, as long as the Server Action reaches that queue by invoking an application use case rather than infrastructure code directly.
+
 Use Route Handlers when:
 - the endpoint is called by GitHub or another external system
 - the endpoint may later be called by multiple clients
