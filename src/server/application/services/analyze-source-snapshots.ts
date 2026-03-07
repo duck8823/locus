@@ -137,6 +137,8 @@ export async function analyzeSourceSnapshots({
     }
 
     try {
+      const fileSemanticChanges: SemanticChange[] = [];
+
       for (const plan of diffPlans) {
         const before = plan.beforeSnapshot ? await plan.adapter.parse(plan.beforeSnapshot) : null;
         const after = plan.afterSnapshot ? await plan.adapter.parse(plan.afterSnapshot) : null;
@@ -160,7 +162,7 @@ export async function analyzeSourceSnapshots({
 
           const references = Array.from(new Set(item.references ?? []));
 
-          semanticChanges.push({
+          fileSemanticChanges.push({
             semanticChangeId,
             reviewId,
             fileId: pair.fileId,
@@ -196,6 +198,8 @@ export async function analyzeSourceSnapshots({
           });
         }
       }
+
+      semanticChanges.push(...fileSemanticChanges);
     } catch (error) {
       const representative = pair.after ?? pair.before;
       unsupportedFiles.push({

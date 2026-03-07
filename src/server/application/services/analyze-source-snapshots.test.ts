@@ -159,6 +159,37 @@ class PythonTransitionAdapter implements ParserAdapter {
   }
 }
 
+class FailingPythonTransitionAdapter implements ParserAdapter {
+  readonly language = "python";
+  readonly adapterName = "failing-python-transition-adapter";
+
+  supports(file: SourceSnapshot): boolean {
+    return file.language === "python";
+  }
+
+  async parse(): Promise<ParsedSnapshot> {
+    throw new Error("python parse failed");
+  }
+
+  async diff(): Promise<ParserDiffResult> {
+    return {
+      adapterName: this.adapterName,
+      language: this.language,
+      items: [],
+    };
+  }
+
+  capabilities(): ParserCapabilities {
+    return {
+      callableDiff: true,
+      importGraph: false,
+      renameDetection: false,
+      moveDetection: false,
+      typeAwareSummary: false,
+    };
+  }
+}
+
 class OverloadDiscriminatorAdapter implements ParserAdapter {
   readonly language = "typescript";
   readonly adapterName = "overload-discriminator-adapter";
@@ -376,6 +407,50 @@ describe("analyzeSourceSnapshots", () => {
     ]);
     expect(result.unsupportedFiles).toEqual([]);
     expect(result.groups).toHaveLength(1);
+  });
+
+  it("drops buffered semantic changes when a later diff plan fails", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "cross-language-failure-review",
+      snapshotPairs: [
+        {
+          fileId: "file-cross-language-failure",
+          filePath: "src/cross-language-failure",
+          before: {
+            snapshotId: "cross-language-failure-review:file-cross-language-failure:before",
+            fileId: "file-cross-language-failure",
+            filePath: "src/cross-language-failure.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export function migratedCallable() { return 1; }",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "cross-language-failure-review:file-cross-language-failure:after",
+            fileId: "file-cross-language-failure",
+            filePath: "src/cross-language-failure.py",
+            language: "python",
+            revision: "after",
+            content: "def python_callable():\n    return 2\n",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new TransitionAwareParserAdapter(), new FailingPythonTransitionAdapter()],
+    });
+
+    expect(result.semanticChanges).toEqual([]);
+    expect(result.groups).toEqual([]);
+    expect(result.unsupportedFiles).toEqual([
+      {
+        detail: "python parse failed",
+        fileId: "file-cross-language-failure",
+        filePath: "src/cross-language-failure",
+        language: "python",
+        reason: "parser_failed",
+        reviewId: "cross-language-failure-review",
+      },
+    ]);
   });
 
   it("generates unique semanticChangeId values for overload-like diff items", async () => {
