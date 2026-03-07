@@ -37,7 +37,7 @@
 5. **Web review workspace v0**
    - 単一 pull request を対象にした認証付き review workspace
    - semantic change list、detail pane、progress state を1画面にまとめる
-   - Next.js App Router を用いた Backend for Frontend (BFF) 形式のサーバー面
+   - Backend for Frontend (BFF) 形式のサーバー面
 
 上の番号付き機能は MVP のスコープを示すもので、実装順ではありません。実装の進め方は後段の Delivery Slices で別に定義します。
 
@@ -60,6 +60,8 @@
 - presentation / application / domain / infrastructure の境界を定義する
 - 認証と空の review-workspace 導線を stub data で先に実装する
 - 最初の Web workspace フローで review progress と workspace state を永続化する
+
+Slice 1 では、最初の workspace を開き直せるだけの最小 persistence があれば十分です。長期的な review-session model 全体まではこの段階で固めません。
 
 ### Slice 2 — Semantic-diff contract と parser spike
 

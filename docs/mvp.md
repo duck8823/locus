@@ -37,7 +37,7 @@ Help reviewers understand the *meaning* of a pull request faster than they can w
 5. **Web review workspace v0**
    - authenticated review workspace for a single pull request
    - semantic change list, detail pane, and progress state in one screen
-   - Backend for Frontend (BFF)-style server surface using Next.js App Router
+   - Backend for Frontend (BFF)-style server surface
 
 The numbered capabilities above define MVP scope, not implementation order. The delivery sequence is defined separately below.
 
@@ -60,6 +60,8 @@ The numbered capabilities above define MVP scope, not implementation order. The 
 - define presentation / application / domain / infrastructure boundaries
 - implement authentication and empty review-workspace navigation with stub data
 - persist review progress and workspace state for the initial web workspace flow
+
+Slice 1 only needs the minimum persistence required to reopen the first workspace flow. It does not need the full long-term review-session model yet.
 
 ### Slice 2 — Semantic-diff contract and parser spike
 
