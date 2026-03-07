@@ -13,11 +13,14 @@ interface ParsedTypeScriptSnapshotRaw {
   callables: ParsedCallable[];
 }
 
+type MethodScope = "instance" | "static";
+
 interface ParsedCallable {
   symbolKey: string;
   displayName: string;
   kind: "function" | "method";
   container?: string;
+  methodScope?: MethodScope;
   signatureSummary?: string;
   bodySummary?: string;
   normalizedSignature: string;
@@ -125,7 +128,7 @@ function toReferenceSymbolKeys(expression: ts.Expression): string[] {
     // Instance calls like userService.updateProfile() stay on the root-function fallback.
     // This is intentionally conservative until type-aware symbol resolution is added.
     if (owner && owner !== "this" && /^[A-Z]/.test(owner)) {
-      keys.add(`method::${owner.replace(/\./g, "::")}::${methodName}`);
+      keys.add(`method::${owner.replace(/\./g, "::")}::static::${methodName}`);
     }
 
     return [...keys];
@@ -177,8 +180,22 @@ function toContainerLabel(containerPath: string[]): string | undefined {
   return containerPath.length > 0 ? containerPath.join("::") : undefined;
 }
 
-function createSymbolKey(kind: "function" | "method", displayName: string, containerPath: string[]): string {
-  return [kind, toContainerLabel(containerPath) ?? "<root>", displayName].join("::");
+function createSymbolKey(params: {
+  kind: "function" | "method";
+  displayName: string;
+  containerPath: string[];
+  methodScope?: MethodScope;
+}): string {
+  if (params.kind === "method") {
+    return [
+      params.kind,
+      toContainerLabel(params.containerPath) ?? "<root>",
+      params.methodScope ?? "instance",
+      params.displayName,
+    ].join("::");
+  }
+
+  return [params.kind, toContainerLabel(params.containerPath) ?? "<root>", params.displayName].join("::");
 }
 
 function isCallableInitializer(
@@ -187,25 +204,47 @@ function isCallableInitializer(
   return !!initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer));
 }
 
+function extractSignatureText(
+  sourceFile: ts.SourceFile,
+  signatureNode: ts.Node,
+  body: ts.ConciseBody | undefined,
+): string {
+  if (!body) {
+    return signatureNode.getText(sourceFile);
+  }
+
+  const signatureStart = signatureNode.getStart(sourceFile);
+  const bodyStart = body.getStart(sourceFile);
+  return sourceFile.text.slice(signatureStart, bodyStart).trimEnd();
+}
+
 function createCallable(params: {
   sourceFile: ts.SourceFile;
   kind: "function" | "method";
   displayName: string;
   containerPath: string[];
+  methodScope?: MethodScope;
   parameters: readonly ts.ParameterDeclaration[];
+  signatureText: string;
   body: ts.ConciseBody | undefined;
   regionNode: ts.Node;
 }): ParsedCallable {
   const signatureSummary = renderSignature(params.displayName, params.parameters);
   const bodyText = params.body ? params.body.getText(params.sourceFile) : "";
-  const normalizedSignature = normalizeCode(signatureSummary);
+  const normalizedSignature = normalizeCode(params.signatureText);
   const normalizedBody = normalizeCode(bodyText);
 
   return {
-    symbolKey: createSymbolKey(params.kind, params.displayName, params.containerPath),
+    symbolKey: createSymbolKey({
+      kind: params.kind,
+      displayName: params.displayName,
+      containerPath: params.containerPath,
+      methodScope: params.methodScope,
+    }),
     displayName: params.displayName,
     kind: params.kind,
     container: toContainerLabel(params.containerPath),
+    methodScope: params.methodScope,
     signatureSummary,
     bodySummary: summarizeBody(params.body),
     normalizedSignature,
@@ -241,6 +280,7 @@ function collectVariableCallableDeclarations(
         displayName,
         containerPath,
         parameters: declaration.initializer.parameters,
+        signatureText: extractSignatureText(sourceFile, declaration, declaration.initializer.body),
         body: declaration.initializer.body,
         regionNode: declaration,
       }),
@@ -264,6 +304,11 @@ function collectClassMemberCallables(
       }
 
       const displayName = readName(member.name);
+      const methodScope: MethodScope = member.modifiers?.some(
+        (modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword,
+      )
+        ? "static"
+        : "instance";
 
       if (!displayName) {
         continue;
@@ -275,7 +320,9 @@ function collectClassMemberCallables(
           kind: "method",
           displayName,
           containerPath,
+          methodScope,
           parameters: member.parameters,
+          signatureText: extractSignatureText(sourceFile, member, member.body),
           body: member.body,
           regionNode: member,
         }),
@@ -296,7 +343,11 @@ function collectClassMemberCallables(
           kind: "method",
           displayName,
           containerPath,
+          methodScope: member.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword)
+            ? "static"
+            : "instance",
           parameters: member.initializer.parameters,
+          signatureText: extractSignatureText(sourceFile, member, member.initializer.body),
           body: member.initializer.body,
           regionNode: member,
         }),
@@ -335,6 +386,7 @@ function collectCallablesFromStatement(
         displayName,
         containerPath,
         parameters: statement.parameters,
+        signatureText: extractSignatureText(sourceFile, statement, statement.body),
         body: statement.body,
         regionNode: statement,
       }),

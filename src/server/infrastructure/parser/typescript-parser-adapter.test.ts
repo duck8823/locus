@@ -37,7 +37,7 @@ describe("TypeScriptParserAdapter", () => {
     expect(change.displayName).toBe("updateProfile");
     expect(change.changeType).toBe("modified");
     expect(change.bodySummary).toBe("Body changed");
-    expect(change.symbolKey).toBe("method::UserService::updateProfile");
+    expect(change.symbolKey).toBe("method::UserService::instance::updateProfile");
     expect(change.references).toContain("function::<root>::formatPhone");
   });
 
@@ -203,7 +203,63 @@ export function executeReview(): void {
 
     expect(change).toBeDefined();
     expect(change?.references).toContain("function::<root>::updateProfile");
-    expect(change?.references).toContain("method::UserService::updateProfile");
-    expect(change?.references).not.toContain("method::userService::updateProfile");
+    expect(change?.references).toContain("method::UserService::static::updateProfile");
+    expect(change?.references).not.toContain("method::userService::static::updateProfile");
+  });
+
+  it("detects signature-only changes even when the body stays the same", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export function convertValue(value: string): string {
+  return String(value);
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export async function convertValue(value: number): Promise<string> {
+  return String(value);
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.changeType).toBe("modified");
+    expect(diff.items[0]?.bodySummary).toBe("Signature changed");
+  });
+
+  it("disambiguates static and instance methods with the same name", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const snapshot = createSnapshot({
+      revision: "after",
+      content: `
+export class CacheStore {
+  static flush(): void {
+    console.info("flush static");
+  }
+
+  flush(): void {
+    console.info("flush instance");
+  }
+}
+`.trim(),
+    });
+
+    const parsed = await adapter.parse(snapshot);
+    const raw = parsed.raw as { callables: Array<{ symbolKey: string }> };
+    const keys = raw.callables.map((callable) => callable.symbolKey).sort();
+
+    expect(keys).toEqual([
+      "method::CacheStore::instance::flush",
+      "method::CacheStore::static::flush",
+    ]);
   });
 });
