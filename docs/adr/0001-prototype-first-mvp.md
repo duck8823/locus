@@ -11,15 +11,15 @@ Locus currently has product positioning but no executable artifact. The project 
 
 ## Decision
 
-Start with a **prototype-first CLI package** that proves the semantic-diff contract and reviewer experience early, while keeping all upstream integrations behind explicit adapters.
+Start with a **prototype-first implementation path** that proves the semantic-diff contract and reviewer experience early, while keeping all upstream integrations behind explicit adapters.
 
 Do **not** lock the long-term parser family or implementation language in this phase. Any first parser / language implementation must be treated as a **disposable spike** behind the adapter boundary, not as a repo-wide architecture commitment.
 
 ## Options considered
 
-### Option A — Prototype-first semantic-diff engine with deferred parser/language commitment (chosen)
+### Option A — Prototype-first implementation with deferred parser/language commitment (chosen)
 
-- Build the CLI and test fixtures first
+- Build the first vertical slice early
 - Keep parser / provider boundaries explicit from day one
 - Treat the first parser / language implementation as provisional until the evaluation criteria are met
 
@@ -28,10 +28,10 @@ Do **not** lock the long-term parser family or implementation language in this p
 - Build the same prototype flow, but declare the parser family and implementation language as long-term decisions immediately
 - Simplifies short-term communication, but creates lock-in before we have evidence from multi-language requirements
 
-### Option C — Full web application skeleton first
+### Option C — Full implementation before the contracts are explicit
 
-- Stand up web / API / DB layers before the analysis engine is proven
-- Produces visible progress, but most code would be scaffolding rather than product proof
+- Stand up most of the product surface before the analysis contracts are proven
+- Produces visible progress, but makes it harder to replace weak analysis assumptions later
 
 ## Rationale
 
@@ -49,7 +49,7 @@ The hardest part of the product is semantic grouping, not CRUD or OAuth. Option 
 
 ### Reuse
 
-A standalone engine with explicit contracts can later power a web app, GitHub App, local CLI, or IDE integration. Disposable spikes are acceptable as long as higher-layer contracts stay stable.
+A boundary-first implementation can later power a web app, GitHub App, local CLI, or IDE integration. Disposable spikes are acceptable as long as higher-layer contracts stay stable.
 
 ## Risks and mitigations
 

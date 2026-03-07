@@ -79,34 +79,38 @@ All external integrations use OAuth, so Locus works with your existing authentic
 
 ## Project Status
 
-This repository is currently **documentation-first**.
+This repository is currently **documentation-first**, but the implementation direction is now explicit.
 
-What is already here:
-- product overview in English and Japanese
-- MVP definition and ADRs in English and Japanese
-- contribution guidance in English and Japanese
-- MIT license text plus a Japanese reference translation
+What is already decided:
+- the product surface is a **web application**
+- the first implementation target is **TypeScript + Next.js App Router**
+- the server follows a **layered architecture** inspired by the conceptual rules in the referenced Go standards
+- semantic analysis must cross a **parser adapter + common IR** boundary
 
-What is intentionally not locked yet:
-- the long-term parser family
-- the long-term implementation language
-- the final technical stack for multi-language support
-
-The first executable semantic-diff spike will be proposed in a follow-up PR, behind explicit parser and snapshot contracts.
+What is intentionally still open:
+- the long-term parser family per analysis language
+- which languages ship in the first semantic-diff spike after the web shell exists
+- production infrastructure details that are unnecessary for MVP validation
 
 ### Recommended reading
 
 - [`docs/mvp.md`](docs/mvp.md) / [`docs/mvp.ja.md`](docs/mvp.ja.md)
+- [`docs/architecture/web-application-blueprint.md`](docs/architecture/web-application-blueprint.md) / [`docs/architecture/web-application-blueprint.ja.md`](docs/architecture/web-application-blueprint.ja.md)
+- [`docs/architecture/semantic-analysis-pipeline.md`](docs/architecture/semantic-analysis-pipeline.md) / [`docs/architecture/semantic-analysis-pipeline.ja.md`](docs/architecture/semantic-analysis-pipeline.ja.md)
 - [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md) / [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md)
+- [`docs/adr/0002-web-first-nextjs-typescript.md`](docs/adr/0002-web-first-nextjs-typescript.md) / [`docs/adr/0002-web-first-nextjs-typescript.ja.md`](docs/adr/0002-web-first-nextjs-typescript.ja.md)
+- [`docs/adr/0003-layered-server-architecture.md`](docs/adr/0003-layered-server-architecture.md) / [`docs/adr/0003-layered-server-architecture.ja.md`](docs/adr/0003-layered-server-architecture.ja.md)
+- [`docs/adr/0004-semantic-change-ir.md`](docs/adr/0004-semantic-change-ir.md) / [`docs/adr/0004-semantic-change-ir.ja.md`](docs/adr/0004-semantic-change-ir.ja.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) / [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md)
 
 ## Roadmap
 
 ### MVP
 - GitHub integration
+- web review workspace
 - AI-generated architecture map
-- Semantic diff (function-level)
-- Review progress tracking
+- semantic diff (function-level)
+- review progress tracking
 
 ### Phase 2
 - Confluence & GitHub Issues/Projects integration
