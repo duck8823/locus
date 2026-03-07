@@ -8,6 +8,7 @@ This document defines the implementation-oriented contracts for the semantic ana
 
 Related document:
 - [Web Application Blueprint](web-application-blueprint.md)
+- [ADR 0004: Semantic Change IR](../adr/0004-semantic-change-ir.md)
 
 ## End-to-end pipeline
 
@@ -208,7 +209,7 @@ A candidate parser/language combination is acceptable for the first spike if it 
 
 ## Delivery-order note
 
-The canonical cross-document implementation order lives in [`../mvp.md`](../mvp.md). In particular, Slice 1 establishes the web shell and server boundaries before parser-spike work begins.
+The canonical cross-document implementation order lives in [Locus MVP Definition](../mvp.md). In particular, Slice 1 establishes the web shell and server boundaries before parser-spike work begins.
 
 Within Slice 2 and Slice 3, a reasonable sub-order is:
 1. Define `SourceSnapshot` and `SemanticChange` types.

@@ -80,7 +80,11 @@ export interface ParserDiffItem {
   symbolKey: string
   displayName: string
   kind: 'function' | 'method' | 'class' | 'module' | 'unknown'
+  container?: string
   changeType: 'added' | 'removed' | 'modified' | 'moved' | 'renamed'
+  signatureSummary?: string
+  bodySummary?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface ParserAdapter {

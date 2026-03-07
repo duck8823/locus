@@ -44,7 +44,7 @@ IR は少なくとも次を表現できる必要があります。
 - language と parser adapter identity
 - symbol identity と display name
 - callable kind / container kind
-- change type (`added`, `removed`, `modified`, `moved`, `renamed` など、対応範囲に応じて)
+- change type (`added`, `removed`, `modified`, `moved`, `renamed` if supported)
 - signature summary と body summary
 - 後段で見つかる architecture edge / reference
 - namespaced な escape hatch に載せる language-specific metadata
@@ -80,7 +80,11 @@ export interface ParserDiffItem {
   symbolKey: string
   displayName: string
   kind: 'function' | 'method' | 'class' | 'module' | 'unknown'
+  container?: string
   changeType: 'added' | 'removed' | 'modified' | 'moved' | 'renamed'
+  signatureSummary?: string
+  bodySummary?: string
+  metadata?: Record<string, unknown>
 }
 
 export interface ParserAdapter {

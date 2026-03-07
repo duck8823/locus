@@ -8,6 +8,7 @@
 
 関連ドキュメント:
 - [Webアプリケーション設計図](web-application-blueprint.ja.md)
+- [ADR 0004: Semantic Change IR](../adr/0004-semantic-change-ir.ja.md)
 
 ## End-to-end pipeline
 
@@ -208,7 +209,7 @@ parser-native な raw AST blob は、デフォルトでは main relational table
 
 ## 実装順メモ
 
-文書横断の正本となる実装順は [`../mvp.ja.md`](../mvp.ja.md) に置きます。特に Slice 1 で Web shell と server boundary を先に固めてから、parser spike に進みます。
+文書横断の正本となる実装順は [Locus MVP 定義](../mvp.ja.md) に置きます。特に Slice 1 で Web shell と server boundary を先に固めてから、parser spike に進みます。
 
 そのうえで、Slice 2 と Slice 3 の内部順序としては次が妥当です。
 1. `SourceSnapshot` と `SemanticChange` の型を定義する
