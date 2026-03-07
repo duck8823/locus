@@ -107,10 +107,10 @@ What is intentionally still open:
 
 ### MVP
 - GitHub integration
-- web review workspace v0
+- Web review workspace v0
 - AI-generated architecture map
-- semantic diff (function-level)
-- review progress tracking
+- Semantic diff (function-level)
+- Review progress tracking
 
 ### Phase 2
 - Confluence & GitHub Issues/Projects integration

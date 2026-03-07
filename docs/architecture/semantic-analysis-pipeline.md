@@ -103,8 +103,8 @@ export interface SemanticChange {
   before?: CodeRegionRef
   after?: CodeRegionRef
   architecture?: {
-    outgoing: string[]
-    incoming: string[]
+    outgoingNodeIds: string[]
+    incomingNodeIds: string[]
   }
   metadata: {
     parser: Record<string, unknown>
@@ -175,6 +175,8 @@ export interface ArchitectureEdge {
   relation: 'imports' | 'calls' | 'implements' | 'uses'
 }
 ```
+
+`fromNodeId`, `toNodeId`, `outgoingNodeIds`, and `incomingNodeIds` all use the same architecture-node identifier space. They are not `fileId` or `symbolKey` values.
 
 For MVP, keep the graph shallow:
 - immediate outgoing neighbors

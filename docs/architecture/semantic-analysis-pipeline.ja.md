@@ -103,8 +103,8 @@ export interface SemanticChange {
   before?: CodeRegionRef
   after?: CodeRegionRef
   architecture?: {
-    outgoing: string[]
-    incoming: string[]
+    outgoingNodeIds: string[]
+    incomingNodeIds: string[]
   }
   metadata: {
     parser: Record<string, unknown>
@@ -175,6 +175,8 @@ export interface ArchitectureEdge {
   relation: 'imports' | 'calls' | 'implements' | 'uses'
 }
 ```
+
+`fromNodeId`、`toNodeId`、`outgoingNodeIds`、`incomingNodeIds` は、すべて同じ architecture node ID 空間を使います。`fileId` や `symbolKey` ではありません。
 
 MVP では graph を浅く保ちます。
 - immediate outgoing neighbor
