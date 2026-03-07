@@ -2,50 +2,45 @@
 
 > 日本語: [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md)
 
-Locus is still in the prototype phase. The current goal is to validate the reviewer experience before investing in a full hosted product.
+Locus is currently a documentation-first repository. The immediate goal is to align on product scope, architectural boundaries, and evaluation criteria before committing to a long-term implementation path.
 
 ## Working Agreement
 
-- Ship thin vertical slices that prove product value.
+- Ship thin vertical slices that reduce ambiguity.
 - Keep architectural decisions explicit in `docs/adr/`.
 - Prefer parser / integration abstractions over hard-coding provider details.
-- Treat the current parser / implementation language choice as provisional until an ADR explicitly fixes it.
-- Add tests for every semantic-diff regression you fix.
+- Treat parser and implementation-language choices as provisional until an ADR explicitly fixes them.
+- Do not let a temporary spike masquerade as a long-term platform decision.
 
-## Local Development
+## What contributions are useful right now
 
-```bash
-npm install
-npm run build
-npm test
-```
-
-Run the current CLI prototype against two source files:
-
-```bash
-npm run semantic-diff -- path/to/before.ts path/to/after.ts
-```
-
-JSON output is available with `--json`.
+- refining the MVP definition
+- tightening ADRs and decision criteria
+- improving bilingual documentation quality
+- clarifying plugin, parser, and adapter boundaries
+- adding issue breakdowns and review scenarios
 
 ## Repository Layout
 
-- `docs/` — product and architecture decisions
-- `packages/semantic-diff` — current executable semantic-diff spike behind the parser contract
+- `README.md` / `README.ja.md` — product overview
+- `docs/mvp.md` / `docs/mvp.ja.md` — MVP scope and delivery slices
+- `docs/adr/` — architecture decisions
+- `CONTRIBUTING.md` / `CONTRIBUTING.ja.md` — contribution policy
 
 ## Change Policy
 
 Open or update an ADR before making one of these changes:
 
-- replacing the parser strategy
-- locking the long-term parser family or implementation language
-- introducing a new persistence layer
+- locking the long-term parser family
+- locking the long-term implementation language
+- replacing the parser abstraction strategy
+- introducing a persistence layer
 - coupling GitHub ingestion directly to the diff engine
 - broadening the MVP beyond the scope in `docs/mvp.md`
 
 ## Pull Request Checklist
 
 - [ ] Scope matches the current MVP or an approved ADR
-- [ ] `npm run build` passes
-- [ ] `npm test` passes
-- [ ] README / docs updated when behavior changes
+- [ ] English and Japanese docs stay consistent when both are affected
+- [ ] Cross-links between language variants are updated if needed
+- [ ] README / docs updated when the documented direction changes

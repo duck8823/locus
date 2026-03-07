@@ -78,30 +78,32 @@ Locusは最初から拡張可能な設計で作られています：
 - **コードホスト** — GitHub（初期実装）、GitLab、Bitbucket
 - **コンテキストソース** — Confluence、GitHub Issues/Projects（初期実装）、Jira、Notion
 - **AIモデル** — OpenAI、Anthropic Claude、ローカルモデル
-- **言語パーサー** — Tree-sitterをコアに、言語固有のLSPも統合可能
+- **言語パーサー** — 多言語対応を前提にした parser adapter 群
 
 すべての外部連携はOAuth対応です。既存の認証基盤をそのまま使えます。
 
-## プロトタイプの現状
+## プロジェクトの現状
 
-現在のリポジトリには、最初の実行可能な成果物として `@locus/semantic-diff` を追加しています。
+現在のリポジトリは **documentation-first** です。
 
-- callable 単位 semantic diff を検証するための暫定 JS/TS スパイク
-- コメントだけ・空白だけの変更は無視
-- CLI で人間向け表示と JSON 出力の両方を提供
-- push / pull request ごとに build + test を走らせる CI を追加
-- 長期的な parser / 言語選定は意図的に未確定のままにしている
+すでに入っているもの:
+- 英語・日本語のプロダクト概要
+- 英語・日本語の MVP 定義と ADR
+- 英語・日本語のコントリビューションガイド
+- MIT License 本文と日本語参考訳
 
-### クイックスタート
+意図的にまだ固定していないもの:
+- 長期的な parser family
+- 長期的な実装言語
+- 多言語対応における最終的な技術スタック
 
-```bash
-npm install
-npm run build
-npm test
-npm run semantic-diff -- path/to/before.ts path/to/after.ts
-```
+最初の実行可能な semantic-diff スパイクは、parser / snapshot contract を明示した上で別PRとして提案します。
 
-MVP の境界と技術判断は [`docs/mvp.ja.md`](docs/mvp.ja.md) と [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md) にまとめています。どちらも長期的な parser / 言語選定を固定しない前提です。英語版は [`docs/mvp.md`](docs/mvp.md) と [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md) です。
+### まず読むもの
+
+- [`docs/mvp.ja.md`](docs/mvp.ja.md) / [`docs/mvp.md`](docs/mvp.md)
+- [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md) / [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md)
+- [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md) / [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## ロードマップ
 
@@ -123,7 +125,7 @@ MVP の境界と技術判断は [`docs/mvp.ja.md`](docs/mvp.ja.md) と [`docs/ad
 
 ## コントリビュート
 
-Locusは現在、企画・設計フェーズにあります。フィードバック・アイデア・議論を歓迎します。
+Locusは現在、企画フェーズにあります。フィードバック・アイデア・議論を歓迎します。
 
 - [Issue](https://github.com/duck8823/locus/issues) を開いてアイデアや問題を共有してください
 - コントリビューションガイドは [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照（英語版: [CONTRIBUTING.md](CONTRIBUTING.md)）

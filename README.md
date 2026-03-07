@@ -73,30 +73,32 @@ Locus is built from the ground up to be extensible:
 - **Code hosts** — GitHub (initial), GitLab, Bitbucket
 - **Context sources** — Confluence, GitHub Issues/Projects (initial), Jira, Notion
 - **AI models** — OpenAI, Anthropic Claude, local models
-- **Language parsers** — Tree-sitter core with LSP integration per language
+- **Language parsers** — parser adapters with multi-language support as a product goal
 
 All external integrations use OAuth, so Locus works with your existing authentication.
 
-## Prototype Status
+## Project Status
 
-The repository now includes the first executable artifact: `@locus/semantic-diff`.
+This repository is currently **documentation-first**.
 
-- Temporary JS/TS spike for callable-level semantic diffs
-- Comment-only and whitespace-only changes are ignored
-- CLI output available in both human-readable and JSON formats
-- CI runs build + test on every push / pull request
-- Long-term parser / language selection remains intentionally open
+What is already here:
+- product overview in English and Japanese
+- MVP definition and ADRs in English and Japanese
+- contribution guidance in English and Japanese
+- MIT license text plus a Japanese reference translation
 
-### Quickstart
+What is intentionally not locked yet:
+- the long-term parser family
+- the long-term implementation language
+- the final technical stack for multi-language support
 
-```bash
-npm install
-npm run build
-npm test
-npm run semantic-diff -- path/to/before.ts path/to/after.ts
-```
+The first executable semantic-diff spike will be proposed in a follow-up PR, behind explicit parser and snapshot contracts.
 
-Product scope and architectural decisions live in [`docs/mvp.md`](docs/mvp.md) and [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md). They intentionally keep the long-term parser / language choice open. Japanese counterparts are available in [`docs/mvp.ja.md`](docs/mvp.ja.md) and [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md).
+### Recommended reading
+
+- [`docs/mvp.md`](docs/mvp.md) / [`docs/mvp.ja.md`](docs/mvp.ja.md)
+- [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md) / [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) / [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md)
 
 ## Roadmap
 
@@ -118,7 +120,7 @@ Product scope and architectural decisions live in [`docs/mvp.md`](docs/mvp.md) a
 
 ## Contributing
 
-Locus is in the early planning stage. Feedback, ideas, and discussion are very welcome.
+Locus is in the planning phase. Feedback, ideas, and discussion are very welcome.
 
 - Open an [Issue](https://github.com/duck8823/locus/issues) to share thoughts or report problems
 - See [CONTRIBUTING.md](CONTRIBUTING.md) or [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) for contribution guidelines

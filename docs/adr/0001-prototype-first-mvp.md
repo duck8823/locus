@@ -65,7 +65,7 @@ A standalone engine with explicit contracts can later power a web app, GitHub Ap
 - Parser-specific logic does not leak into higher layers.
 - The first implementation can be replaced without changing the higher-layer contracts.
 - ADR approval is required before locking the long-term parser family or implementation language.
-- Every syntax form added to the current spike ships with regression tests.
+- Every syntax form added to the first spike ships with regression tests.
 
 ## Rejection conditions
 
@@ -77,6 +77,6 @@ Revisit this ADR if one of the following becomes true:
 
 ## Next actions
 
-1. Keep the current spike behind adapter contracts and validate it with fixtures.
+1. Keep the first spike behind adapter contracts and validate it with fixtures.
 2. Define evaluation criteria for parser / language selection before making a long-term commitment.
 3. Add real pull-request fixtures and use them to judge precision before building UI.
