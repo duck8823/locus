@@ -53,7 +53,7 @@ UserService.updateProfile()         UserService.updateProfile()
 
 ### ビジネスロジックコンテキスト
 
-コード変更を、その背景にある要件と繋げます。ConfluentやGitHub Issues/Projectsと連携し、関連仕様をインラインで表示します。「このコードは動くか？」だけでなく「このコードは本来やるべきことをやっているか？」を問えるようになります。
+コード変更を、その背景にある要件と繋げます。ConfluenceやGitHub Issues/Projectsと連携し、関連仕様をインラインで表示します。「このコードは動くか？」だけでなく「このコードは本来やるべきことをやっているか？」を問えるようになります。
 
 ### AIレビュー補助
 
@@ -80,6 +80,26 @@ Locusは最初から拡張可能な設計で作られています：
 - **言語パーサー** — Tree-sitterをコアに、言語固有のLSPも統合可能
 
 すべての外部連携はOAuth対応です。既存の認証基盤をそのまま使えます。
+
+## プロトタイプの現状
+
+現在のリポジトリには、最初の実行可能な成果物として `@locus/semantic-diff` を追加しています。
+
+- JavaScript / TypeScript の関数・メソッド単位セマンティックDiff
+- コメントだけ・空白だけの変更は無視
+- CLI で人間向け表示と JSON 出力の両方を提供
+- push / pull request ごとに build + test を走らせる CI を追加
+
+### クイックスタート
+
+```bash
+npm install
+npm run build
+npm test
+npm run semantic-diff -- path/to/before.ts path/to/after.ts
+```
+
+MVP の境界と技術判断は [`docs/mvp.md`](docs/mvp.md) と [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md) にまとめています。
 
 ## ロードマップ
 

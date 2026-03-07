@@ -1,0 +1,18 @@
+{
+  "name": "locus",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @locus/semantic-diff",
+    "test": "npm run test --workspace @locus/semantic-diff",
+    "lint": "npm run lint --workspace @locus/semantic-diff",
+    "semantic-diff": "npm run cli --workspace @locus/semantic-diff --"
+  }
+}

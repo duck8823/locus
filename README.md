@@ -76,6 +76,26 @@ Locus is built from the ground up to be extensible:
 
 All external integrations use OAuth, so Locus works with your existing authentication.
 
+## Prototype Status
+
+The repository now includes the first executable artifact: `@locus/semantic-diff`.
+
+- Callable-level semantic diffs for JavaScript / TypeScript
+- Comment-only and whitespace-only changes are ignored
+- CLI output available in both human-readable and JSON formats
+- CI runs build + test on every push / pull request
+
+### Quickstart
+
+```bash
+npm install
+npm run build
+npm test
+npm run semantic-diff -- path/to/before.ts path/to/after.ts
+```
+
+Product scope and architectural decisions live in [`docs/mvp.md`](docs/mvp.md) and [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md).
+
 ## Roadmap
 
 ### MVP
