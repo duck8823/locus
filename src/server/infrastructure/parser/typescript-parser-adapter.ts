@@ -120,8 +120,10 @@ function toReferenceSymbolKeys(expression: ts.Expression): string[] {
     const methodName = expression.name.text;
     const keys = new Set<string>([`function::<root>::${methodName}`]);
 
-    // Keep a conservative fallback for function-level lookup while only promoting
-    // owner-qualified references when the owner resembles a type/container symbol.
+    // Heuristic: treat owner-qualified references as type/container symbols only when
+    // the owner starts with an uppercase letter (e.g. UserService.updateProfile()).
+    // Instance calls like userService.updateProfile() stay on the root-function fallback.
+    // This is intentionally conservative until type-aware symbol resolution is added.
     if (owner && owner !== "this" && /^[A-Z]/.test(owner)) {
       keys.add(`method::${owner.replace(/\./g, "::")}::${methodName}`);
     }

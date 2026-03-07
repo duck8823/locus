@@ -201,6 +201,7 @@ export function executeReview(): void {
     });
     const change = diff.items[0];
 
+    expect(change).toBeDefined();
     expect(change?.references).toContain("function::<root>::updateProfile");
     expect(change?.references).toContain("method::UserService::updateProfile");
     expect(change?.references).not.toContain("method::userService::updateProfile");
