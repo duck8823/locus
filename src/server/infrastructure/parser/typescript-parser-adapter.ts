@@ -377,6 +377,23 @@ function collectClassMemberCallables(
   const callables: ParsedCallable[] = [];
 
   for (const member of classDeclaration.members) {
+    if (ts.isConstructorDeclaration(member)) {
+      callables.push(
+        createCallable({
+          sourceFile,
+          kind: "method",
+          displayName: "constructor",
+          containerPath,
+          methodScope: "instance",
+          parameters: member.parameters,
+          signatureText: extractSignatureText(sourceFile, member, member.body),
+          body: member.body,
+          regionNode: member,
+        }),
+      );
+      continue;
+    }
+
     if (ts.isMethodDeclaration(member)) {
       const displayName = readName(member.name);
       const methodScope = inferMethodScope(member);

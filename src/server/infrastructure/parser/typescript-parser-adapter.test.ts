@@ -293,6 +293,44 @@ export class CacheStore {
     ]);
   });
 
+  it("tracks constructor body changes as semantic callable updates", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export class SessionStore {
+  constructor(seed: number) {
+    this.seed = seed + 1;
+  }
+
+  private seed: number;
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export class SessionStore {
+  constructor(seed: number) {
+    this.seed = seed + 2;
+  }
+
+  private seed: number;
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("method::SessionStore::instance::constructor");
+    expect(diff.items[0]?.changeType).toBe("modified");
+    expect(diff.items[0]?.bodySummary).toBe("Body changed");
+  });
+
   it("tracks anonymous default-exported functions", async () => {
     const adapter = new TypeScriptParserAdapter();
     const before = createSnapshot({
@@ -468,6 +506,38 @@ export declare abstract class Repository {
 
     expect(diff.items).toHaveLength(1);
     expect(diff.items[0]?.symbolKey).toBe("method::Repository::instance::findById");
+    expect(diff.items[0]?.changeType).toBe("modified");
+    expect(diff.items[0]?.bodySummary).toBe("Signature changed");
+  });
+
+  it("tracks declaration-only constructor signature changes", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      filePath: "types/session-store.d.ts",
+      revision: "before",
+      content: `
+export declare class SessionStore {
+  constructor(seed: number);
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      filePath: "types/session-store.d.ts",
+      revision: "after",
+      content: `
+export declare class SessionStore {
+  constructor(seed: string);
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("method::SessionStore::instance::constructor");
     expect(diff.items[0]?.changeType).toBe("modified");
     expect(diff.items[0]?.bodySummary).toBe("Signature changed");
   });
