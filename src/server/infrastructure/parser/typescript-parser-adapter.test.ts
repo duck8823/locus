@@ -174,4 +174,35 @@ export function serialize(value: string | number): string {
 
     expect(diff.items).toEqual([]);
   });
+
+  it("normalizes property-call references without adding variable-owner method keys", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export function executeReview(): void {
+  userService.updateProfile();
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export function executeReview(): void {
+  userService.updateProfile();
+  UserService.updateProfile();
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+    const change = diff.items[0];
+
+    expect(change?.references).toContain("function::<root>::updateProfile");
+    expect(change?.references).toContain("method::UserService::updateProfile");
+    expect(change?.references).not.toContain("method::userService::updateProfile");
+  });
 });
