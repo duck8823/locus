@@ -113,7 +113,8 @@ If you want to exercise the GitHub webhook route locally, set:
 export GITHUB_WEBHOOK_SECRET=your-local-webhook-secret
 ```
 
-If you want to run the live GitHub PR demo button from the marketing page, set:
+If you want to run the live GitHub PR demo button from the marketing page, you can enter owner/repo/PR number directly in the form.
+The environment variables below are optional defaults:
 
 ```bash
 export GITHUB_TOKEN=your-github-token
@@ -121,6 +122,8 @@ export LOCUS_GITHUB_DEMO_OWNER=owner
 export LOCUS_GITHUB_DEMO_REPO=repository
 export LOCUS_GITHUB_DEMO_PR_NUMBER=123
 ```
+
+`GITHUB_TOKEN` is optional for public repositories (but recommended to avoid low anonymous rate limits).
 
 Validation commands:
 
