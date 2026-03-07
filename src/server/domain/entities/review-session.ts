@@ -1,4 +1,5 @@
 import { reviewGroupStatuses, type ReviewGroupStatus } from "@/server/domain/value-objects/review-status";
+import { ReviewGroupNotFoundError } from "@/server/domain/errors/review-group-not-found-error";
 
 export interface ReviewGroupRecord {
   groupId: string;
@@ -66,13 +67,6 @@ function assertGroups(groups: ReviewGroupRecord[]): void {
     if (!(reviewGroupStatuses as readonly string[]).includes(group.status)) {
       throw new Error(`Invalid status on review group ${group.groupId}: ${group.status}`);
     }
-  }
-}
-
-export class ReviewGroupNotFoundError extends Error {
-  constructor(groupId: string) {
-    super(`Review group not found: ${groupId}`);
-    this.name = "ReviewGroupNotFoundError";
   }
 }
 

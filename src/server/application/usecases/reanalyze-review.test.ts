@@ -77,6 +77,10 @@ describe("ReanalyzeReviewUseCase", () => {
       requestedAt: "2026-03-07T01:00:00.000Z",
       reason: "manual_reanalysis",
     });
+    const persistedReviewSession = await repository.findByReviewId("demo-review");
+    expect(persistedReviewSession?.toRecord().lastReanalyzeRequestedAt).toBe(
+      "2026-03-07T01:00:00.000Z",
+    );
   });
 
   it("raises when the review session does not exist", async () => {

@@ -1,11 +1,9 @@
 import type { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
-import { createSeedReviewSession } from "@/server/application/services/review-session-seed";
+import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
 
 export interface GetReviewWorkspaceInput {
   reviewId: string;
-  viewerName: string;
-  loadedAt?: string;
 }
 
 export interface GetReviewWorkspaceDependencies {
@@ -15,21 +13,13 @@ export interface GetReviewWorkspaceDependencies {
 export class GetReviewWorkspaceUseCase {
   constructor(private readonly dependencies: GetReviewWorkspaceDependencies) {}
 
-  async execute({ reviewId, viewerName, loadedAt }: GetReviewWorkspaceInput): Promise<ReviewSession> {
+  async execute({ reviewId }: GetReviewWorkspaceInput): Promise<ReviewSession> {
     const reviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
 
-    if (reviewSession) {
-      return reviewSession;
+    if (!reviewSession) {
+      throw new ReviewSessionNotFoundError(reviewId);
     }
 
-    const seededReviewSession = createSeedReviewSession({
-      reviewId,
-      viewerName,
-      createdAt: loadedAt ?? new Date().toISOString(),
-    });
-
-    await this.dependencies.reviewSessionRepository.save(seededReviewSession);
-
-    return seededReviewSession;
+    return reviewSession;
   }
 }

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import styles from "./page.module.css";
+import { LocalizedDateTime } from "@/app/components/localized-date-time";
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
 import { requestReanalysisAction } from "@/server/presentation/actions/request-reanalysis-action";
 import { selectReviewGroupAction } from "@/server/presentation/actions/select-review-group-action";
@@ -20,7 +21,7 @@ export default async function ReviewWorkspacePage({
     redirect("/");
   }
 
-  const workspace = await loadReviewWorkspaceDto({ reviewId, viewerName });
+  const workspace = await loadReviewWorkspaceDto({ reviewId });
   const selectedGroup =
     workspace.groups.find((group) => group.isSelected) ?? workspace.groups[0];
 
@@ -38,7 +39,9 @@ export default async function ReviewWorkspacePage({
             <span>Reviewer: {workspace.viewerName}</span>
             <span>Repository: {workspace.repositoryName}</span>
             <span>Branch: {workspace.branchLabel}</span>
-            <span>Last opened: {workspace.lastOpenedLabel}</span>
+            <span>
+              Last opened: <LocalizedDateTime isoTimestamp={workspace.lastOpenedAt} />
+            </span>
           </div>
         </div>
         <div className={styles.actions}>
@@ -120,7 +123,15 @@ export default async function ReviewWorkspacePage({
           </div>
           <div className={styles.detailBlock}>
             <span className={styles.muted}>Reanalysis status</span>
-            <p>{workspace.lastReanalyzeRequestedLabel}</p>
+            <p>
+              {workspace.lastReanalyzeRequestedAt ? (
+                <>
+                  Queued at <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+                </>
+              ) : (
+                "Not requested yet"
+              )}
+            </p>
           </div>
         </section>
 

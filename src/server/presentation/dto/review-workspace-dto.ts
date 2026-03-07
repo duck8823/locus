@@ -17,8 +17,8 @@ export interface ReviewWorkspaceDto {
   repositoryName: string;
   branchLabel: string;
   viewerName: string;
-  lastOpenedLabel: string;
-  lastReanalyzeRequestedLabel: string;
+  lastOpenedAt: string;
+  lastReanalyzeRequestedAt: string | null;
   availableStatuses: ReviewGroupStatus[];
   groups: ReviewWorkspaceGroupDto[];
 }

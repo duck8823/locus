@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ReviewSession, ReviewGroupNotFoundError } from "@/server/domain/entities/review-session";
+import { ReviewSession } from "@/server/domain/entities/review-session";
+import { ReviewGroupNotFoundError } from "@/server/domain/errors/review-group-not-found-error";
 
 function createSession() {
   return ReviewSession.create({

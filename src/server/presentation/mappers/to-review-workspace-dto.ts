@@ -11,10 +11,8 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     repositoryName: record.repositoryName,
     branchLabel: record.branchLabel,
     viewerName: record.viewerName,
-    lastOpenedLabel: formatTimestamp(record.lastOpenedAt),
-    lastReanalyzeRequestedLabel: record.lastReanalyzeRequestedAt
-      ? `Queued at ${formatTimestamp(record.lastReanalyzeRequestedAt)}`
-      : "Not requested yet",
+    lastOpenedAt: record.lastOpenedAt,
+    lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt,
     availableStatuses: [...reviewGroupStatuses],
     groups: record.groups.map((group) => ({
       groupId: group.groupId,
@@ -27,11 +25,4 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
       downstream: [...group.downstream],
     })),
   };
-}
-
-function formatTimestamp(timestamp: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(timestamp));
 }

@@ -5,16 +5,12 @@ import type { ReviewWorkspaceDto } from "@/server/presentation/dto/review-worksp
 
 export interface LoadReviewWorkspaceInput {
   reviewId: string;
-  viewerName: string;
 }
 
-export async function loadReviewWorkspaceDto({
-  reviewId,
-  viewerName,
-}: LoadReviewWorkspaceInput): Promise<ReviewWorkspaceDto> {
+export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceInput): Promise<ReviewWorkspaceDto> {
   const { reviewSessionRepository } = getDependencies();
   const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository });
-  const reviewSession = await useCase.execute({ reviewId, viewerName });
+  const reviewSession = await useCase.execute({ reviewId });
 
   return toReviewWorkspaceDto(reviewSession);
 }

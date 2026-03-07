@@ -23,20 +23,6 @@ class CountingReviewSessionRepository implements ReviewSessionRepository {
 }
 
 describe("GetReviewWorkspaceUseCase", () => {
-  it("seeds and persists a workspace when it does not exist", async () => {
-    const repository = new CountingReviewSessionRepository();
-    const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository: repository });
-
-    const reviewSession = await useCase.execute({
-      reviewId: "demo-review",
-      viewerName: "Demo reviewer",
-      loadedAt: "2026-03-07T00:00:00.000Z",
-    });
-
-    expect(reviewSession.toRecord().groups).toHaveLength(3);
-    expect(repository.saveCount).toBe(1);
-  });
-
   it("returns an existing workspace without rewriting last-opened state", async () => {
     const repository = new CountingReviewSessionRepository();
     repository.seed(
@@ -62,13 +48,18 @@ describe("GetReviewWorkspaceUseCase", () => {
     );
     const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository: repository });
 
-    const reviewSession = await useCase.execute({
-      reviewId: "demo-review",
-      viewerName: "Another reviewer",
-      loadedAt: "2026-03-07T05:00:00.000Z",
-    });
+    const reviewSession = await useCase.execute({ reviewId: "demo-review" });
 
     expect(reviewSession.toRecord().lastOpenedAt).toBe("2026-03-07T00:00:00.000Z");
     expect(repository.saveCount).toBe(0);
+  });
+
+  it("raises when the workspace has not been opened yet", async () => {
+    const repository = new CountingReviewSessionRepository();
+    const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository: repository });
+
+    await expect(useCase.execute({ reviewId: "missing-review" })).rejects.toThrow(
+      "Review session not found: missing-review",
+    );
   });
 });
