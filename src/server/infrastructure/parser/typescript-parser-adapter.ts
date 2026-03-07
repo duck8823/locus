@@ -204,12 +204,20 @@ function isCallableInitializer(
   return !!initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer));
 }
 
+function inferMethodScope(node: ts.MethodDeclaration | ts.PropertyDeclaration): MethodScope {
+  return node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword)
+    ? "static"
+    : "instance";
+}
+
 function extractSignatureText(
   sourceFile: ts.SourceFile,
   signatureNode: ts.Node,
   body: ts.ConciseBody | undefined,
 ): string {
   if (!body) {
+    // Used for declarations that have no executable body span. In those cases,
+    // the whole signature node text is the best available contract surface.
     return signatureNode.getText(sourceFile);
   }
 
@@ -304,11 +312,7 @@ function collectClassMemberCallables(
       }
 
       const displayName = readName(member.name);
-      const methodScope: MethodScope = member.modifiers?.some(
-        (modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword,
-      )
-        ? "static"
-        : "instance";
+      const methodScope = inferMethodScope(member);
 
       if (!displayName) {
         continue;
@@ -343,9 +347,7 @@ function collectClassMemberCallables(
           kind: "method",
           displayName,
           containerPath,
-          methodScope: member.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword)
-            ? "static"
-            : "instance",
+          methodScope: inferMethodScope(member),
           parameters: member.initializer.parameters,
           signatureText: extractSignatureText(sourceFile, member, member.initializer.body),
           body: member.initializer.body,
