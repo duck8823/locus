@@ -80,4 +80,4 @@ Revisit this ADR if one of the following becomes true:
 
 1. Keep the first spike behind adapter contracts and validate it with fixtures.
 2. Define evaluation criteria for parser / language selection before making a long-term commitment.
-3. Add real pull-request fixtures and use them to judge precision before building UI.
+3. Add real pull-request fixtures and use them to judge precision before expanding beyond the initial web shell.
