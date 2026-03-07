@@ -1,0 +1,11 @@
+/node_modules
+/.next
+/out
+/build
+/coverage
+/.vercel
+/.locus-data
+.DS_Store
+*.log
+*.tsbuildinfo
+.env*
