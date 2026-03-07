@@ -72,7 +72,65 @@ function toRegion(sourceFile: ts.SourceFile, node: ts.Node): CodeRegionRef {
   };
 }
 
-function extractCallReferences(sourceFile: ts.SourceFile, node: ts.Node | undefined): string[] {
+function readName(name: ts.PropertyName | ts.BindingName | ts.ModuleName | undefined): string | null {
+  if (!name) {
+    return null;
+  }
+
+  if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name)) {
+    return name.text;
+  }
+
+  if (ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+
+  return name.getText();
+}
+
+function normalizeMemberChain(expression: ts.Expression): string | null {
+  if (ts.isIdentifier(expression) || ts.isPrivateIdentifier(expression)) {
+    return expression.text;
+  }
+
+  if (expression.kind === ts.SyntaxKind.ThisKeyword) {
+    return "this";
+  }
+
+  if (ts.isPropertyAccessExpression(expression)) {
+    const base = normalizeMemberChain(expression.expression);
+
+    if (!base) {
+      return null;
+    }
+
+    return `${base}.${expression.name.text}`;
+  }
+
+  return null;
+}
+
+function toReferenceSymbolKeys(expression: ts.Expression): string[] {
+  if (ts.isIdentifier(expression)) {
+    return [`function::<root>::${expression.text}`];
+  }
+
+  if (ts.isPropertyAccessExpression(expression)) {
+    const owner = normalizeMemberChain(expression.expression);
+    const methodName = expression.name.text;
+    const keys = new Set<string>([`function::<root>::${methodName}`]);
+
+    if (owner && owner !== "this") {
+      keys.add(`method::${owner.replace(/\./g, "::")}::${methodName}`);
+    }
+
+    return [...keys];
+  }
+
+  return [];
+}
+
+function extractCallReferences(node: ts.Node | undefined): string[] {
   if (!node) {
     return [];
   }
@@ -81,7 +139,9 @@ function extractCallReferences(sourceFile: ts.SourceFile, node: ts.Node | undefi
 
   const visit = (current: ts.Node) => {
     if (ts.isCallExpression(current)) {
-      references.add(current.expression.getText(sourceFile));
+      for (const reference of toReferenceSymbolKeys(current.expression)) {
+        references.add(reference);
+      }
     }
 
     ts.forEachChild(current, visit);
@@ -109,24 +169,12 @@ function summarizeBody(body: ts.ConciseBody | undefined): string | undefined {
   return "expression body";
 }
 
-function createSymbolKey(kind: "function" | "method", displayName: string, container?: string): string {
-  return [kind, container ?? "<root>", displayName].join("::");
+function toContainerLabel(containerPath: string[]): string | undefined {
+  return containerPath.length > 0 ? containerPath.join("::") : undefined;
 }
 
-function readName(name: ts.PropertyName | ts.BindingName | undefined): string | null {
-  if (!name) {
-    return null;
-  }
-
-  if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name)) {
-    return name.text;
-  }
-
-  if (ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
-    return name.text;
-  }
-
-  return name.getText();
+function createSymbolKey(kind: "function" | "method", displayName: string, containerPath: string[]): string {
+  return [kind, toContainerLabel(containerPath) ?? "<root>", displayName].join("::");
 }
 
 function isCallableInitializer(
@@ -139,30 +187,182 @@ function createCallable(params: {
   sourceFile: ts.SourceFile;
   kind: "function" | "method";
   displayName: string;
-  container?: string;
+  containerPath: string[];
   parameters: readonly ts.ParameterDeclaration[];
   body: ts.ConciseBody | undefined;
   regionNode: ts.Node;
 }): ParsedCallable {
   const signatureSummary = renderSignature(params.displayName, params.parameters);
-  const signatureText = signatureSummary;
   const bodyText = params.body ? params.body.getText(params.sourceFile) : "";
-  const normalizedSignature = normalizeCode(signatureText);
+  const normalizedSignature = normalizeCode(signatureSummary);
   const normalizedBody = normalizeCode(bodyText);
 
   return {
-    symbolKey: createSymbolKey(params.kind, params.displayName, params.container),
+    symbolKey: createSymbolKey(params.kind, params.displayName, params.containerPath),
     displayName: params.displayName,
     kind: params.kind,
-    container: params.container,
+    container: toContainerLabel(params.containerPath),
     signatureSummary,
     bodySummary: summarizeBody(params.body),
     normalizedSignature,
     normalizedBody,
     normalizedText: `${normalizedSignature}=>${normalizedBody}`,
     region: toRegion(params.sourceFile, params.regionNode),
-    references: extractCallReferences(params.sourceFile, params.body),
+    references: extractCallReferences(params.body),
   };
+}
+
+function collectVariableCallableDeclarations(
+  sourceFile: ts.SourceFile,
+  statement: ts.VariableStatement,
+  containerPath: string[],
+): ParsedCallable[] {
+  const callables: ParsedCallable[] = [];
+
+  for (const declaration of statement.declarationList.declarations) {
+    if (!isCallableInitializer(declaration.initializer)) {
+      continue;
+    }
+
+    const displayName = readName(declaration.name);
+
+    if (!displayName) {
+      continue;
+    }
+
+    callables.push(
+      createCallable({
+        sourceFile,
+        kind: "function",
+        displayName,
+        containerPath,
+        parameters: declaration.initializer.parameters,
+        body: declaration.initializer.body,
+        regionNode: declaration,
+      }),
+    );
+  }
+
+  return callables;
+}
+
+function collectClassMemberCallables(
+  sourceFile: ts.SourceFile,
+  classDeclaration: ts.ClassDeclaration,
+  containerPath: string[],
+): ParsedCallable[] {
+  const callables: ParsedCallable[] = [];
+
+  for (const member of classDeclaration.members) {
+    if (ts.isMethodDeclaration(member)) {
+      if (!member.body) {
+        continue;
+      }
+
+      const displayName = readName(member.name);
+
+      if (!displayName) {
+        continue;
+      }
+
+      callables.push(
+        createCallable({
+          sourceFile,
+          kind: "method",
+          displayName,
+          containerPath,
+          parameters: member.parameters,
+          body: member.body,
+          regionNode: member,
+        }),
+      );
+      continue;
+    }
+
+    if (ts.isPropertyDeclaration(member) && isCallableInitializer(member.initializer)) {
+      const displayName = readName(member.name);
+
+      if (!displayName) {
+        continue;
+      }
+
+      callables.push(
+        createCallable({
+          sourceFile,
+          kind: "method",
+          displayName,
+          containerPath,
+          parameters: member.initializer.parameters,
+          body: member.initializer.body,
+          regionNode: member,
+        }),
+      );
+    }
+  }
+
+  return callables;
+}
+
+function collectCallablesFromStatement(
+  sourceFile: ts.SourceFile,
+  statement: ts.Statement | ts.ModuleDeclaration,
+  containerPath: string[],
+): ParsedCallable[] {
+  if (ts.isClassDeclaration(statement) && statement.name) {
+    const classContainerPath = [...containerPath, statement.name.text];
+    return collectClassMemberCallables(sourceFile, statement, classContainerPath);
+  }
+
+  if (ts.isFunctionDeclaration(statement)) {
+    if (!statement.body) {
+      return [];
+    }
+
+    const displayName = readName(statement.name);
+
+    if (!displayName) {
+      return [];
+    }
+
+    return [
+      createCallable({
+        sourceFile,
+        kind: "function",
+        displayName,
+        containerPath,
+        parameters: statement.parameters,
+        body: statement.body,
+        regionNode: statement,
+      }),
+    ];
+  }
+
+  if (ts.isVariableStatement(statement)) {
+    return collectVariableCallableDeclarations(sourceFile, statement, containerPath);
+  }
+
+  if (ts.isModuleDeclaration(statement)) {
+    const moduleName = readName(statement.name);
+    const nextContainerPath = moduleName ? [...containerPath, moduleName] : containerPath;
+
+    if (!statement.body) {
+      return [];
+    }
+
+    if (ts.isModuleBlock(statement.body)) {
+      return statement.body.statements.flatMap((nestedStatement) =>
+        collectCallablesFromStatement(sourceFile, nestedStatement, nextContainerPath),
+      );
+    }
+
+    if (ts.isModuleDeclaration(statement.body)) {
+      return collectCallablesFromStatement(sourceFile, statement.body, nextContainerPath);
+    }
+
+    return [];
+  }
+
+  return [];
 }
 
 function collectCallables(snapshot: SourceSnapshot): ParsedCallable[] {
@@ -174,85 +374,9 @@ function collectCallables(snapshot: SourceSnapshot): ParsedCallable[] {
     toScriptKind(snapshot.filePath),
   );
 
-  const callables: ParsedCallable[] = [];
-
-  const visit = (node: ts.Node, containers: string[]) => {
-    if (ts.isClassDeclaration(node) && node.name) {
-      const nextContainers = [...containers, node.name.text];
-      ts.forEachChild(node, (child) => visit(child, nextContainers));
-      return;
-    }
-
-    if (ts.isFunctionDeclaration(node)) {
-      const displayName = readName(node.name);
-
-      if (displayName) {
-        callables.push(
-          createCallable({
-            sourceFile,
-            kind: "function",
-            displayName,
-            container: containers.at(-1),
-            parameters: node.parameters,
-            body: node.body,
-            regionNode: node,
-          }),
-        );
-      }
-    } else if (ts.isMethodDeclaration(node)) {
-      const displayName = readName(node.name);
-
-      if (displayName) {
-        callables.push(
-          createCallable({
-            sourceFile,
-            kind: "method",
-            displayName,
-            container: containers.at(-1),
-            parameters: node.parameters,
-            body: node.body,
-            regionNode: node,
-          }),
-        );
-      }
-    } else if (ts.isPropertyDeclaration(node) && isCallableInitializer(node.initializer)) {
-      const displayName = readName(node.name);
-
-      if (displayName) {
-        callables.push(
-          createCallable({
-            sourceFile,
-            kind: "method",
-            displayName,
-            container: containers.at(-1),
-            parameters: node.initializer.parameters,
-            body: node.initializer.body,
-            regionNode: node,
-          }),
-        );
-      }
-    } else if (ts.isVariableDeclaration(node) && isCallableInitializer(node.initializer)) {
-      const displayName = readName(node.name);
-
-      if (displayName) {
-        callables.push(
-          createCallable({
-            sourceFile,
-            kind: "function",
-            displayName,
-            container: containers.at(-1),
-            parameters: node.initializer.parameters,
-            body: node.initializer.body,
-            regionNode: node,
-          }),
-        );
-      }
-    }
-
-    ts.forEachChild(node, (child) => visit(child, containers));
-  };
-
-  visit(sourceFile, []);
+  const callables = sourceFile.statements.flatMap((statement) =>
+    collectCallablesFromStatement(sourceFile, statement, []),
+  );
 
   return callables.sort((a, b) => a.symbolKey.localeCompare(b.symbolKey));
 }

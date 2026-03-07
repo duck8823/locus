@@ -20,7 +20,7 @@ export interface AnalyzeSourceSnapshotsResult {
 }
 
 function createStableId(...parts: string[]): string {
-  return createHash("sha1").update(parts.join("::")).digest("hex").slice(0, 16);
+  return createHash("sha256").update(parts.join("::")).digest("hex").slice(0, 20);
 }
 
 function inferDominantLayer(filePath: string): string | undefined {
@@ -43,9 +43,10 @@ function inferDominantLayer(filePath: string): string | undefined {
   return undefined;
 }
 
-function selectAdapter(adapters: ParserAdapter[], pair: SourceSnapshotPair): ParserAdapter | null {
-  const representative = pair.after ?? pair.before;
-
+function selectAdapter(
+  adapters: ParserAdapter[],
+  representative: SourceSnapshotPair["before"] | SourceSnapshotPair["after"],
+): ParserAdapter | null {
   if (!representative) {
     return null;
   }
@@ -76,7 +77,7 @@ export async function analyzeSourceSnapshots({
       continue;
     }
 
-    const adapter = selectAdapter(parserAdapters, pair);
+    const adapter = selectAdapter(parserAdapters, representative);
 
     if (!adapter) {
       unsupportedFiles.push({

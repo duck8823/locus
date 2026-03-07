@@ -113,10 +113,7 @@ export class ReviewSession {
   static create(params: CreateReviewSessionParams): ReviewSession {
     assertGroups(params.groups);
 
-    const selectedGroupId =
-      params.selectedGroupId ??
-      (params.groups.length > 0 ? params.groups[0]?.groupId : null) ??
-      null;
+    const selectedGroupId = params.selectedGroupId ?? params.groups[0]?.groupId ?? null;
 
     return new ReviewSession({
       reviewId: params.reviewId,

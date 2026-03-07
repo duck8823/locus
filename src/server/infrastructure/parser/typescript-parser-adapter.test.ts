@@ -38,6 +38,7 @@ describe("TypeScriptParserAdapter", () => {
     expect(change.changeType).toBe("modified");
     expect(change.bodySummary).toBe("Body changed");
     expect(change.symbolKey).toBe("method::UserService::updateProfile");
+    expect(change.references).toContain("function::<root>::formatPhone");
   });
 
   it("detects added and removed callables", async () => {
@@ -111,5 +112,66 @@ export function keepValue(value: number): number {
         }),
       ),
     ).toBe(false);
+  });
+
+  it("does not create standalone diffs for nested local callables", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export function outer(): number {
+  const local = () => 1;
+  return local();
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export function outer(): number {
+  const local = () => 2;
+  return local();
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("function::<root>::outer");
+  });
+
+  it("ignores overload signatures without implementation bodies", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export function serialize(value: string): string;
+export function serialize(value: number): string;
+export function serialize(value: string | number): string {
+  return String(value);
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export function serialize(value: string): string;
+export function serialize(value: number): string;
+export function serialize(value: string | number): string {
+  return String(value);
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toEqual([]);
   });
 });
