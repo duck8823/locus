@@ -6,6 +6,9 @@
 
 This document defines the implementation-oriented contracts for the semantic analysis pipeline so that the first parser spike, GitHub ingestion, persistence, and UI can all be designed against the same model.
 
+Related document:
+- [Web Application Blueprint](web-application-blueprint.md)
+
 ## End-to-end pipeline
 
 ```text

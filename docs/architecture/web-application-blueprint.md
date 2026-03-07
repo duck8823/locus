@@ -12,6 +12,9 @@ It answers:
 - how requests flow through the layers
 - which responsibilities belong to the web shell vs the analysis core
 
+Related document:
+- [Semantic Analysis Pipeline](semantic-analysis-pipeline.md)
+
 ## Runtime overview
 
 ```text

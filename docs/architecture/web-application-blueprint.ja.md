@@ -12,6 +12,9 @@
 - リクエストが各層をどう流れるか
 - Web shell と analysis core の責務をどう分けるか
 
+関連ドキュメント:
+- [セマンティック分析パイプライン](semantic-analysis-pipeline.ja.md)
+
 ## Runtime overview
 
 ```text

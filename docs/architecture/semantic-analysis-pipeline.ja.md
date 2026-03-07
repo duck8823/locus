@@ -6,6 +6,9 @@
 
 この文書は semantic analysis pipeline の契約を実装可能な粒度で定義し、最初の parser spike、GitHub ingestion、persistence、UI を同じモデルの上で進められるようにするものです。
 
+関連ドキュメント:
+- [Webアプリケーション設計図](web-application-blueprint.ja.md)
+
 ## End-to-end pipeline
 
 ```text
@@ -47,7 +50,7 @@ export interface SourceSnapshot {
 - rename detection により `filePath` が変わっても、review session 内の `fileId` は維持します
 - GitHub の pull request number のような provider 固有 ID は、core contract の形に直接入れず、`providerMetadata` か安定した string reference に写像して扱います
 
-## Parser contract
+## Parser contracts
 
 ```ts
 export interface ParsedSnapshot {
