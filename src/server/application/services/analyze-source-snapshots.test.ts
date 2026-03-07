@@ -330,6 +330,50 @@ describe("analyzeSourceSnapshots", () => {
     ]);
   });
 
+  it("attributes parser_failed metadata to the snapshot that actually failed", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "failing-before-review",
+      snapshotPairs: [
+        {
+          fileId: "file-failing-before",
+          filePath: "src/migration-target",
+          before: {
+            snapshotId: "failing-before-review:file-failing-before:before",
+            fileId: "file-failing-before",
+            filePath: "src/legacy-service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export function legacy() { return 1; }",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "failing-before-review:file-failing-before:after",
+            fileId: "file-failing-before",
+            filePath: "docs/legacy-service.md",
+            language: "markdown",
+            revision: "after",
+            content: "# migrated",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new FailingParserAdapter()],
+    });
+
+    expect(result.semanticChanges).toEqual([]);
+    expect(result.groups).toEqual([]);
+    expect(result.unsupportedFiles).toEqual([
+      {
+        detail: "intentional parser failure",
+        fileId: "file-failing-before",
+        filePath: "src/legacy-service.ts",
+        language: "typescript",
+        reason: "parser_failed",
+        reviewId: "failing-before-review",
+      },
+    ]);
+  });
+
   it("keeps removals when a file transitions from supported to unsupported language", async () => {
     const result = await analyzeSourceSnapshots({
       reviewId: "migration-review",
@@ -445,7 +489,7 @@ describe("analyzeSourceSnapshots", () => {
       {
         detail: "python parse failed",
         fileId: "file-cross-language-failure",
-        filePath: "src/cross-language-failure",
+        filePath: "src/cross-language-failure.py",
         language: "python",
         reason: "parser_failed",
         reviewId: "cross-language-failure-review",

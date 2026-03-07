@@ -136,12 +136,22 @@ export async function analyzeSourceSnapshots({
       }
     }
 
+    let failureSnapshot: SourceSnapshot | null = null;
+
     try {
       const fileSemanticChanges: SemanticChange[] = [];
 
       for (const plan of diffPlans) {
+        if (plan.beforeSnapshot) {
+          failureSnapshot = plan.beforeSnapshot;
+        }
         const before = plan.beforeSnapshot ? await plan.adapter.parse(plan.beforeSnapshot) : null;
+
+        if (plan.afterSnapshot) {
+          failureSnapshot = plan.afterSnapshot;
+        }
         const after = plan.afterSnapshot ? await plan.adapter.parse(plan.afterSnapshot) : null;
+        failureSnapshot = plan.afterSnapshot ?? plan.beforeSnapshot ?? failureSnapshot;
         const diff = await plan.adapter.diff({ before, after });
 
         for (const item of diff.items) {
@@ -201,11 +211,11 @@ export async function analyzeSourceSnapshots({
 
       semanticChanges.push(...fileSemanticChanges);
     } catch (error) {
-      const representative = pair.after ?? pair.before;
+      const representative = failureSnapshot ?? pair.after ?? pair.before;
       unsupportedFiles.push({
         reviewId,
         fileId: pair.fileId,
-        filePath: pair.filePath,
+        filePath: representative?.filePath ?? pair.filePath,
         language: representative?.language ?? null,
         reason: "parser_failed",
         detail: error instanceof Error ? error.message : "Unknown parser error",
