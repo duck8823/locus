@@ -52,6 +52,8 @@ export interface SourceSnapshot {
 
 ## Parser contracts
 
+The canonical `ParserAdapter` interface is defined in [ADR 0004](../adr/0004-semantic-change-ir.md). This document defines the parser payload contracts that the pipeline stores and normalizes around that adapter boundary.
+
 ```ts
 export interface ParsedSnapshot {
   snapshotId: string

@@ -224,7 +224,7 @@ Route Handler を使うべきケース:
 - semantic change group table
 - review progress state table
 
-Raw source snapshot は、DB row size が問題になるまでは blob storage を固定しなくてよいです。
+Raw source snapshot は、DB row size が問題になるまでは blob storage を固定しなくてよいです。その判断は、最初の web shell を立ち上げる前に確定している必要はありません。
 
 ## Background job boundary
 

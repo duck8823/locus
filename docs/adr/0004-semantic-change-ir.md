@@ -20,6 +20,23 @@ The system therefore has three explicit stages:
 
 Parser-native ASTs do **not** cross the infrastructure boundary.
 
+## Options considered
+
+### Option A — Expose parser-native contracts to higher layers
+
+- Lets the first implementation move quickly with one parser stack
+- Couples UI, persistence, and application logic to parser-specific shapes
+
+### Option B — Lock one parser family and language model up front
+
+- Simplifies early implementation choices
+- Creates architectural lock-in before multi-language evaluation data exists
+
+### Option C — Parser adapter boundary + common Semantic Change IR (chosen)
+
+- Keeps the first parser implementation replaceable
+- Preserves stable contracts for storage, UI, and future language expansion
+
 ## Required properties of the IR
 
 The IR must be able to represent at least:

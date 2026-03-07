@@ -52,6 +52,8 @@ export interface SourceSnapshot {
 
 ## Parser contracts
 
+`ParserAdapter` の正本インターフェースは [ADR 0004](../adr/0004-semantic-change-ir.ja.md) に置きます。この文書では、その adapter 境界の周りで保存・正規化する parser payload contract を定義します。
+
 ```ts
 export interface ParsedSnapshot {
   snapshotId: string

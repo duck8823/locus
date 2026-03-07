@@ -54,6 +54,10 @@ The numbered capabilities above define MVP scope, not implementation order. The 
 
 ## Delivery Slices
 
+Supporting implementation docs:
+- [Web Application Blueprint](architecture/web-application-blueprint.md)
+- [Semantic Analysis Pipeline](architecture/semantic-analysis-pipeline.md)
+
 ### Slice 1 — Web shell and server boundaries
 
 - establish the Next.js App Router project structure

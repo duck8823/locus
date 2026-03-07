@@ -54,6 +54,10 @@
 
 ## 配送スライス
 
+実装補助ドキュメント:
+- [Webアプリケーション設計図](architecture/web-application-blueprint.ja.md)
+- [セマンティック分析パイプライン](architecture/semantic-analysis-pipeline.ja.md)
+
 ### Slice 1 — Web shell と server boundary
 
 - Next.js App Router のプロジェクト構造を確立する
