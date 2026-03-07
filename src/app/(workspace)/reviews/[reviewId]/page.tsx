@@ -8,6 +8,10 @@ import { requestReanalysisAction } from "@/server/presentation/actions/request-r
 import { selectReviewGroupAction } from "@/server/presentation/actions/select-review-group-action";
 import { setReviewGroupStatusAction } from "@/server/presentation/actions/set-review-group-status-action";
 
+function formatReviewGroupStatus(status: string) {
+  return status.replaceAll("_", " ");
+}
+
 export default async function ReviewWorkspacePage({
   params,
 }: {
@@ -60,58 +64,73 @@ export default async function ReviewWorkspacePage({
       <div className={styles.layout}>
         <section className={styles.panel}>
           <h2>Change groups</h2>
-          <ul className={styles.groupList}>
-            {workspace.groups.map((group) => (
-              <li key={group.groupId}>
-                <form action={selectReviewGroupAction}>
-                  <input name="reviewId" type="hidden" value={workspace.reviewId} />
-                  <input name="groupId" type="hidden" value={group.groupId} />
-                  <button
-                    className={styles.groupButton}
-                    data-selected={group.isSelected}
-                    type="submit"
-                  >
-                    <span className={styles.groupTitle}>
-                      <span>{group.title}</span>
-                      <span className={styles.badge} data-status={group.status}>
-                        {group.status.replace("_", " ")}
+          {workspace.groups.length > 0 ? (
+            <ul className={styles.groupList}>
+              {workspace.groups.map((group) => (
+                <li key={group.groupId}>
+                  <form action={selectReviewGroupAction}>
+                    <input name="reviewId" type="hidden" value={workspace.reviewId} />
+                    <input name="groupId" type="hidden" value={group.groupId} />
+                    <button
+                      className={styles.groupButton}
+                      data-selected={group.isSelected}
+                      type="submit"
+                    >
+                      <span className={styles.groupTitle}>
+                        <span>{group.title}</span>
+                        <span className={styles.badge} data-status={group.status}>
+                          {formatReviewGroupStatus(group.status)}
+                        </span>
                       </span>
-                    </span>
-                    <p className={styles.groupSummary}>{group.summary}</p>
-                  </button>
-                </form>
-              </li>
-            ))}
-          </ul>
+                      <p className={styles.groupSummary}>{group.summary}</p>
+                    </button>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={styles.muted}>No change groups are available yet.</p>
+          )}
         </section>
 
         <section className={styles.panel}>
           <h2>Detail pane</h2>
-          <div className={styles.detailBlock}>
-            <span className={styles.badge} data-status={selectedGroup.status}>
-              {selectedGroup.status.replace("_", " ")}
-            </span>
-            <h3 style={{ fontSize: "26px" }}>{selectedGroup.title}</h3>
-            <p className={styles.groupSummary}>{selectedGroup.summary}</p>
-            <p className={styles.filePath}>{selectedGroup.filePath}</p>
-          </div>
+          {selectedGroup ? (
+            <>
+              <div className={styles.detailBlock}>
+                <span className={styles.badge} data-status={selectedGroup.status}>
+                  {formatReviewGroupStatus(selectedGroup.status)}
+                </span>
+                <h3 style={{ fontSize: "26px" }}>{selectedGroup.title}</h3>
+                <p className={styles.groupSummary}>{selectedGroup.summary}</p>
+                <p className={styles.filePath}>{selectedGroup.filePath}</p>
+              </div>
 
-          <form action={setReviewGroupStatusAction} className={styles.statusActions}>
-            <input name="reviewId" type="hidden" value={workspace.reviewId} />
-            <input name="groupId" type="hidden" value={selectedGroup.groupId} />
-            {workspace.availableStatuses.map((status) => (
-              <button
-                key={status}
-                className={styles.statusButton}
-                data-active={selectedGroup.status === status}
-                name="status"
-                type="submit"
-                value={status}
-              >
-                Mark {status.replace("_", " ")}
-              </button>
-            ))}
-          </form>
+              <form action={setReviewGroupStatusAction} className={styles.statusActions}>
+                <input name="reviewId" type="hidden" value={workspace.reviewId} />
+                <input name="groupId" type="hidden" value={selectedGroup.groupId} />
+                {workspace.availableStatuses.map((status) => (
+                  <button
+                    key={status}
+                    className={styles.statusButton}
+                    data-active={selectedGroup.status === status}
+                    name="status"
+                    type="submit"
+                    value={status}
+                  >
+                    Mark {formatReviewGroupStatus(status)}
+                  </button>
+                ))}
+              </form>
+            </>
+          ) : (
+            <div className={styles.detailBlock}>
+              <p className={styles.groupSummary}>
+                Change group details will appear after semantic analysis produces the first
+                review group.
+              </p>
+            </div>
+          )}
 
           <div className={styles.detailBlock}>
             <span className={styles.muted}>Why this exists</span>
@@ -140,20 +159,26 @@ export default async function ReviewWorkspacePage({
           <p className={styles.muted} style={{ marginBottom: "14px" }}>
             Slice 1 keeps this to immediate neighbors only.
           </p>
-          <ul className={styles.archList}>
-            {selectedGroup.upstream.map((node) => (
-              <li key={`upstream-${node}`}>
-                <strong>Upstream</strong>
-                <p className={styles.groupSummary}>{node}</p>
-              </li>
-            ))}
-            {selectedGroup.downstream.map((node) => (
-              <li key={`downstream-${node}`}>
-                <strong>Downstream</strong>
-                <p className={styles.groupSummary}>{node}</p>
-              </li>
-            ))}
-          </ul>
+          {selectedGroup ? (
+            <ul className={styles.archList}>
+              {selectedGroup.upstream.map((node) => (
+                <li key={`upstream-${node}`}>
+                  <strong>Upstream</strong>
+                  <p className={styles.groupSummary}>{node}</p>
+                </li>
+              ))}
+              {selectedGroup.downstream.map((node) => (
+                <li key={`downstream-${node}`}>
+                  <strong>Downstream</strong>
+                  <p className={styles.groupSummary}>{node}</p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={styles.muted}>
+              Architecture context will appear after the first change group is available.
+            </p>
+          )}
         </aside>
       </div>
     </main>
