@@ -1,5 +1,9 @@
 import { reviewGroupStatuses, type ReviewGroupStatus } from "@/server/domain/value-objects/review-status";
 import { ReviewGroupNotFoundError } from "@/server/domain/errors/review-group-not-found-error";
+import type {
+  SemanticChange,
+  UnsupportedFileAnalysis,
+} from "@/server/domain/value-objects/semantic-change";
 
 export interface ReviewGroupRecord {
   groupId: string;
@@ -9,6 +13,9 @@ export interface ReviewGroupRecord {
   status: ReviewGroupStatus;
   upstream: string[];
   downstream: string[];
+  dominantLayer?: string;
+  fileIds?: string[];
+  semanticChangeIds?: string[];
 }
 
 export interface ReviewSessionRecord {
@@ -19,6 +26,8 @@ export interface ReviewSessionRecord {
   viewerName: string;
   selectedGroupId: string | null;
   groups: ReviewGroupRecord[];
+  semanticChanges?: SemanticChange[];
+  unsupportedFileAnalyses?: UnsupportedFileAnalysis[];
   lastOpenedAt: string;
   lastReanalyzeRequestedAt: string | null;
 }
@@ -30,6 +39,8 @@ export interface CreateReviewSessionParams {
   branchLabel: string;
   viewerName: string;
   groups: ReviewGroupRecord[];
+  semanticChanges?: SemanticChange[];
+  unsupportedFileAnalyses?: UnsupportedFileAnalysis[];
   selectedGroupId?: string | null;
   lastOpenedAt: string;
   lastReanalyzeRequestedAt?: string | null;
@@ -40,6 +51,34 @@ function cloneGroup(group: ReviewGroupRecord): ReviewGroupRecord {
     ...group,
     upstream: [...group.upstream],
     downstream: [...group.downstream],
+    fileIds: group.fileIds ? [...group.fileIds] : undefined,
+    semanticChangeIds: group.semanticChangeIds ? [...group.semanticChangeIds] : undefined,
+  };
+}
+
+function cloneSemanticChange(semanticChange: SemanticChange): SemanticChange {
+  return {
+    ...semanticChange,
+    symbol: { ...semanticChange.symbol },
+    change: { ...semanticChange.change },
+    before: semanticChange.before ? { ...semanticChange.before } : undefined,
+    after: semanticChange.after ? { ...semanticChange.after } : undefined,
+    architecture: semanticChange.architecture
+      ? {
+          outgoingNodeIds: [...semanticChange.architecture.outgoingNodeIds],
+          incomingNodeIds: [...semanticChange.architecture.incomingNodeIds],
+        }
+      : undefined,
+    metadata: {
+      parser: { ...semanticChange.metadata.parser },
+      languageSpecific: { ...semanticChange.metadata.languageSpecific },
+    },
+  };
+}
+
+function cloneUnsupportedFileAnalysis(record: UnsupportedFileAnalysis): UnsupportedFileAnalysis {
+  return {
+    ...record,
   };
 }
 
@@ -47,14 +86,12 @@ function cloneRecord(record: ReviewSessionRecord): ReviewSessionRecord {
   return {
     ...record,
     groups: record.groups.map(cloneGroup),
+    semanticChanges: (record.semanticChanges ?? []).map(cloneSemanticChange),
+    unsupportedFileAnalyses: (record.unsupportedFileAnalyses ?? []).map(cloneUnsupportedFileAnalysis),
   };
 }
 
 function assertGroups(groups: ReviewGroupRecord[]): void {
-  if (groups.length === 0) {
-    throw new Error("A review session requires at least one review group.");
-  }
-
   const ids = new Set<string>();
 
   for (const group of groups) {
@@ -76,7 +113,10 @@ export class ReviewSession {
   static create(params: CreateReviewSessionParams): ReviewSession {
     assertGroups(params.groups);
 
-    const selectedGroupId = params.selectedGroupId ?? params.groups[0]?.groupId ?? null;
+    const selectedGroupId =
+      params.selectedGroupId ??
+      (params.groups.length > 0 ? params.groups[0]?.groupId : null) ??
+      null;
 
     return new ReviewSession({
       reviewId: params.reviewId,
@@ -86,19 +126,30 @@ export class ReviewSession {
       viewerName: params.viewerName,
       selectedGroupId,
       groups: params.groups.map(cloneGroup),
+      semanticChanges: (params.semanticChanges ?? []).map(cloneSemanticChange),
+      unsupportedFileAnalyses: (params.unsupportedFileAnalyses ?? []).map(cloneUnsupportedFileAnalysis),
       lastOpenedAt: params.lastOpenedAt,
       lastReanalyzeRequestedAt: params.lastReanalyzeRequestedAt ?? null,
     });
   }
 
   static fromRecord(record: ReviewSessionRecord): ReviewSession {
-    assertGroups(record.groups);
+    const normalizedRecord: ReviewSessionRecord = {
+      ...record,
+      semanticChanges: record.semanticChanges ?? [],
+      unsupportedFileAnalyses: record.unsupportedFileAnalyses ?? [],
+    };
 
-    if (record.selectedGroupId && !record.groups.some((group) => group.groupId === record.selectedGroupId)) {
-      throw new Error(`Selected review group not found: ${record.selectedGroupId}`);
+    assertGroups(normalizedRecord.groups);
+
+    if (
+      normalizedRecord.selectedGroupId &&
+      !normalizedRecord.groups.some((group) => group.groupId === normalizedRecord.selectedGroupId)
+    ) {
+      throw new Error(`Selected review group not found: ${normalizedRecord.selectedGroupId}`);
     }
 
-    return new ReviewSession(cloneRecord(record));
+    return new ReviewSession(cloneRecord(normalizedRecord));
   }
 
   get reviewId(): string {
