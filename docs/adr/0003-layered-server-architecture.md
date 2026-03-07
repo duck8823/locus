@@ -68,6 +68,8 @@ The referenced Go rules strongly separate presentation, application, domain, and
 - **use explicit mappers** so ORM and provider types do not leak into the domain
 - **treat parser adapters like infrastructure modules**, not like domain objects
 
+The operational rules in this ADR are intentionally self-contained. A reader should be able to apply the architecture without needing access to the originally referenced materials.
+
 ## Project structure
 
 ```text
@@ -124,9 +126,6 @@ src/
 - infrastructure types are mapped before entering Domain/Application
 - review comments treat boundary violations as design issues, not style nits
 
-## References
+## Reference note
 
-- Referenced design concept source: https://github.com/caddi-sandbox/shunsuke-maeda-sandbox/tree/main/docs/go-coding-standards
-- Architecture section: https://github.com/caddi-sandbox/shunsuke-maeda-sandbox/blob/main/docs/go-coding-standards/architecture.md
-- Project structure section: https://github.com/caddi-sandbox/shunsuke-maeda-sandbox/blob/main/docs/go-coding-standards/project-structure.md
-- Presentation section: https://github.com/caddi-sandbox/shunsuke-maeda-sandbox/blob/main/docs/go-coding-standards/presentation.md
+This ADR was inspired by an internal Go coding-standards document, but the normative guidance is fully captured above. Future implementation and review should rely on this ADR itself rather than on an external repository remaining accessible.

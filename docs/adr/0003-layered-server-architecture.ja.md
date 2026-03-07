@@ -68,6 +68,8 @@ Presentation -> Application -> Domain <- Infrastructure
 - ORM 型や provider 型が domain に漏れないよう **mapper を明示する**
 - parser adapter は **domain ではなく infrastructure** として扱う
 
+この ADR の運用ルールは、この文書だけで理解・適用できるように自己完結させます。元の参照資料へアクセスできなくても、実装判断に困らないことを前提にします。
+
 ## 推奨プロジェクト構成
 
 ```text
@@ -124,9 +126,6 @@ src/
 - infrastructure 型は Domain/Application に入る前に mapper を通す
 - レビューでは境界違反を style ではなく設計問題として扱う
 
-## References
+## 参照メモ
 
-- 参照した設計概念の元: https://github.com/caddi-sandbox/shunsuke-maeda-sandbox/tree/main/docs/go-coding-standards
-- Architecture section: https://github.com/caddi-sandbox/shunsuke-maeda-sandbox/blob/main/docs/go-coding-standards/architecture.md
-- Project structure section: https://github.com/caddi-sandbox/shunsuke-maeda-sandbox/blob/main/docs/go-coding-standards/project-structure.md
-- Presentation section: https://github.com/caddi-sandbox/shunsuke-maeda-sandbox/blob/main/docs/go-coding-standards/presentation.md
+この ADR は内部の Go コーディング規約文書から着想を得ていますが、規範となる内容は上記にすべて記載しています。今後の実装判断やレビューでは、外部リポジトリの可用性ではなく、この ADR 自体を参照してください。

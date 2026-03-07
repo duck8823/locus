@@ -112,7 +112,7 @@ Locusは最初から拡張可能な設計で作られています：
 
 ### MVP
 - GitHub連携
-- Web review workspace
+- Web review workspace v0
 - AI自動生成アーキテクチャマップ
 - セマンティックDiff（関数・メソッド単位）
 - レビュー進捗トラッキング

@@ -107,7 +107,7 @@ What is intentionally still open:
 
 ### MVP
 - GitHub integration
-- web review workspace
+- web review workspace v0
 - AI-generated architecture map
 - semantic diff (function-level)
 - review progress tracking

@@ -91,4 +91,4 @@ Next.js を product shell として選んでも、business logic を framework f
 ## References
 
 - Next.js App Router docs: https://nextjs.org/docs/app
-- Next.js Route Handlers docs: https://nextjs.org/docs/app/getting-started/route-handlers-and-middleware
+- Next.js Route Handlers docs: https://nextjs.org/docs/app/api-reference/file-conventions/route

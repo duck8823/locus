@@ -91,4 +91,4 @@ Revisit this ADR if one of the following becomes true:
 ## References
 
 - Next.js App Router docs: https://nextjs.org/docs/app
-- Next.js Route Handlers docs: https://nextjs.org/docs/app/getting-started/route-handlers-and-middleware
+- Next.js Route Handlers docs: https://nextjs.org/docs/app/api-reference/file-conventions/route
