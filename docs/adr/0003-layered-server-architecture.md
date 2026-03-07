@@ -75,13 +75,23 @@ The operational rules in this ADR are intentionally self-contained. A reader sho
 ```text
 src/
   app/
+    (marketing)/
+      page.tsx
+    (workspace)/
+      reviews/
+        [reviewId]/
+          page.tsx
+          loading.tsx
+          error.tsx
+      settings/
+        connections/page.tsx
     api/
       github/
         webhooks/route.ts
       reviews/
-        [reviewId]/progress/route.ts
-    reviews/
-      [reviewId]/page.tsx
+        [reviewId]/
+          progress/route.ts
+          reanalyze/route.ts
   server/
     presentation/
       api/
@@ -104,6 +114,7 @@ src/
       llm/
       queue/
       cache/
+      storage/
 ```
 
 ## Consequences

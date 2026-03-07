@@ -32,9 +32,11 @@ export interface SourceSnapshot {
   revision: 'before' | 'after'
   content: string
   metadata: {
-    codeHost: 'github'
-    pullRequestNumber: number
+    codeHost: string
+    repositoryRef?: string
+    changeRequestRef?: string
     commitSha?: string
+    providerMetadata?: Record<string, unknown>
   }
 }
 ```
@@ -43,6 +45,7 @@ export interface SourceSnapshot {
 - `fileId` must stay stable across before/after versions of the same file.
 - `language` may be unknown at ingestion time and resolved later.
 - rename detection may update `filePath`, but `fileId` should remain stable for the review session.
+- provider-specific identifiers such as GitHub pull request numbers should live under `providerMetadata` or be mapped into stable string references, not into the core contract shape.
 
 ## Parser contracts
 

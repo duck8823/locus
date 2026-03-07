@@ -74,21 +74,21 @@ src/
       dto/
       mappers/
     application/
-      ports/
-      services/
       usecases/
+      services/
+      ports/
     domain/
       entities/
+      value-objects/
       repositories/
       services/
-      value-objects/
     infrastructure/
-      cache/
       db/
       github/
-      llm/
       parser/
+      llm/
       queue/
+      cache/
       storage/
 ```
 
