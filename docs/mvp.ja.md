@@ -34,6 +34,11 @@
    - 変更ノードの直近 upstream / downstream のみ表示する
 4. **Review progress tracking**
    - semantic change group を unread / in-progress / reviewed で管理する
+5. **Web review workspace v0**
+   - 単一 pull request を対象にした認証付き review workspace
+   - semantic change list、detail pane、progress state を1画面にまとめる
+
+上の番号付き機能は MVP のスコープを示すもので、実装順ではありません。実装の進め方は後段の Delivery Slices で別に定義します。
 
 ### 対象外
 
@@ -43,36 +48,46 @@
 - このフェーズで長期的な parser family や実装言語を固定すること
 - GitHub へのレビューコメント自動書き戻し
 - リアルタイム共同編集
+- このフェーズでのネイティブ desktop アプリ対応
 - 本番課金・テナンシー周りの設計
 
 ## 配送スライス
 
-### Slice 1 — Semantic-diff contract と parser spike
+実装補助ドキュメント:
+- [Webアプリケーション設計図](architecture/web-application-blueprint.ja.md)
+- [セマンティック分析パイプライン](architecture/semantic-analysis-pipeline.ja.md)
+
+### Slice 1 — Web shell と server boundary
+
+- Next.js App Router のプロジェクト構造を確立する
+- presentation / application / domain / infrastructure の境界を定義する
+- 認証と空の review-workspace 導線を stub data で先に実装する
+- 最初の Web workspace フローで review progress と workspace state を永続化する
+
+Slice 1 では、最初の workspace を開き直せるだけの最小 persistence があれば十分です。長期的な review-session model 全体まではこの段階で固めません。
+
+### Slice 2 — Semantic-diff contract と parser spike
 
 - parser adapter と semantic change contract を定義する
 - adapter 境界の背後に 1 つの暫定 probe 実装を置く
 - probe 言語の主要 callable 形式をテストでカバーする
 
-### Slice 2 — GitHub adapter
+### Slice 3 — GitHub adapter
 
 - PR diff を file snapshot に変換する
 - changed files を semantic change record に対応付ける
 
-### Slice 3 — Architecture context
+### Slice 4 — Architecture context
 
 - touched files から dependency graph を構築する
 - 各 semantic change group に graph neighbor を付与する
-
-### Slice 4 — Review session state
-
-- review progress を永続化する
-- 同じ PR を開き直したときに途中位置を復元する
 
 ## 成功条件
 
 - レビュアーが 10 秒以内に変更された callable を見つけられる。
 - コメントだけ・フォーマットだけの変更が semantic change として表示されない。
 - 200 ファイル規模の GitHub PR を手作業なしで ingest / 要約できる。
+- レビュアーが Web workspace を閉じて開き直しても review progress を失わない。
 - 少なくとも 1 回の内部ドッグフーディングで、medium-sized PR に対して raw diff より semantic view の方が有用だと確認できる。
 
 ## リスク
@@ -83,4 +98,5 @@
 | 暫定スパイクが最終的な基盤選定だと誤解される | 多言語ロードマップに対して偶発的なロックインが起きる | parser / 実装言語を固定する前に ADR を必須にする |
 | Architecture map がノイジーになる | グラフが読みにくいとレビューで無視される | 最初は直近 neighbor のみ表示する |
 | GitHub ingestion と analysis が密結合する | 将来のコードホスト追加コストが高くなる | provider-agnostic な snapshot contract を保つ |
-| UI を早く作りすぎる | 見た目でコア信号の弱さをごまかしてしまう | UI より先に CLI と fixture で精度を検証する |
+| Next.js の便利 API でレイヤ境界が崩れる | サーバーのテスト性・差し替え性が下がる | コアロジックを `src/server` に閉じ込め、use case 経由を徹底する |
+| UI を早く作りすぎる | 見た目でコア信号の弱さをごまかしてしまう | UI は薄く保ち、fixture と contract 検証を先に行う |

@@ -11,15 +11,16 @@ Locus currently has product positioning but no executable artifact. The project 
 
 ## Decision
 
-Start with a **prototype-first CLI package** that proves the semantic-diff contract and reviewer experience early, while keeping all upstream integrations behind explicit adapters.
+Start with a **prototype-first implementation path** that proves the semantic-diff contract and reviewer experience early, while keeping all upstream integrations behind explicit adapters.
 
 Do **not** lock the long-term parser family or implementation language in this phase. Any first parser / language implementation must be treated as a **disposable spike** behind the adapter boundary, not as a repo-wide architecture commitment.
 
 ## Options considered
 
-### Option A — Prototype-first semantic-diff engine with deferred parser/language commitment (chosen)
+### Option A — Prototype-first implementation with deferred parser/language commitment (chosen)
 
-- Build the CLI and test fixtures first
+- Build the first vertical slice early
+- The first vertical slice means one web shell route backed by one parser-driven review flow end to end
 - Keep parser / provider boundaries explicit from day one
 - Treat the first parser / language implementation as provisional until the evaluation criteria are met
 
@@ -28,10 +29,10 @@ Do **not** lock the long-term parser family or implementation language in this p
 - Build the same prototype flow, but declare the parser family and implementation language as long-term decisions immediately
 - Simplifies short-term communication, but creates lock-in before we have evidence from multi-language requirements
 
-### Option C — Full web application skeleton first
+### Option C — Full implementation before the contracts are explicit
 
-- Stand up web / API / DB layers before the analysis engine is proven
-- Produces visible progress, but most code would be scaffolding rather than product proof
+- Stand up a broad product surface, integrations, and persistence model before the analysis contracts are proven
+- Produces visible progress, but makes it harder to replace weak analysis assumptions later
 
 ## Rationale
 
@@ -49,7 +50,7 @@ The hardest part of the product is semantic grouping, not CRUD or OAuth. Option 
 
 ### Reuse
 
-A standalone engine with explicit contracts can later power a web app, GitHub App, local CLI, or IDE integration. Disposable spikes are acceptable as long as higher-layer contracts stay stable.
+A boundary-first implementation can later power a web app, GitHub App, local CLI, or IDE integration. Disposable spikes are acceptable as long as higher-layer contracts stay stable.
 
 ## Risks and mitigations
 
@@ -79,4 +80,4 @@ Revisit this ADR if one of the following becomes true:
 
 1. Keep the first spike behind adapter contracts and validate it with fixtures.
 2. Define evaluation criteria for parser / language selection before making a long-term commitment.
-3. Add real pull-request fixtures and use them to judge precision before building UI.
+3. Add real pull-request fixtures and use them to judge precision before expanding beyond the initial web shell.

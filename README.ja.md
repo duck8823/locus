@@ -84,31 +84,35 @@ Locusは最初から拡張可能な設計で作られています：
 
 ## プロジェクトの現状
 
-現在のリポジトリは **documentation-first** です。
+現在のリポジトリは **documentation-first** ですが、実装方針はかなり具体化されています。
 
-すでに入っているもの:
-- 英語・日本語のプロダクト概要
-- 英語・日本語の MVP 定義と ADR
-- 英語・日本語のコントリビューションガイド
-- MIT License 本文と日本語参考訳
+すでに決まっていること:
+- プロダクト形態は **Web アプリ**
+- 最初の実装ターゲットは **TypeScript + Next.js App Router**
+- サーバー側実装は、ADR に明文化した Go に着想を得たレイヤードアーキテクチャに従う
+- semantic analysis は **parser adapter + 共通 IR** の境界を必ずまたぐ
 
-意図的にまだ固定していないもの:
-- 長期的な parser family
-- 長期的な実装言語
-- 多言語対応における最終的な技術スタック
-
-最初の実行可能な semantic-diff スパイクは、parser / snapshot contract を明示した上で別PRとして提案します。
+意図的にまだ固定していないこと:
+- 解析言語ごとの長期的な parser family
+- Web シェルの後に載せる最初の semantic-diff スパイク対象言語
+- MVP 検証に不要な本番インフラ詳細
 
 ### まず読むもの
 
 - [`docs/mvp.ja.md`](docs/mvp.ja.md) / [`docs/mvp.md`](docs/mvp.md)
 - [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md) / [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md)
+- [`docs/adr/0002-web-first-nextjs-typescript.ja.md`](docs/adr/0002-web-first-nextjs-typescript.ja.md) / [`docs/adr/0002-web-first-nextjs-typescript.md`](docs/adr/0002-web-first-nextjs-typescript.md)
+- [`docs/adr/0003-layered-server-architecture.ja.md`](docs/adr/0003-layered-server-architecture.ja.md) / [`docs/adr/0003-layered-server-architecture.md`](docs/adr/0003-layered-server-architecture.md)
+- [`docs/adr/0004-semantic-change-ir.ja.md`](docs/adr/0004-semantic-change-ir.ja.md) / [`docs/adr/0004-semantic-change-ir.md`](docs/adr/0004-semantic-change-ir.md)
+- [`docs/architecture/web-application-blueprint.ja.md`](docs/architecture/web-application-blueprint.ja.md) / [`docs/architecture/web-application-blueprint.md`](docs/architecture/web-application-blueprint.md)
+- [`docs/architecture/semantic-analysis-pipeline.ja.md`](docs/architecture/semantic-analysis-pipeline.ja.md) / [`docs/architecture/semantic-analysis-pipeline.md`](docs/architecture/semantic-analysis-pipeline.md)
 - [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md) / [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## ロードマップ
 
 ### MVP
 - GitHub連携
+- Web review workspace v0
 - AI自動生成アーキテクチャマップ
 - セマンティックDiff（関数・メソッド単位）
 - レビュー進捗トラッキング
