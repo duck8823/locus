@@ -9,7 +9,7 @@
 
 Locus is fundamentally a review product. Reviewers need to move across semantic change groups, architecture context, linked requirements, and review progress state in a single workspace. The product also needs authenticated GitHub integration and a practical path to shipping a Backend for Frontend (BFF)-style server surface quickly.
 
-The user explicitly chose a web application over a CLI-first or desktop-first product surface. We also want to keep parser and language choices open while still making implementation decisions that allow progress now.
+We explicitly chose a web application over a CLI-first or desktop-first product surface. We also want to keep parser and language choices open while still making implementation decisions that allow progress now.
 
 ## Decision
 

@@ -59,6 +59,7 @@ The numbered capabilities above define MVP scope, not implementation order. The 
 - establish the Next.js App Router project structure
 - define presentation / application / domain / infrastructure boundaries
 - implement authentication and empty review-workspace navigation with stub data
+- persist review progress and workspace state for fixture-backed review sessions
 
 ### Slice 2 — Semantic-diff contract and parser spike
 
@@ -70,7 +71,6 @@ The numbered capabilities above define MVP scope, not implementation order. The 
 
 - transform a PR diff into file snapshots
 - map changed files to semantic change records
-- persist review progress and workspace state
 
 ### Slice 4 — Architecture context
 

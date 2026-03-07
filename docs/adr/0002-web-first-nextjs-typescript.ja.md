@@ -9,7 +9,7 @@
 
 Locus は本質的にレビュー支援プロダクトです。レビュアーは semantic change group、architecture context、関連要件、review progress を 1 つの workspace で往復する必要があります。加えて GitHub 連携のための認証付きサーバー面も必要です。
 
-ユーザーは CLI-first や desktop-first ではなく、Web アプリを選びました。また、parser や実装言語の選定はまだ固定せずに、今進められる実装判断だけを先に置きたい状況です。
+今回は CLI-first や desktop-first ではなく、Web アプリを選びました。また、parser や実装言語の選定はまだ固定せずに、今進められる実装判断だけを先に置きたい状況です。
 
 ## Decision
 
