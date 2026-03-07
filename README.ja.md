@@ -5,6 +5,7 @@
 **「差分の確認」から、「変更の意味を理解するプロセス」へ。**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license-ja](https://img.shields.io/badge/license-ja-lightgrey.svg)](LICENSE.ja.md)
 [![Status](https://img.shields.io/badge/status-planning-orange.svg)]()
 [![en](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
 
@@ -53,7 +54,7 @@ UserService.updateProfile()         UserService.updateProfile()
 
 ### ビジネスロジックコンテキスト
 
-コード変更を、その背景にある要件と繋げます。ConfluentやGitHub Issues/Projectsと連携し、関連仕様をインラインで表示します。「このコードは動くか？」だけでなく「このコードは本来やるべきことをやっているか？」を問えるようになります。
+コード変更を、その背景にある要件と繋げます。ConfluenceやGitHub Issues/Projectsと連携し、関連仕様をインラインで表示します。「このコードは動くか？」だけでなく「このコードは本来やるべきことをやっているか？」を問えるようになります。
 
 ### AIレビュー補助
 
@@ -77,9 +78,32 @@ Locusは最初から拡張可能な設計で作られています：
 - **コードホスト** — GitHub（初期実装）、GitLab、Bitbucket
 - **コンテキストソース** — Confluence、GitHub Issues/Projects（初期実装）、Jira、Notion
 - **AIモデル** — OpenAI、Anthropic Claude、ローカルモデル
-- **言語パーサー** — Tree-sitterをコアに、言語固有のLSPも統合可能
+- **言語パーサー** — 多言語対応を前提にした parser adapter 群
 
 すべての外部連携はOAuth対応です。既存の認証基盤をそのまま使えます。
+
+## プロジェクトの現状
+
+現在のリポジトリは **documentation-first** です。
+
+すでに入っているもの:
+- 英語・日本語のプロダクト概要
+- 英語・日本語の MVP 定義と ADR
+- 英語・日本語のコントリビューションガイド
+- MIT License 本文と日本語参考訳
+
+意図的にまだ固定していないもの:
+- 長期的な parser family
+- 長期的な実装言語
+- 多言語対応における最終的な技術スタック
+
+最初の実行可能な semantic-diff スパイクは、parser / snapshot contract を明示した上で別PRとして提案します。
+
+### まず読むもの
+
+- [`docs/mvp.ja.md`](docs/mvp.ja.md) / [`docs/mvp.md`](docs/mvp.md)
+- [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md) / [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md)
+- [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md) / [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## ロードマップ
 
@@ -101,11 +125,11 @@ Locusは最初から拡張可能な設計で作られています：
 
 ## コントリビュート
 
-Locusは現在、企画・設計フェーズにあります。フィードバック・アイデア・議論を歓迎します。
+Locusは現在、企画フェーズにあります。フィードバック・アイデア・議論を歓迎します。
 
 - [Issue](https://github.com/duck8823/locus/issues) を開いてアイデアや問題を共有してください
-- コントリビューションガイドは [CONTRIBUTING.md](CONTRIBUTING.md) を参照（*準備中*）
+- コントリビューションガイドは [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照（英語版: [CONTRIBUTING.md](CONTRIBUTING.md)）
 
 ## ライセンス
 
-MIT License — 詳細は [LICENSE](LICENSE) を参照してください。
+MIT License — 正本は [LICENSE](LICENSE) を参照してください。日本語参考訳は [LICENSE.ja.md](LICENSE.ja.md) です。
