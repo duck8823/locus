@@ -159,6 +159,89 @@ class PythonTransitionAdapter implements ParserAdapter {
   }
 }
 
+class OverloadDiscriminatorAdapter implements ParserAdapter {
+  readonly language = "typescript";
+  readonly adapterName = "overload-discriminator-adapter";
+
+  supports(file: SourceSnapshot): boolean {
+    return file.language === "typescript";
+  }
+
+  async parse(snapshot: SourceSnapshot): Promise<ParsedSnapshot> {
+    return {
+      snapshotId: snapshot.snapshotId,
+      adapterName: this.adapterName,
+      language: this.language,
+      raw: snapshot,
+    };
+  }
+
+  async diff(input: { before: ParsedSnapshot | null; after: ParsedSnapshot | null }): Promise<ParserDiffResult> {
+    const beforeSnapshot = input.before?.raw as SourceSnapshot | undefined;
+    const afterSnapshot = input.after?.raw as SourceSnapshot | undefined;
+    const filePath = afterSnapshot?.filePath ?? beforeSnapshot?.filePath ?? "src/overload.ts";
+
+    return {
+      adapterName: this.adapterName,
+      language: this.language,
+      items: [
+        {
+          symbolKey: "function::<root>::parse",
+          displayName: "parse",
+          kind: "function",
+          changeType: "modified",
+          signatureSummary: "parse(value)",
+          bodySummary: "Signature changed",
+          beforeRegion: {
+            filePath,
+            startLine: 1,
+            endLine: 1,
+          },
+          afterRegion: {
+            filePath,
+            startLine: 1,
+            endLine: 1,
+          },
+          metadata: {
+            instanceDiscriminator: "overload:1",
+          },
+        },
+        {
+          symbolKey: "function::<root>::parse",
+          displayName: "parse",
+          kind: "function",
+          changeType: "modified",
+          signatureSummary: "parse(value)",
+          bodySummary: "Signature changed",
+          beforeRegion: {
+            filePath,
+            startLine: 2,
+            endLine: 2,
+          },
+          afterRegion: {
+            filePath,
+            startLine: 2,
+            endLine: 2,
+          },
+          metadata: {
+            instanceDiscriminator: "overload:2",
+          },
+        },
+      ],
+    };
+  }
+
+  capabilities(): ParserCapabilities {
+    return {
+      callableDiff: true,
+      importGraph: false,
+      renameDetection: false,
+      moveDetection: false,
+      typeAwareSummary: false,
+    };
+  }
+}
+
 describe("analyzeSourceSnapshots", () => {
   it("creates semantic changes, groups, and unsupported file records", async () => {
     const result = await analyzeSourceSnapshots({
@@ -293,5 +376,42 @@ describe("analyzeSourceSnapshots", () => {
     ]);
     expect(result.unsupportedFiles).toEqual([]);
     expect(result.groups).toHaveLength(1);
+  });
+
+  it("generates unique semanticChangeId values for overload-like diff items", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "overload-review",
+      snapshotPairs: [
+        {
+          fileId: "file-overload",
+          filePath: "types/parse.d.ts",
+          before: {
+            snapshotId: "overload-review:file-overload:before",
+            fileId: "file-overload",
+            filePath: "types/parse.d.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export declare function parse(value: string): string;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "overload-review:file-overload:after",
+            fileId: "file-overload",
+            filePath: "types/parse.d.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export declare function parse(value: string): string;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new OverloadDiscriminatorAdapter()],
+    });
+
+    expect(result.semanticChanges).toHaveLength(2);
+    const semanticChangeIds = result.semanticChanges.map((change) => change.semanticChangeId);
+    expect(new Set(semanticChangeIds).size).toBe(2);
+    expect(result.groups).toHaveLength(1);
+    expect(new Set(result.groups[0]?.semanticChangeIds ?? []).size).toBe(2);
   });
 });

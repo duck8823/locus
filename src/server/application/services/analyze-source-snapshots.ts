@@ -143,6 +143,10 @@ export async function analyzeSourceSnapshots({
         const diff = await plan.adapter.diff({ before, after });
 
         for (const item of diff.items) {
+          const instanceDiscriminator =
+            typeof item.metadata?.instanceDiscriminator === "string"
+              ? item.metadata.instanceDiscriminator
+              : "";
           const semanticChangeId = createStableId(
             reviewId,
             pair.fileId,
@@ -151,6 +155,7 @@ export async function analyzeSourceSnapshots({
             item.changeType,
             item.signatureSummary ?? "",
             item.bodySummary ?? "",
+            instanceDiscriminator,
           );
 
           const references = Array.from(new Set(item.references ?? []));
