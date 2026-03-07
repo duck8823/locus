@@ -72,50 +72,13 @@ Presentation -> Application -> Domain <- Infrastructure
 
 ## 推奨プロジェクト構成
 
-```text
-src/
-  app/
-    (marketing)/
-      page.tsx
-    (workspace)/
-      reviews/
-        [reviewId]/
-          page.tsx
-          loading.tsx
-          error.tsx
-      settings/
-        connections/page.tsx
-    api/
-      github/
-        webhooks/route.ts
-      reviews/
-        [reviewId]/
-          progress/route.ts
-          reanalyze/route.ts
-  server/
-    presentation/
-      api/
-      actions/
-      dto/
-      mappers/
-    application/
-      usecases/
-      services/
-      ports/
-    domain/
-      entities/
-      value-objects/
-      repositories/
-      services/
-    infrastructure/
-      db/
-      github/
-      parser/
-      llm/
-      queue/
-      cache/
-      storage/
-```
+[Webアプリケーション設計図](../architecture/web-application-blueprint.ja.md) に、正本となるプロジェクト構成例を置きます。この ADR では依存方向とレイヤ責務だけを拘束します。
+
+- `src/app/**` は framework-facing な層にとどめる
+- `src/server/presentation/**` は framework file の外で request/response shaping を担う
+- `src/server/application/**` は use case と orchestration を担う
+- `src/server/domain/**` は framework 非依存の概念を担う
+- `src/server/infrastructure/**` は provider 固有実装を担う
 
 ## Consequences
 

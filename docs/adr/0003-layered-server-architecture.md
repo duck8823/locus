@@ -72,50 +72,13 @@ The operational rules in this ADR are intentionally self-contained. A reader sho
 
 ## Project structure
 
-```text
-src/
-  app/
-    (marketing)/
-      page.tsx
-    (workspace)/
-      reviews/
-        [reviewId]/
-          page.tsx
-          loading.tsx
-          error.tsx
-      settings/
-        connections/page.tsx
-    api/
-      github/
-        webhooks/route.ts
-      reviews/
-        [reviewId]/
-          progress/route.ts
-          reanalyze/route.ts
-  server/
-    presentation/
-      api/
-      actions/
-      dto/
-      mappers/
-    application/
-      usecases/
-      services/
-      ports/
-    domain/
-      entities/
-      value-objects/
-      repositories/
-      services/
-    infrastructure/
-      db/
-      github/
-      parser/
-      llm/
-      queue/
-      cache/
-      storage/
-```
+The canonical project-structure example lives in [Web Application Blueprint](../architecture/web-application-blueprint.md). This ADR constrains the dependency direction and the layer ownership:
+
+- `src/app/**` stays framework-facing
+- `src/server/presentation/**` handles request/response shaping outside framework files
+- `src/server/application/**` owns use cases and orchestration
+- `src/server/domain/**` owns framework-agnostic concepts
+- `src/server/infrastructure/**` owns provider-specific implementations
 
 ## Consequences
 
