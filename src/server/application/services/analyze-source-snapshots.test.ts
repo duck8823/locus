@@ -100,6 +100,65 @@ class TransitionAwareParserAdapter implements ParserAdapter {
   }
 }
 
+class PythonTransitionAdapter implements ParserAdapter {
+  readonly language = "python";
+  readonly adapterName = "python-transition-adapter";
+
+  supports(file: SourceSnapshot): boolean {
+    return file.language === "python";
+  }
+
+  async parse(snapshot: SourceSnapshot): Promise<ParsedSnapshot> {
+    return {
+      snapshotId: snapshot.snapshotId,
+      adapterName: this.adapterName,
+      language: this.language,
+      raw: snapshot,
+    };
+  }
+
+  async diff(input: { before: ParsedSnapshot | null; after: ParsedSnapshot | null }): Promise<ParserDiffResult> {
+    const beforeSnapshot = input.before?.raw as SourceSnapshot | undefined;
+    const afterSnapshot = input.after?.raw as SourceSnapshot | undefined;
+
+    if (!beforeSnapshot && afterSnapshot) {
+      return {
+        adapterName: this.adapterName,
+        language: this.language,
+        items: [
+          {
+            symbolKey: "function::<root>::pythonCallable",
+            displayName: "pythonCallable",
+            kind: "function",
+            changeType: "added",
+            afterRegion: {
+              filePath: afterSnapshot.filePath,
+              startLine: 1,
+              endLine: 3,
+            },
+          },
+        ],
+      };
+    }
+
+    return {
+      adapterName: this.adapterName,
+      language: this.language,
+      items: [],
+    };
+  }
+
+  capabilities(): ParserCapabilities {
+    return {
+      callableDiff: true,
+      importGraph: false,
+      renameDetection: false,
+      moveDetection: false,
+      typeAwareSummary: false,
+    };
+  }
+}
+
 describe("analyzeSourceSnapshots", () => {
   it("creates semantic changes, groups, and unsupported file records", async () => {
     const result = await analyzeSourceSnapshots({
@@ -192,5 +251,47 @@ describe("analyzeSourceSnapshots", () => {
     expect(result.groups).toHaveLength(1);
     expect(result.groups[0]?.fileIds).toEqual(["file-language-migration"]);
     expect(result.unsupportedFiles).toEqual([]);
+  });
+
+  it("combines before/after diffs when each revision uses a different supported adapter", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "cross-language-review",
+      snapshotPairs: [
+        {
+          fileId: "file-cross-language",
+          filePath: "src/cross-language",
+          before: {
+            snapshotId: "cross-language-review:file-cross-language:before",
+            fileId: "file-cross-language",
+            filePath: "src/cross-language.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export function migratedCallable() { return 1; }",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "cross-language-review:file-cross-language:after",
+            fileId: "file-cross-language",
+            filePath: "src/cross-language.py",
+            language: "python",
+            revision: "after",
+            content: "def python_callable():\n    return 2\n",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new TransitionAwareParserAdapter(), new PythonTransitionAdapter()],
+    });
+
+    expect(result.semanticChanges.map((change) => change.change.type).sort()).toEqual([
+      "added",
+      "removed",
+    ]);
+    expect(result.semanticChanges.map((change) => change.adapterName).sort()).toEqual([
+      "python-transition-adapter",
+      "transition-aware-adapter",
+    ]);
+    expect(result.unsupportedFiles).toEqual([]);
+    expect(result.groups).toHaveLength(1);
   });
 });

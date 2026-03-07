@@ -409,4 +409,34 @@ export declare function fetchUser(id: number): Promise<User>;
     expect(diff.items[0]?.symbolKey).toBe("function::<root>::fetchUser");
     expect(diff.items[0]?.bodySummary).toBe("Signature changed");
   });
+
+  it("detects overload signature changes without dropping earlier overload entries", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      filePath: "types/overloads.d.ts",
+      revision: "before",
+      content: `
+export declare function parseValue(input: string): string;
+export declare function parseValue(input: number): string;
+`.trim(),
+    });
+    const after = createSnapshot({
+      filePath: "types/overloads.d.ts",
+      revision: "after",
+      content: `
+export declare function parseValue(input: string, radix?: number): string;
+export declare function parseValue(input: number): string;
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("function::<root>::parseValue");
+    expect(diff.items[0]?.changeType).toBe("modified");
+    expect(diff.items[0]?.bodySummary).toBe("Signature changed");
+  });
 });

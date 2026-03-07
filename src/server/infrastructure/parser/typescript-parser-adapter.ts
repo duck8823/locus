@@ -549,6 +549,19 @@ function createModifiedSummary(before: ParsedCallable, after: ParsedCallable): s
   return "Callable updated";
 }
 
+function buildCallableInstanceMap(callables: ParsedCallable[]): Map<string, ParsedCallable> {
+  const instanceCountBySymbol = new Map<string, number>();
+  const instanceMap = new Map<string, ParsedCallable>();
+
+  for (const callable of callables) {
+    const nextIndex = (instanceCountBySymbol.get(callable.symbolKey) ?? 0) + 1;
+    instanceCountBySymbol.set(callable.symbolKey, nextIndex);
+    instanceMap.set(`${callable.symbolKey}::overload#${nextIndex}`, callable);
+  }
+
+  return instanceMap;
+}
+
 export class TypeScriptParserAdapter implements ParserAdapter {
   readonly language = "typescript";
 
@@ -579,8 +592,8 @@ export class TypeScriptParserAdapter implements ParserAdapter {
   async diff(input: { before: ParsedSnapshot | null; after: ParsedSnapshot | null }): Promise<ParserDiffResult> {
     const before = assertParsedSnapshot(input.before);
     const after = assertParsedSnapshot(input.after);
-    const beforeMap = new Map(before.callables.map((callable) => [callable.symbolKey, callable]));
-    const afterMap = new Map(after.callables.map((callable) => [callable.symbolKey, callable]));
+    const beforeMap = buildCallableInstanceMap(before.callables);
+    const afterMap = buildCallableInstanceMap(after.callables);
     const keys = Array.from(new Set([...beforeMap.keys(), ...afterMap.keys()])).sort((a, b) =>
       a.localeCompare(b),
     );

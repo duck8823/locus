@@ -19,6 +19,12 @@ export interface AnalyzeSourceSnapshotsResult {
   unsupportedFiles: UnsupportedFileAnalysis[];
 }
 
+interface DiffPlan {
+  adapter: ParserAdapter;
+  beforeSnapshot: SourceSnapshot | null;
+  afterSnapshot: SourceSnapshot | null;
+}
+
 function createStableId(...parts: string[]): string {
   return createHash("sha256").update(parts.join("::")).digest("hex").slice(0, 20);
 }
@@ -71,9 +77,7 @@ export async function analyzeSourceSnapshots({
   const unsupportedFiles: UnsupportedFileAnalysis[] = [];
 
   for (const pair of snapshotPairs) {
-    const representative = pair.after ?? pair.before;
-
-    if (!representative) {
+    if (!pair.before && !pair.after) {
       unsupportedFiles.push({
         reviewId,
         fileId: pair.fileId,
@@ -85,91 +89,115 @@ export async function analyzeSourceSnapshots({
       continue;
     }
 
-    const adapter = selectAdapter(parserAdapters, [pair.after, pair.before]);
+    const beforeAdapter = pair.before ? selectAdapter(parserAdapters, [pair.before]) : null;
+    const afterAdapter = pair.after ? selectAdapter(parserAdapters, [pair.after]) : null;
 
-    if (!adapter) {
+    if (!beforeAdapter && !afterAdapter) {
+      const representative = pair.after ?? pair.before;
       unsupportedFiles.push({
         reviewId,
         fileId: pair.fileId,
         filePath: pair.filePath,
-        language: representative.language,
+        language: representative?.language ?? null,
         reason: "unsupported_language",
       });
       continue;
     }
 
-    try {
-      const before =
-        pair.before && adapter.supports(pair.before) ? await adapter.parse(pair.before) : null;
-      const after = pair.after && adapter.supports(pair.after) ? await adapter.parse(pair.after) : null;
+    const diffPlans: DiffPlan[] = [];
 
-      if (!before && !after) {
-        unsupportedFiles.push({
-          reviewId,
-          fileId: pair.fileId,
-          filePath: pair.filePath,
-          language: representative.language,
-          reason: "unsupported_language",
-          detail: `No supported revision for adapter ${adapter.adapterName}.`,
+    if (
+      pair.before &&
+      pair.after &&
+      beforeAdapter &&
+      afterAdapter &&
+      beforeAdapter.adapterName === afterAdapter.adapterName
+    ) {
+      diffPlans.push({
+        adapter: beforeAdapter,
+        beforeSnapshot: pair.before,
+        afterSnapshot: pair.after,
+      });
+    } else {
+      if (pair.before && beforeAdapter) {
+        diffPlans.push({
+          adapter: beforeAdapter,
+          beforeSnapshot: pair.before,
+          afterSnapshot: null,
         });
-        continue;
       }
 
-      const diff = await adapter.diff({ before, after });
-
-      for (const item of diff.items) {
-        const semanticChangeId = createStableId(
-          reviewId,
-          pair.fileId,
-          item.symbolKey,
-          item.changeType,
-          item.signatureSummary ?? "",
-          item.bodySummary ?? "",
-        );
-
-        const references = Array.from(new Set(item.references ?? []));
-
-        semanticChanges.push({
-          semanticChangeId,
-          reviewId,
-          fileId: pair.fileId,
-          language: diff.language,
-          adapterName: diff.adapterName,
-          symbol: {
-            stableKey: item.symbolKey,
-            displayName: item.displayName,
-            kind: item.kind,
-            container: item.container,
-          },
-          change: {
-            type: item.changeType,
-            signatureSummary: item.signatureSummary,
-            bodySummary: item.bodySummary,
-          },
-          before: item.beforeRegion,
-          after: item.afterRegion,
-          architecture:
-            references.length > 0
-              ? {
-                  outgoingNodeIds: references.map((reference) => `symbol:${reference}`),
-                  incomingNodeIds: [],
-                }
-              : undefined,
-          metadata: {
-            parser: {
-              adapterName: diff.adapterName,
-              parserVersion: before?.parserVersion ?? after?.parserVersion,
-            },
-            languageSpecific: item.metadata ?? {},
-          },
+      if (pair.after && afterAdapter) {
+        diffPlans.push({
+          adapter: afterAdapter,
+          beforeSnapshot: null,
+          afterSnapshot: pair.after,
         });
+      }
+    }
+
+    try {
+      for (const plan of diffPlans) {
+        const before = plan.beforeSnapshot ? await plan.adapter.parse(plan.beforeSnapshot) : null;
+        const after = plan.afterSnapshot ? await plan.adapter.parse(plan.afterSnapshot) : null;
+        const diff = await plan.adapter.diff({ before, after });
+
+        for (const item of diff.items) {
+          const semanticChangeId = createStableId(
+            reviewId,
+            pair.fileId,
+            diff.adapterName,
+            item.symbolKey,
+            item.changeType,
+            item.signatureSummary ?? "",
+            item.bodySummary ?? "",
+          );
+
+          const references = Array.from(new Set(item.references ?? []));
+
+          semanticChanges.push({
+            semanticChangeId,
+            reviewId,
+            fileId: pair.fileId,
+            language: diff.language,
+            adapterName: diff.adapterName,
+            symbol: {
+              stableKey: item.symbolKey,
+              displayName: item.displayName,
+              kind: item.kind,
+              container: item.container,
+            },
+            change: {
+              type: item.changeType,
+              signatureSummary: item.signatureSummary,
+              bodySummary: item.bodySummary,
+            },
+            before: item.beforeRegion,
+            after: item.afterRegion,
+            architecture:
+              references.length > 0
+                ? {
+                    outgoingNodeIds: references.map((reference) => `symbol:${reference}`),
+                    incomingNodeIds: [],
+                  }
+                : undefined,
+            metadata: {
+              parser: {
+                adapterName: diff.adapterName,
+                parserVersion: before?.parserVersion ?? after?.parserVersion,
+              },
+              languageSpecific: item.metadata ?? {},
+            },
+          });
+        }
       }
     } catch (error) {
+      const representative = pair.after ?? pair.before;
       unsupportedFiles.push({
         reviewId,
         fileId: pair.fileId,
         filePath: pair.filePath,
-        language: representative.language,
+        language: representative?.language ?? null,
         reason: "parser_failed",
         detail: error instanceof Error ? error.message : "Unknown parser error",
       });
