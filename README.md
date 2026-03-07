@@ -86,6 +86,7 @@ Already runnable today:
 - a Next.js App Router web shell
 - a layered `src/server/**` backend skeleton
 - a file-backed demo review session that preserves selected change group and status
+- a GitHub pull-request snapshot adapter that can ingest real PR files into semantic analysis
 - route handlers and server actions that exercise the presentation/application boundary
 
 What is already decided:
@@ -110,6 +111,15 @@ If you want to exercise the GitHub webhook route locally, set:
 
 ```bash
 export GITHUB_WEBHOOK_SECRET=your-local-webhook-secret
+```
+
+If you want to run the live GitHub PR demo button from the marketing page, set:
+
+```bash
+export GITHUB_TOKEN=your-github-token
+export LOCUS_GITHUB_DEMO_OWNER=owner
+export LOCUS_GITHUB_DEMO_REPO=repository
+export LOCUS_GITHUB_DEMO_PR_NUMBER=123
 ```
 
 Validation commands:
