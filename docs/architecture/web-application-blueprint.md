@@ -146,11 +146,11 @@ Candidate entities/value objects:
 ### `src/server/infrastructure/**`
 Provider-specific implementations.
 
-Examples:
-- `PrismaReviewSessionRepository`
-- `GitHubCodeHostClient`
-- `TreeSitterTypeScriptParserAdapter`
-- `OpenAIReviewAssistant`
+Examples (placeholder names, not locked technology choices):
+- `ReviewSessionRepositoryAdapter`
+- `CodeHostPullRequestClient`
+- `TemporarySemanticParserAdapter`
+- `LLMReviewAssistantAdapter`
 
 ## Primary user flows
 
@@ -238,29 +238,9 @@ Background jobs include:
 
 The web shell may trigger jobs and poll or subscribe for state, but it must not perform the heavy analysis inline.
 
-## Implementation slices
+## Delivery-order note
 
-### Slice A — Web shell skeleton
-- Next.js App Router scaffold
-- auth/session stub
-- empty review workspace route
-- layered server folders and lintable dependency rules
-
-### Slice B — Review session persistence
-- open a review by ID
-- store progress state
-- render stub semantic change groups from fixtures
-
-### Slice C — GitHub ingestion + first parser spike
-- ingest changed files from GitHub
-- create file snapshots
-- run one parser adapter
-- persist semantic change groups
-
-### Slice D — Architecture context
-- import graph extraction
-- immediate neighbors pane
-- review workspace enrichment
+The authoritative implementation sequence lives in [`../mvp.md`](../mvp.md). This blueprint intentionally describes runtime boundaries and request flow, not a second slice plan.
 
 ## Non-goals for the first implementation
 

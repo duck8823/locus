@@ -59,7 +59,7 @@
 - Next.js App Router のプロジェクト構造を確立する
 - presentation / application / domain / infrastructure の境界を定義する
 - 認証と空の review-workspace 導線を stub data で先に実装する
-- fixture ベースの review session に対して review progress と workspace state を永続化する
+- 最初の Web workspace フローで review progress と workspace state を永続化する
 
 ### Slice 2 — Semantic-diff contract と parser spike
 

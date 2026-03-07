@@ -146,11 +146,11 @@ framework 非依存の概念を置きます。
 ### `src/server/infrastructure/**`
 provider 固有の実装を置きます。
 
-例:
-- `PrismaReviewSessionRepository`
-- `GitHubCodeHostClient`
-- `TreeSitterTypeScriptParserAdapter`
-- `OpenAIReviewAssistant`
+例（技術選定を固定しないプレースホルダー名）:
+- `ReviewSessionRepositoryAdapter`
+- `CodeHostPullRequestClient`
+- `TemporarySemanticParserAdapter`
+- `LLMReviewAssistantAdapter`
 
 ## 主要ユーザーフロー
 
@@ -238,29 +238,9 @@ background job の対象:
 
 Web shell は job を起動し、state を poll / subscribe してよいですが、重い解析を同期実行してはいけません。
 
-## 実装スライス
+## 実装順メモ
 
-### Slice A — Web shell skeleton
-- Next.js App Router scaffold
-- auth/session stub
-- 空の review workspace route
-- layered server folder と lintable dependency rule
-
-### Slice B — Review session persistence
-- review を ID で開く
-- progress state を保存する
-- fixture から作った stub semantic change group を表示する
-
-### Slice C — GitHub ingestion + first parser spike
-- GitHub から changed file を ingest する
-- file snapshot を作る
-- 1 つの parser adapter を走らせる
-- semantic change group を永続化する
-
-### Slice D — Architecture context
-- import graph extraction
-- immediate neighbors pane
-- review workspace enrichment
+実装順の正本は [`../mvp.ja.md`](../mvp.ja.md) の Delivery Slices です。この blueprint は runtime boundary と request flow の説明に専念し、別のスライス計画は持ちません。
 
 ## 最初の実装でやらないこと
 
