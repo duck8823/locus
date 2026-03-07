@@ -262,4 +262,62 @@ export class CacheStore {
       "method::CacheStore::static::flush",
     ]);
   });
+
+  it("tracks anonymous default-exported functions", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export default function () {
+  return 1;
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export default function () {
+  return 2;
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("function::<root>::default");
+    expect(diff.items[0]?.changeType).toBe("modified");
+  });
+
+  it("tracks methods in anonymous default-exported classes", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export default class {
+  execute = () => 1;
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export default class {
+  execute = () => 2;
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("method::default::instance::execute");
+    expect(diff.items[0]?.changeType).toBe("modified");
+  });
 });

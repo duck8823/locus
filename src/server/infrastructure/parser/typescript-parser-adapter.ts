@@ -204,6 +204,18 @@ function isCallableInitializer(
   return !!initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer));
 }
 
+function hasDefaultModifier(node: { modifiers?: ts.NodeArray<ts.ModifierLike> }): boolean {
+  return node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword) ?? false;
+}
+
+function resolveClassContainerName(classDeclaration: ts.ClassDeclaration): string | null {
+  return readName(classDeclaration.name) ?? (hasDefaultModifier(classDeclaration) ? "default" : null);
+}
+
+function resolveFunctionDisplayName(functionDeclaration: ts.FunctionDeclaration): string | null {
+  return readName(functionDeclaration.name) ?? (hasDefaultModifier(functionDeclaration) ? "default" : null);
+}
+
 function inferMethodScope(node: ts.MethodDeclaration | ts.PropertyDeclaration): MethodScope {
   return node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword)
     ? "static"
@@ -365,8 +377,14 @@ function collectCallablesFromStatement(
   statement: ts.Statement | ts.ModuleDeclaration,
   containerPath: string[],
 ): ParsedCallable[] {
-  if (ts.isClassDeclaration(statement) && statement.name) {
-    const classContainerPath = [...containerPath, statement.name.text];
+  if (ts.isClassDeclaration(statement)) {
+    const classContainerName = resolveClassContainerName(statement);
+
+    if (!classContainerName) {
+      return [];
+    }
+
+    const classContainerPath = [...containerPath, classContainerName];
     return collectClassMemberCallables(sourceFile, statement, classContainerPath);
   }
 
@@ -375,7 +393,7 @@ function collectCallablesFromStatement(
       return [];
     }
 
-    const displayName = readName(statement.name);
+    const displayName = resolveFunctionDisplayName(statement);
 
     if (!displayName) {
       return [];
