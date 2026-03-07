@@ -6,7 +6,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![license-ja](https://img.shields.io/badge/license-ja-lightgrey.svg)](LICENSE.ja.md)
-[![Status](https://img.shields.io/badge/status-planning-orange.svg)]()
+[![Status](https://img.shields.io/badge/status-prototype-yellow.svg)]()
 [![en](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
 
 </div>
@@ -68,7 +68,8 @@ UserService.updateProfile()         UserService.updateProfile()
 | セマンティックDiff | ASTベースの関数・メソッド単位の変更可視化 | 🔴 計画中 |
 | ビジネスロジックコンテキスト | Confluence・GitHub Issues/Projects連携 | 🔴 計画中 |
 | AIレビュー補助 | コンテキストを持ったLLMによるレビュー | 🔴 計画中 |
-| レビュー進捗トラッキング | 大きなPRで迷子にならない | 🔴 計画中 |
+| Web review workspace v0 | Next.js 製レビューシェルとレイヤ境界、stub ナビゲーション | 🟡 Prototype |
+| レビュー進捗トラッキング | 大きなPRで迷子にならない | 🟡 Prototype |
 | プラガブル接続 | GitHub（初期実装）、GitLab・Bitbucket（プラグイン） | 🔴 計画中 |
 
 ## プラガブル設計
@@ -84,7 +85,13 @@ Locusは最初から拡張可能な設計で作られています：
 
 ## プロジェクトの現状
 
-現在のリポジトリは **documentation-first** ですが、実装方針はかなり具体化されています。
+現在のリポジトリには **実行可能な Web シェルのプロトタイプ** があります。より深い解析スライスは、引き続き設計ドキュメント主導で進めます。
+
+すでに動くもの:
+- Next.js App Router の Web シェル
+- `src/server/**` 配下のレイヤードサーバースケルトン
+- 選択中の change group と進捗状態を保持できる file-backed demo review session
+- presentation / application 境界を通る route handler / server action
 
 すでに決まっていること:
 - プロダクト形態は **Web アプリ**
@@ -96,6 +103,28 @@ Locusは最初から拡張可能な設計で作られています：
 - 解析言語ごとの長期的な parser family
 - Web シェルの後に載せる最初の semantic-diff スパイク対象言語
 - MVP 検証に不要な本番インフラ詳細
+
+### ローカル開発
+
+```bash
+npm install
+npm run dev
+```
+
+GitHub webhook route もローカルで試す場合は、以下を設定してください。
+
+```bash
+export GITHUB_WEBHOOK_SECRET=your-local-webhook-secret
+```
+
+確認コマンド:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
 ### まず読むもの
 

@@ -1,0 +1,40 @@
+import { NextResponse } from "next/server";
+import { AcceptGitHubWebhookUseCase } from "@/server/application/usecases/accept-github-webhook";
+import { getDependencies } from "@/server/composition/dependencies";
+import {
+  GitHubWebhookRequestError,
+  parseGitHubWebhookRequest,
+} from "@/server/presentation/api/parse-github-webhook-request";
+
+export async function POST(request: Request) {
+  try {
+    const parsed = await parseGitHubWebhookRequest(request);
+    const { analysisJobScheduler } = getDependencies();
+    const useCase = new AcceptGitHubWebhookUseCase({ analysisJobScheduler });
+    const result = await useCase.execute({
+      reviewId: parsed.reviewId,
+      eventName: parsed.eventName,
+      deliveryId: parsed.deliveryId,
+    });
+
+    return NextResponse.json(
+      {
+        accepted: true,
+        reviewId: parsed.reviewId,
+        eventName: result.eventName,
+        deliveryId: result.deliveryId,
+        jobId: result.scheduledJob.jobId,
+      },
+      { status: 202 },
+    );
+  } catch (error) {
+    if (error instanceof GitHubWebhookRequestError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unknown error" },
+      { status: 400 },
+    );
+  }
+}

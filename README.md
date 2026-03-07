@@ -6,7 +6,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![license-ja](https://img.shields.io/badge/license-ja-lightgrey.svg)](LICENSE.ja.md)
-[![Status](https://img.shields.io/badge/status-planning-orange.svg)]()
+[![Status](https://img.shields.io/badge/status-prototype-yellow.svg)]()
 [![ja](https://img.shields.io/badge/lang-ja-green.svg)](README.ja.md)
 
 </div>
@@ -63,7 +63,8 @@ With full knowledge of your system's architecture and the linked specifications,
 | Semantic Diff | AST-based, function-level change visualization | 🔴 Planned |
 | Business Logic Context | Confluence & GitHub Issues/Projects integration | 🔴 Planned |
 | AI Review Assistant | Context-aware review powered by LLMs | 🔴 Planned |
-| Review Progress Tracking | Never lose your place in a large PR | 🔴 Planned |
+| Web Review Workspace v0 | Next.js review shell with layered server boundaries and stub navigation | 🟡 Prototype |
+| Review Progress Tracking | Never lose your place in a large PR | 🟡 Prototype |
 | Pluggable Connections | GitHub (first), GitLab, Bitbucket (via plugins) | 🔴 Planned |
 
 ## Pluggable by Design
@@ -79,7 +80,13 @@ All external integrations use OAuth, so Locus works with your existing authentic
 
 ## Project Status
 
-This repository is currently **documentation-first**, but the implementation direction is now explicit.
+This repository now has a **runnable web-shell prototype**, while the deeper analysis slices remain documentation-led.
+
+Already runnable today:
+- a Next.js App Router web shell
+- a layered `src/server/**` backend skeleton
+- a file-backed demo review session that preserves selected change group and status
+- route handlers and server actions that exercise the presentation/application boundary
 
 What is already decided:
 - the product surface is a **web application**
@@ -91,6 +98,28 @@ What is intentionally still open:
 - the long-term parser family per analysis language
 - which languages ship in the first semantic-diff spike after the web shell exists
 - production infrastructure details that are unnecessary for MVP validation
+
+### Local development
+
+```bash
+npm install
+npm run dev
+```
+
+If you want to exercise the GitHub webhook route locally, set:
+
+```bash
+export GITHUB_WEBHOOK_SECRET=your-local-webhook-secret
+```
+
+Validation commands:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
 ### Recommended reading
 
