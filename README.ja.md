@@ -5,6 +5,7 @@
 **「差分の確認」から、「変更の意味を理解するプロセス」へ。**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license-ja](https://img.shields.io/badge/license-ja-lightgrey.svg)](LICENSE.ja.md)
 [![Status](https://img.shields.io/badge/status-planning-orange.svg)]()
 [![en](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
 
@@ -99,7 +100,7 @@ npm test
 npm run semantic-diff -- path/to/before.ts path/to/after.ts
 ```
 
-MVP の境界と技術判断は [`docs/mvp.md`](docs/mvp.md) と [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md) にまとめています。
+MVP の境界と技術判断は [`docs/mvp.ja.md`](docs/mvp.ja.md) と [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md) にまとめています。英語版は [`docs/mvp.md`](docs/mvp.md) と [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md) です。
 
 ## ロードマップ
 
@@ -124,8 +125,8 @@ MVP の境界と技術判断は [`docs/mvp.md`](docs/mvp.md) と [`docs/adr/0001
 Locusは現在、企画・設計フェーズにあります。フィードバック・アイデア・議論を歓迎します。
 
 - [Issue](https://github.com/duck8823/locus/issues) を開いてアイデアや問題を共有してください
-- コントリビューションガイドは [CONTRIBUTING.md](CONTRIBUTING.md) を参照（*準備中*）
+- コントリビューションガイドは [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照（英語版: [CONTRIBUTING.md](CONTRIBUTING.md)）
 
 ## ライセンス
 
-MIT License — 詳細は [LICENSE](LICENSE) を参照してください。
+MIT License — 正本は [LICENSE](LICENSE) を参照してください。日本語参考訳は [LICENSE.ja.md](LICENSE.ja.md) です。

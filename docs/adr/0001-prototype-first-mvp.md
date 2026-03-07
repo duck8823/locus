@@ -1,5 +1,7 @@
 # ADR 0001: Prototype-first MVP delivery
 
+> 日本語: [0001-prototype-first-mvp.ja.md](0001-prototype-first-mvp.ja.md)
+
 - Status: Accepted
 - Date: 2026-03-07
 

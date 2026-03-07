@@ -5,6 +5,7 @@
 **From checking diffs to understanding the meaning of changes.**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![license-ja](https://img.shields.io/badge/license-ja-lightgrey.svg)](LICENSE.ja.md)
 [![Status](https://img.shields.io/badge/status-planning-orange.svg)]()
 [![ja](https://img.shields.io/badge/lang-ja-green.svg)](README.ja.md)
 
@@ -94,7 +95,7 @@ npm test
 npm run semantic-diff -- path/to/before.ts path/to/after.ts
 ```
 
-Product scope and architectural decisions live in [`docs/mvp.md`](docs/mvp.md) and [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md).
+Product scope and architectural decisions live in [`docs/mvp.md`](docs/mvp.md) and [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md). Japanese counterparts are available in [`docs/mvp.ja.md`](docs/mvp.ja.md) and [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md).
 
 ## Roadmap
 
@@ -119,8 +120,8 @@ Product scope and architectural decisions live in [`docs/mvp.md`](docs/mvp.md) a
 Locus is in the early planning stage. Feedback, ideas, and discussion are very welcome.
 
 - Open an [Issue](https://github.com/duck8823/locus/issues) to share thoughts or report problems
-- See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines *(coming soon)*
+- See [CONTRIBUTING.md](CONTRIBUTING.md) or [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) for contribution guidelines
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for the authoritative text, or [LICENSE.ja.md](LICENSE.ja.md) for a Japanese reference translation.

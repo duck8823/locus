@@ -1,5 +1,7 @@
 # Locus MVP Definition
 
+> 日本語: [mvp.ja.md](mvp.ja.md)
+
 ## Product Goal
 
 Help reviewers understand the *meaning* of a pull request faster than they can with a raw unified diff.

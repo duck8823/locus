@@ -1,5 +1,7 @@
 # Contributing to Locus
 
+> 日本語: [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md)
+
 Locus is still in the prototype phase. The current goal is to validate the reviewer experience before investing in a full hosted product.
 
 ## Working Agreement
