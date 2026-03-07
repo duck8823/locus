@@ -30,7 +30,7 @@ Do **not** lock the long-term parser family or implementation language in this p
 
 ### Option C — Full implementation before the contracts are explicit
 
-- Stand up most of the product surface before the analysis contracts are proven
+- Stand up a broad product surface, integrations, and persistence model before the analysis contracts are proven
 - Produces visible progress, but makes it harder to replace weak analysis assumptions later
 
 ## Rationale

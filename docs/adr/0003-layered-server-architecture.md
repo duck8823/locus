@@ -1,4 +1,4 @@
-# ADR 0003: Use a layered server architecture inspired by the referenced Go standards
+# ADR 0003: Use a Go-inspired layered server architecture
 
 > 日本語: [0003-layered-server-architecture.ja.md](0003-layered-server-architecture.ja.md)
 

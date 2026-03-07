@@ -28,7 +28,7 @@ Web アプリが担うもの:
 ### Option A — TypeScript + Next.js App Router による Web-first（採用）
 
 - 主要なレビュー体験に最も合う
-- UI と BFF を 1 つのコードベースで扱える
+- UI と Backend for Frontend (BFF) を 1 つのコードベースで扱える
 - Node.js / TypeScript から既存 parser ecosystem を扱いやすい
 
 ### Option B — CLI-first
@@ -63,7 +63,7 @@ Next.js を product shell として選んでも、business logic を framework f
 
 ### Positive
 
-- review UI と BFF を 1 つの実装面で進められる
+- review UI と Backend for Frontend (BFF) を 1 つの実装面で進められる
 - 認証付きレビュー導線を早く試せる
 - route handler、server rendering、段階的な UI 実装に乗りやすい
 

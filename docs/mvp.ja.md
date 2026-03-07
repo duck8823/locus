@@ -37,7 +37,7 @@
 5. **Web review workspace v0**
    - 単一 pull request を対象にした認証付き review workspace
    - semantic change list、detail pane、progress state を1画面にまとめる
-   - Next.js App Router を用いた BFF 形式のサーバー面
+   - Next.js App Router を用いた Backend for Frontend (BFF) 形式のサーバー面
 
 ### 対象外
 

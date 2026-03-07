@@ -37,7 +37,7 @@ Help reviewers understand the *meaning* of a pull request faster than they can w
 5. **Web review workspace v0**
    - authenticated review workspace for a single pull request
    - semantic change list, detail pane, and progress state in one screen
-   - BFF-style server surface using Next.js App Router
+   - Backend for Frontend (BFF)-style server surface using Next.js App Router
 
 ### Out of scope
 

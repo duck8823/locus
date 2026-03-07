@@ -1,4 +1,4 @@
-# Web Application Blueprint
+# Webアプリケーション設計図
 
 > English: [web-application-blueprint.md](web-application-blueprint.md)
 
@@ -16,7 +16,7 @@
 
 ```text
 Browser
-  -> Next.js App Router (UI + BFF surface)
+  -> Next.js App Router (UI + Backend for Frontend (BFF) surface)
     -> Application use cases
       -> Domain contracts
         -> Infrastructure adapters

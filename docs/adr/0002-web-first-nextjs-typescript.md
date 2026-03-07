@@ -7,7 +7,7 @@
 
 ## Context
 
-Locus is fundamentally a review product. Reviewers need to move across semantic change groups, architecture context, linked requirements, and review progress state in a single workspace. The product also needs authenticated GitHub integration and a practical path to shipping a BFF-style server surface quickly.
+Locus is fundamentally a review product. Reviewers need to move across semantic change groups, architecture context, linked requirements, and review progress state in a single workspace. The product also needs authenticated GitHub integration and a practical path to shipping a Backend for Frontend (BFF)-style server surface quickly.
 
 The user explicitly chose a web application over a CLI-first or desktop-first product surface. We also want to keep parser and language choices open while still making implementation decisions that allow progress now.
 
@@ -28,7 +28,7 @@ The web application does **not** get to own domain logic directly. Core logic mu
 ### Option A — Web-first with TypeScript + Next.js App Router (chosen)
 
 - matches the primary review workflow
-- gives us one codebase for UI and BFF concerns
+- gives us one codebase for UI and Backend for Frontend (BFF) concerns
 - works well with parser ecosystems available from Node.js / TypeScript
 
 ### Option B — CLI-first product surface
@@ -63,7 +63,7 @@ Choosing Next.js as the product shell does not force us to put business logic in
 
 ### Positive
 
-- one implementation surface for review UI and BFF concerns
+- one implementation surface for review UI and Backend for Frontend (BFF) concerns
 - easy to prototype authenticated review flows
 - straightforward path to route handlers, server rendering, and incremental UI work
 

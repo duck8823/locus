@@ -1,4 +1,4 @@
-# ADR 0003: 参照した Go 規約の設計概念を取り込んだ layered server architecture を採用する
+# ADR 0003: Go コーディング規約に着想を得た layered server architecture を採用する
 
 > English: [0003-layered-server-architecture.md](0003-layered-server-architecture.md)
 

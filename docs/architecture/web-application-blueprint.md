@@ -16,7 +16,7 @@ It answers:
 
 ```text
 Browser
-  -> Next.js App Router (UI + BFF surface)
+  -> Next.js App Router (UI + Backend for Frontend (BFF) surface)
     -> Application use cases
       -> Domain contracts
         -> Infrastructure adapters

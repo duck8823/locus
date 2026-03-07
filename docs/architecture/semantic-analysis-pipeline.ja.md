@@ -1,4 +1,4 @@
-# Semantic Analysis Pipeline
+# セマンティック分析パイプライン
 
 > English: [semantic-analysis-pipeline.md](semantic-analysis-pipeline.md)
 
