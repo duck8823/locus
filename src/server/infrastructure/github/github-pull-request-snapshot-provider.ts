@@ -153,7 +153,8 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
   private readonly fetchImpl: FetchLike;
 
   constructor(options: GitHubPullRequestSnapshotProviderOptions = {}) {
-    this.token = options.token ?? process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? null;
+    const configuredToken = options.token ?? process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? null;
+    this.token = configuredToken && configuredToken.trim().length > 0 ? configuredToken.trim() : null;
     this.apiBaseUrl = options.apiBaseUrl ?? "https://api.github.com";
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
@@ -162,8 +163,6 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     reviewId: string;
     source: GitHubPullRequestRef;
   }): Promise<PullRequestSnapshotBundle> {
-    this.assertToken();
-
     const pullRequest = await this.requestJson<GitHubPullRequestApiResponse>(
       `/repos/${encodeURIComponent(input.source.owner)}/${encodeURIComponent(input.source.repository)}/pulls/${input.source.pullRequestNumber}`,
     );
@@ -245,14 +244,6 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
       snapshotPairs,
       source: input.source,
     };
-  }
-
-  private assertToken(): void {
-    if (this.token) {
-      return;
-    }
-
-    throw new Error("GitHub token is required. Set GITHUB_TOKEN or GH_TOKEN.");
   }
 
   private createSnapshot(params: {
@@ -361,12 +352,17 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
   }
 
   private async requestJson<T>(path: string): Promise<T> {
+    const headers: Record<string, string> = {
+      accept: "application/vnd.github+json",
+      "x-github-api-version": "2022-11-28",
+    };
+
+    if (this.token) {
+      headers.authorization = `Bearer ${this.token}`;
+    }
+
     const response = await this.fetchImpl(`${this.apiBaseUrl}${path}`, {
-      headers: {
-        authorization: `Bearer ${this.token}`,
-        accept: "application/vnd.github+json",
-        "x-github-api-version": "2022-11-28",
-      },
+      headers,
     });
 
     if (!response.ok) {

@@ -19,10 +19,12 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("GitHubPullRequestSnapshotProvider", () => {
-  it("converts pull request files into snapshot pairs", async () => {
-    const fetchImpl: typeof fetch = async (input) => {
+  it("converts pull request files into snapshot pairs without requiring a token", async () => {
+    const seenAuthorizationHeaders: Array<string | null> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
       const url = new URL(String(input));
       const path = `${url.pathname}${url.search}`;
+      seenAuthorizationHeaders.push(new Headers(init?.headers).get("authorization"));
 
       switch (path) {
         case "/repos/octocat/locus/pulls/42":
@@ -81,7 +83,7 @@ describe("GitHubPullRequestSnapshotProvider", () => {
     };
 
     const provider = new GitHubPullRequestSnapshotProvider({
-      token: "test-token",
+      token: "",
       apiBaseUrl: "https://api.github.com",
       fetchImpl,
     });
@@ -109,6 +111,7 @@ describe("GitHubPullRequestSnapshotProvider", () => {
     const renamedPair = bundle.snapshotPairs.find((pair) => pair.filePath === "src/new-name.ts");
     expect(renamedPair?.before?.filePath).toBe("src/old-name.ts");
     expect(renamedPair?.after?.filePath).toBe("src/new-name.ts");
+    expect(seenAuthorizationHeaders.every((header) => header === null)).toBe(true);
   });
 
   it("treats binary blobs as unsupported snapshots", async () => {
