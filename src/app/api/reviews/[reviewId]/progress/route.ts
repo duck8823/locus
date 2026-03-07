@@ -3,7 +3,7 @@ import { ReviewSessionNotFoundError } from "@/server/application/errors/review-s
 import { MarkReviewGroupStatusUseCase } from "@/server/application/usecases/mark-review-group-status";
 import { getDependencies } from "@/server/composition/dependencies";
 import { parseProgressRequest } from "@/server/presentation/api/parse-progress-request";
-import { isReviewGroupNotFoundError } from "@/server/presentation/errors/is-review-group-not-found-error";
+import { ReviewGroupNotFoundError } from "@/server/presentation/errors/review-group-not-found-error";
 import { toReviewWorkspaceDto } from "@/server/presentation/mappers/to-review-workspace-dto";
 
 export async function POST(
@@ -28,10 +28,7 @@ export async function POST(
       { status: 200 },
     );
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error instanceof ReviewSessionNotFoundError || isReviewGroupNotFoundError(error))
-    ) {
+    if (error instanceof ReviewSessionNotFoundError || error instanceof ReviewGroupNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
 

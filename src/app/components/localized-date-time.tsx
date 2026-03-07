@@ -16,5 +16,9 @@ export function LocalizedDateTime({ isoTimestamp }: LocalizedDateTimeProps) {
     [isoTimestamp],
   );
 
-  return <time dateTime={isoTimestamp}>{label}</time>;
+  return (
+    <time dateTime={isoTimestamp} suppressHydrationWarning>
+      {label}
+    </time>
+  );
 }
