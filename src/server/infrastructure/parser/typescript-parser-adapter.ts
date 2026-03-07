@@ -405,7 +405,13 @@ function collectClassMemberCallables(
       continue;
     }
 
-    if (ts.isPropertyDeclaration(member) && isCallableInitializer(member.initializer)) {
+    if (ts.isPropertyDeclaration(member)) {
+      const callableInitializer = resolveCallableExpression(member.initializer);
+
+      if (!callableInitializer) {
+        continue;
+      }
+
       const displayName = readName(member.name);
 
       if (!displayName) {
@@ -419,9 +425,9 @@ function collectClassMemberCallables(
           displayName,
           containerPath,
           methodScope: inferMethodScope(member),
-          parameters: member.initializer.parameters,
-          signatureText: extractSignatureText(sourceFile, member, member.initializer.body),
-          body: member.initializer.body,
+          parameters: callableInitializer.parameters,
+          signatureText: extractSignatureText(sourceFile, member, callableInitializer.body),
+          body: callableInitializer.body,
           regionNode: member,
         }),
       );
@@ -448,10 +454,6 @@ function collectCallablesFromStatement(
   }
 
   if (ts.isFunctionDeclaration(statement)) {
-    if (!statement.body) {
-      return [];
-    }
-
     const displayName = resolveFunctionDisplayName(statement);
 
     if (!displayName) {

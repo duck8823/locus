@@ -349,4 +349,64 @@ export default (() => {
     expect(diff.items[0]?.symbolKey).toBe("function::<root>::default");
     expect(diff.items[0]?.changeType).toBe("modified");
   });
+
+  it("tracks wrapped callable class-property initializers", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+type Handler = (value: number) => number;
+
+export class WrappedHandler {
+  handler = ((value: number) => value + 1) as Handler;
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+type Handler = (value: number) => number;
+
+export class WrappedHandler {
+  handler = ((value: number) => value + 2) as Handler;
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("method::WrappedHandler::instance::handler");
+    expect(diff.items[0]?.changeType).toBe("modified");
+  });
+
+  it("tracks declaration-only callable signature changes in .d.ts files", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      filePath: "types/public-api.d.ts",
+      revision: "before",
+      content: `
+export declare function fetchUser(id: string): Promise<User>;
+`.trim(),
+    });
+    const after = createSnapshot({
+      filePath: "types/public-api.d.ts",
+      revision: "after",
+      content: `
+export declare function fetchUser(id: number): Promise<User>;
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.symbolKey).toBe("function::<root>::fetchUser");
+    expect(diff.items[0]?.bodySummary).toBe("Signature changed");
+  });
 });
