@@ -30,7 +30,7 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
 }
 
 function formatTimestamp(timestamp: string): string {
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(timestamp));

@@ -1,5 +1,6 @@
 import path from "node:path";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { rename, mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { ReviewSession, type ReviewSessionRecord } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
 
@@ -9,6 +10,7 @@ export interface FileReviewSessionRepositoryOptions {
 
 export class FileReviewSessionRepository implements ReviewSessionRepository {
   private readonly dataDirectory: string;
+  private readonly writeQueues = new Map<string, Promise<void>>();
 
   constructor(options: FileReviewSessionRepositoryOptions = {}) {
     this.dataDirectory = options.dataDirectory ?? path.join(process.cwd(), ".locus-data", "review-sessions");
@@ -31,8 +33,30 @@ export class FileReviewSessionRepository implements ReviewSessionRepository {
   }
 
   async save(reviewSession: ReviewSession): Promise<void> {
-    await mkdir(this.dataDirectory, { recursive: true });
-    await writeFile(this.getFilePath(reviewSession.reviewId), JSON.stringify(reviewSession.toRecord(), null, 2));
+    const reviewId = reviewSession.reviewId;
+    const content = JSON.stringify(reviewSession.toRecord(), null, 2);
+    const previousWrite = this.writeQueues.get(reviewId) ?? Promise.resolve();
+    const nextWrite = previousWrite
+      .catch(() => undefined)
+      .then(async () => {
+        await mkdir(this.dataDirectory, { recursive: true });
+
+        const filePath = this.getFilePath(reviewId);
+        const tempFilePath = `${filePath}.${randomUUID()}.tmp`;
+
+        await writeFile(tempFilePath, content);
+        await rename(tempFilePath, filePath);
+      });
+
+    this.writeQueues.set(reviewId, nextWrite);
+
+    try {
+      await nextWrite;
+    } finally {
+      if (this.writeQueues.get(reviewId) === nextWrite) {
+        this.writeQueues.delete(reviewId);
+      }
+    }
   }
 
   private getFilePath(reviewId: string): string {

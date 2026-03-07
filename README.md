@@ -106,6 +106,12 @@ npm install
 npm run dev
 ```
 
+If you want to exercise the GitHub webhook route locally, set:
+
+```bash
+export GITHUB_WEBHOOK_SECRET=your-local-webhook-secret
+```
+
 Validation commands:
 
 ```bash

@@ -111,6 +111,12 @@ npm install
 npm run dev
 ```
 
+GitHub webhook route もローカルで試す場合は、以下を設定してください。
+
+```bash
+export GITHUB_WEBHOOK_SECRET=your-local-webhook-secret
+```
+
 確認コマンド:
 
 ```bash

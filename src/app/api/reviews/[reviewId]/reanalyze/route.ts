@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ReanalyzeReviewUseCase } from "@/server/application/usecases/reanalyze-review";
-import { ReviewSessionNotFoundError } from "@/server/application/usecases/mark-review-group-status";
+import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
 import { getDependencies } from "@/server/composition/dependencies";
 import { parseReanalyzeRequest } from "@/server/presentation/api/parse-reanalyze-request";
 

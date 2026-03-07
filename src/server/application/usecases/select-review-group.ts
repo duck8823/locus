@@ -1,6 +1,6 @@
 import type { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
-import { ReviewSessionNotFoundError } from "@/server/application/usecases/mark-review-group-status";
+import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
 
 export interface SelectReviewGroupInput {
   reviewId: string;

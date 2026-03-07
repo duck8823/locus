@@ -1,13 +1,7 @@
 import type { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
 import type { ReviewGroupStatus } from "@/server/domain/value-objects/review-status";
-
-export class ReviewSessionNotFoundError extends Error {
-  constructor(reviewId: string) {
-    super(`Review session not found: ${reviewId}`);
-    this.name = "ReviewSessionNotFoundError";
-  }
-}
+import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
 
 export interface MarkReviewGroupStatusInput {
   reviewId: string;

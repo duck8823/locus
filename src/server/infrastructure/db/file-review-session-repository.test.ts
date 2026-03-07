@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -57,5 +57,38 @@ describe("FileReviewSessionRepository", () => {
 
     expect(reloaded?.toRecord().groups[0]?.status).toBe("reviewed");
     expect(persisted.viewerName).toBe("Demo reviewer");
+  });
+
+  it("serializes concurrent writes and leaves no temporary files behind", async () => {
+    const { root, repository } = await createRepository();
+    const baseSession = ReviewSession.create({
+      reviewId: "demo-review",
+      title: "Demo",
+      repositoryName: "duck8823/locus",
+      branchLabel: "feat/web-shell-skeleton",
+      viewerName: "Demo reviewer",
+      lastOpenedAt: "2026-03-07T00:00:00.000Z",
+      groups: [
+        {
+          groupId: "group-a",
+          title: "Group A",
+          summary: "Summary",
+          filePath: "src/a.ts",
+          status: "unread",
+          upstream: [],
+          downstream: [],
+        },
+      ],
+    });
+    const updatedSession = ReviewSession.fromRecord(baseSession.toRecord());
+    updatedSession.setGroupStatus("group-a", "reviewed");
+
+    await Promise.all([repository.save(baseSession), repository.save(updatedSession)]);
+
+    const files = await readdir(path.join(root, "review-sessions"));
+    const reloaded = await repository.findByReviewId("demo-review");
+
+    expect(files).toEqual(["demo-review.json"]);
+    expect(reloaded?.toRecord().groups[0]?.status).toBe("reviewed");
   });
 });

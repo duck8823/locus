@@ -1,4 +1,4 @@
-import { OpenReviewWorkspaceUseCase } from "@/server/application/usecases/open-review-workspace";
+import { GetReviewWorkspaceUseCase } from "@/server/application/usecases/get-review-workspace";
 import { getDependencies } from "@/server/composition/dependencies";
 import { toReviewWorkspaceDto } from "@/server/presentation/mappers/to-review-workspace-dto";
 import type { ReviewWorkspaceDto } from "@/server/presentation/dto/review-workspace-dto";
@@ -13,7 +13,7 @@ export async function loadReviewWorkspaceDto({
   viewerName,
 }: LoadReviewWorkspaceInput): Promise<ReviewWorkspaceDto> {
   const { reviewSessionRepository } = getDependencies();
-  const useCase = new OpenReviewWorkspaceUseCase({ reviewSessionRepository });
+  const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository });
   const reviewSession = await useCase.execute({ reviewId, viewerName });
 
   return toReviewWorkspaceDto(reviewSession);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { MarkReviewGroupStatusUseCase, ReviewSessionNotFoundError } from "@/server/application/usecases/mark-review-group-status";
+import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
+import { MarkReviewGroupStatusUseCase } from "@/server/application/usecases/mark-review-group-status";
 import { getDependencies } from "@/server/composition/dependencies";
 import { parseProgressRequest } from "@/server/presentation/api/parse-progress-request";
 import { toReviewWorkspaceDto } from "@/server/presentation/mappers/to-review-workspace-dto";
@@ -26,7 +27,10 @@ export async function POST(
       { status: 200 },
     );
   } catch (error) {
-    if (error instanceof ReviewSessionNotFoundError || isReviewGroupNotFoundError(error)) {
+    if (
+      error instanceof Error &&
+      (error instanceof ReviewSessionNotFoundError || isReviewGroupNotFoundError(error))
+    ) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
 

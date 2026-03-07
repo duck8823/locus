@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { AcceptGitHubWebhookUseCase } from "@/server/application/usecases/accept-github-webhook";
 import { getDependencies } from "@/server/composition/dependencies";
-import { parseGitHubWebhookRequest } from "@/server/presentation/api/parse-github-webhook-request";
+import {
+  GitHubWebhookRequestError,
+  parseGitHubWebhookRequest,
+} from "@/server/presentation/api/parse-github-webhook-request";
 
 export async function POST(request: Request) {
   try {
@@ -25,6 +28,10 @@ export async function POST(request: Request) {
       { status: 202 },
     );
   } catch (error) {
+    if (error instanceof GitHubWebhookRequestError) {
+      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+    }
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },
       { status: 400 },

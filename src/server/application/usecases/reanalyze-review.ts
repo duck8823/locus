@@ -1,7 +1,7 @@
 import type { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
 import type { AnalysisJobScheduler, ScheduledAnalysisJob } from "@/server/application/ports/analysis-job-scheduler";
-import { ReviewSessionNotFoundError } from "@/server/application/usecases/mark-review-group-status";
+import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
 
 export interface ReanalyzeReviewInput {
   reviewId: string;
