@@ -178,8 +178,10 @@ export class ReanalyzeReviewUseCase {
         return assertNever(source);
     }
 
+    const latestReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
+    const latestProgressRecord = latestReviewSession?.toRecord() ?? previousRecord;
     const mergedRecord = mergePreviousReviewProgress({
-      previousRecord,
+      previousRecord: latestProgressRecord,
       nextRecord: refreshedReviewSession.toRecord(),
       requestedAt: timestamp,
       source,

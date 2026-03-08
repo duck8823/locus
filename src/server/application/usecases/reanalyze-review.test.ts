@@ -36,6 +36,7 @@ class InMemoryReviewSessionRepository implements ReviewSessionRepository {
 class StubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
   lastInput: { reviewId: string; source: GitHubPullRequestRef } | null = null;
   calls = 0;
+  onFetch: (() => Promise<void>) | null = null;
 
   async fetchPullRequestSnapshots(input: {
     reviewId: string;
@@ -43,6 +44,10 @@ class StubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
   }): Promise<PullRequestSnapshotBundle> {
     this.lastInput = input;
     this.calls += 1;
+
+    if (this.onFetch) {
+      await this.onFetch();
+    }
 
     return {
       title: `PR #${input.source.pullRequestNumber}: Improve updateProfile validation`,
@@ -282,6 +287,64 @@ describe("ReanalyzeReviewUseCase", () => {
       repository: "locus",
       pullRequestNumber: 12,
     });
+  });
+
+  it("keeps progress updates that happen while reanalysis is running", async () => {
+    const repository = new InMemoryReviewSessionRepository();
+    repository.seed(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-12",
+        title: "PR #12: Improve updateProfile validation",
+        repositoryName: "octocat/locus",
+        branchLabel: "feature/update-profile → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 12,
+        },
+        lastOpenedAt: "2026-03-07T00:00:00.000Z",
+        groups: [
+          {
+            groupId: "legacy-group",
+            title: "Legacy group",
+            summary: "Legacy summary",
+            filePath: "src/user-service.ts",
+            status: "unread",
+            upstream: [],
+            downstream: [],
+          },
+        ],
+      }),
+    );
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    snapshotProvider.onFetch = async () => {
+      const liveSession = await repository.findByReviewId("github-octocat-locus-pr-12");
+
+      if (!liveSession) {
+        throw new Error("expected a live session");
+      }
+
+      liveSession.setGroupStatus("legacy-group", "in_progress");
+      await repository.save(liveSession);
+    };
+    const useCase = new ReanalyzeReviewUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+    });
+
+    await useCase.execute({ reviewId: "github-octocat-locus-pr-12" });
+
+    const persisted = await repository.findByReviewId("github-octocat-locus-pr-12");
+
+    expect(
+      persisted
+        ?.toRecord()
+        .groups.find((group) => group.filePath === "src/user-service.ts")
+        ?.status,
+    ).toBe("in_progress");
   });
 
   it("rebuilds seed fixture sessions without calling the GitHub provider", async () => {
