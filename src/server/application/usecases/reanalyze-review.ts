@@ -265,6 +265,7 @@ export class ReanalyzeReviewUseCase {
       const completedAt = new Date().toISOString();
       const errorMessage = toReanalysisErrorMessage(error);
       let failedSession = existingReviewSession;
+      let latestStateReloadFailed = false;
 
       try {
         const latestReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
@@ -287,6 +288,21 @@ export class ReanalyzeReviewUseCase {
         }
       } catch {
         failedSession = existingReviewSession;
+        latestStateReloadFailed = true;
+      }
+
+      if (latestStateReloadFailed) {
+        const fallbackRecord = existingReviewSession.toRecord();
+
+        return {
+          reviewSession: existingReviewSession,
+          snapshotPairCount,
+          source: fallbackRecord.source ?? source,
+          reanalysisStatus: fallbackRecord.reanalysisStatus ?? "running",
+          lastReanalyzeRequestedAt: fallbackRecord.lastReanalyzeRequestedAt,
+          lastReanalyzeCompletedAt: fallbackRecord.lastReanalyzeCompletedAt ?? null,
+          errorMessage,
+        };
       }
 
       failedSession.markReanalysisFailed(completedAt, errorMessage, startedAt);

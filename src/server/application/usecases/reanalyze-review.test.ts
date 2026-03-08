@@ -638,7 +638,7 @@ describe("ReanalyzeReviewUseCase", () => {
     expect(record?.lastReanalyzeError).toContain("GitHub API request failed");
   });
 
-  it("falls back to in-memory session when loading latest state fails in catch", async () => {
+  it("keeps running state when latest reload fails in catch", async () => {
     const repository = new InMemoryReviewSessionRepository();
     repository.seed(
       ReviewSession.create({
@@ -676,10 +676,11 @@ describe("ReanalyzeReviewUseCase", () => {
 
     const result = await useCase.execute({ reviewId: "github-octocat-locus-pr-12" });
 
-    expect(result.reanalysisStatus).toBe("failed");
+    expect(result.reanalysisStatus).toBe("running");
+    expect(result.errorMessage).toContain("GitHub API request failed");
     const persisted = await repository.findByReviewId("github-octocat-locus-pr-12");
-    expect(persisted?.toRecord().reanalysisStatus).toBe("failed");
-    expect(persisted?.toRecord().lastReanalyzeError).toContain("GitHub API request failed");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("running");
+    expect(persisted?.toRecord().lastReanalyzeError).toBeNull();
   });
 
   it("records failed status when source cannot be resolved", async () => {
