@@ -1072,7 +1072,8 @@ export const run = async () => import('../domain/real-dynamic');
             filePath: "src/application/main.ts",
             language: "typescript",
             revision: "after",
-            content: "import { from } from '../domain/keyword-target';\nexport const run = () => from();",
+            content:
+              "import from from '../domain/keyword-target';\nimport { from as fromSymbol } from '../domain/keyword-target';\nexport const run = () => from() + fromSymbol();",
             metadata: { codeHost: "github" },
           },
         },
@@ -1310,5 +1311,61 @@ export const run = () => message.length;
 
     const mainChange = result.semanticChanges.find((change) => change.fileId === "file-main");
     expect(mainChange?.architecture?.outgoingNodeIds ?? []).not.toContain("file:src/domain/ignored.ts");
+  });
+
+  it("skips dependency extraction for non JS/TS source languages", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "non-js-source-review",
+      snapshotPairs: [
+        {
+          fileId: "file-doc",
+          filePath: "docs/guide.md",
+          before: {
+            snapshotId: "non-js-source-review:file-doc:before",
+            fileId: "file-doc",
+            filePath: "docs/guide.md",
+            language: "markdown",
+            revision: "before",
+            content: "# Guide",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "non-js-source-review:file-doc:after",
+            fileId: "file-doc",
+            filePath: "docs/guide.md",
+            language: "markdown",
+            revision: "after",
+            content: "import { service } from '../src/domain/service';",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-service",
+          filePath: "src/domain/service.ts",
+          before: {
+            snapshotId: "non-js-source-review:file-service:before",
+            fileId: "file-service",
+            filePath: "src/domain/service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const service = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "non-js-source-review:file-service:after",
+            fileId: "file-service",
+            filePath: "src/domain/service.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const service = () => 2;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const serviceChange = result.semanticChanges.find((change) => change.fileId === "file-service");
+    expect(serviceChange?.architecture?.incomingNodeIds ?? []).not.toContain("file:docs/guide.md");
   });
 });

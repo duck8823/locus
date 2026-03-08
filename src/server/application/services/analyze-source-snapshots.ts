@@ -29,6 +29,7 @@ interface DiffPlan {
 interface SnapshotDependencySource {
   filePath: string;
   content: string;
+  language: string | null;
   isRemoved: boolean;
 }
 
@@ -51,23 +52,29 @@ function createStableId(...parts: string[]): string {
 }
 
 function inferDominantLayer(filePath: string): string | undefined {
-  if (filePath.includes("/app/")) {
+  const pathSegments = filePath.split("/").filter((segment) => segment.length > 0);
+
+  if (pathSegments.includes("app")) {
     return "presentation";
   }
 
-  if (filePath.includes("/domain/")) {
+  if (pathSegments.includes("domain")) {
     return "domain";
   }
 
-  if (filePath.includes("/infrastructure/")) {
+  if (pathSegments.includes("infrastructure")) {
     return "infrastructure";
   }
 
-  if (filePath.includes("/application/")) {
+  if (pathSegments.includes("application")) {
     return "application";
   }
 
   return undefined;
+}
+
+function supportsImportGraphParsing(language: string | null): boolean {
+  return language === "typescript" || language === "javascript" || language === "tsx" || language === "jsx";
 }
 
 function isIdentifierCharacter(value: string | undefined): boolean {
@@ -129,41 +136,7 @@ function readStringLiteral(
 
     if (quote === "`" && character === "$" && source[index + 1] === "{") {
       hasInterpolation = true;
-      let braceDepth = 1;
-      index += 2;
-
-      while (index < source.length && braceDepth > 0) {
-        const nestedCharacter = source[index];
-
-        if (!nestedCharacter) {
-          break;
-        }
-
-        if (nestedCharacter === "/" && source[index + 1] === "/") {
-          index = skipLineComment(source, index + 2);
-          continue;
-        }
-
-        if (nestedCharacter === "/" && source[index + 1] === "*") {
-          index = skipBlockComment(source, index + 2);
-          continue;
-        }
-
-        if (nestedCharacter === "'" || nestedCharacter === '"' || nestedCharacter === "`") {
-          const nestedLiteral = readStringLiteral(source, index);
-          index = nestedLiteral?.nextIndex ?? index + 1;
-          continue;
-        }
-
-        if (nestedCharacter === "{") {
-          braceDepth += 1;
-        } else if (nestedCharacter === "}") {
-          braceDepth -= 1;
-        }
-
-        index += 1;
-      }
-
+      index += 1;
       continue;
     }
 
@@ -290,7 +263,8 @@ function parseImportStatement(
       const literal = readStringLiteral(source, skipWhitespace(source, index + "from".length));
 
       if (!literal || literal.hasInterpolation) {
-        return null;
+        index += "from".length;
+        continue;
       }
 
       const specifier = tryExtractRelativeSpecifier(literal.value);
@@ -366,7 +340,8 @@ function parseExportStatement(
       const literal = readStringLiteral(source, skipWhitespace(source, index + "from".length));
 
       if (!literal || literal.hasInterpolation) {
-        return null;
+        index += "from".length;
+        continue;
       }
 
       const specifier = tryExtractRelativeSpecifier(literal.value);
@@ -529,6 +504,7 @@ function collectDependencySources(snapshotPairs: SourceSnapshotPair[]): Snapshot
       sourcesByPath.set(pair.after.filePath, {
         filePath: pair.after.filePath,
         content: pair.after.content,
+        language: pair.after.language,
         isRemoved: false,
       });
       continue;
@@ -538,6 +514,7 @@ function collectDependencySources(snapshotPairs: SourceSnapshotPair[]): Snapshot
       sourcesByPath.set(pair.before.filePath, {
         filePath: pair.before.filePath,
         content: pair.before.content,
+        language: pair.before.language,
         isRemoved: true,
       });
     }
@@ -553,6 +530,10 @@ function buildFileDependencyContext(snapshotPairs: SourceSnapshotPair[]): FileDe
   const incomingByPath = new Map<string, Set<string>>();
 
   for (const source of sources) {
+    if (!supportsImportGraphParsing(source.language)) {
+      continue;
+    }
+
     const outgoing = outgoingByPath.get(source.filePath) ?? new Set<string>();
     outgoingByPath.set(source.filePath, outgoing);
 
