@@ -16,7 +16,15 @@ function formatReviewGroupStatus(status: string) {
   return status.replaceAll("_", " ");
 }
 
-const ARCHITECTURE_CATEGORY_ORDER = ["layer", "file", "symbol", "unknown"] as const;
+const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
+  layer: true,
+  file: true,
+  symbol: true,
+  unknown: true,
+};
+const ARCHITECTURE_CATEGORY_ORDER = Object.keys(
+  ARCHITECTURE_CATEGORY_FLAGS,
+) as Array<keyof ArchitectureNodeGroups>;
 const ARCHITECTURE_CATEGORY_LABELS: Record<keyof ArchitectureNodeGroups, string> = {
   layer: "Layers",
   file: "Files",
