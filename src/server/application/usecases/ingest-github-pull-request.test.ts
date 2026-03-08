@@ -195,6 +195,12 @@ describe("IngestGitHubPullRequestUseCase", () => {
     expect(record?.title).toBe("PR #12: Improve updateProfile validation");
     expect(record?.repositoryName).toBe("octocat/locus");
     expect(record?.branchLabel).toBe("feature/update-profile → main");
+    expect(record?.source).toEqual({
+      provider: "github",
+      owner: "octocat",
+      repository: "locus",
+      pullRequestNumber: 12,
+    });
     expect(record?.groups.length ?? 0).toBeGreaterThan(0);
     expect(record?.semanticChanges?.length).toBe(1);
     expect(record?.semanticChanges?.[0]?.symbol.displayName).toBe("updateProfile");

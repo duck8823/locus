@@ -77,6 +77,10 @@ describe("createSeedReviewSession", () => {
     expect(record.groups.length).toBeGreaterThan(0);
     expect(record.semanticChanges?.length).toBeGreaterThan(0);
     expect(record.unsupportedFileAnalyses).toHaveLength(1);
+    expect(record.source).toEqual({
+      provider: "seed_fixture",
+      fixtureId: "default",
+    });
     expect(record.groups.every((group) => (group.semanticChangeIds?.length ?? 0) > 0)).toBe(true);
   });
 });

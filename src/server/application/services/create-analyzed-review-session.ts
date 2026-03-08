@@ -5,6 +5,7 @@ import type {
   SemanticChange,
   SemanticChangeGroup,
 } from "@/server/domain/value-objects/semantic-change";
+import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
 import type { SourceSnapshotPair } from "@/server/domain/value-objects/source-snapshot";
 
 export interface CreateAnalyzedReviewSessionInput {
@@ -13,6 +14,7 @@ export interface CreateAnalyzedReviewSessionInput {
   repositoryName: string;
   branchLabel: string;
   viewerName: string;
+  source: ReviewSessionSource;
   createdAt: string;
   snapshotPairs: SourceSnapshotPair[];
   parserAdapters: ParserAdapter[];
@@ -77,6 +79,7 @@ export async function createAnalyzedReviewSession({
   repositoryName,
   branchLabel,
   viewerName,
+  source,
   createdAt,
   snapshotPairs,
   parserAdapters,
@@ -96,6 +99,7 @@ export async function createAnalyzedReviewSession({
     repositoryName,
     branchLabel,
     viewerName,
+    source,
     groups,
     semanticChanges: analysisResult.semanticChanges,
     unsupportedFileAnalyses: analysisResult.unsupportedFiles,
