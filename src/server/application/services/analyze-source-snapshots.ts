@@ -70,27 +70,334 @@ function inferDominantLayer(filePath: string): string | undefined {
   return undefined;
 }
 
-function collectRelativeImportSpecifiers(content: string): string[] {
-  const specifiers = new Set<string>();
-  const patterns = [
-    /\bimport\s+(?:type\s+)?(?:[^"'`]+?\s+from\s+)?["'`]([^"'`]+)["'`]/g,
-    /\bexport\s+(?:type\s+)?(?:[^"'`]+?\s+from\s+)?["'`]([^"'`]+)["'`]/g,
-    /\brequire\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g,
-    /\bimport\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g,
-  ];
+function isIdentifierCharacter(value: string | undefined): boolean {
+  return typeof value === "string" && /[A-Za-z0-9_$]/.test(value);
+}
 
-  for (const pattern of patterns) {
-    pattern.lastIndex = 0;
+function hasWordBoundary(source: string, index: number, word: string): boolean {
+  if (!source.startsWith(word, index)) {
+    return false;
+  }
 
-    for (const match of content.matchAll(pattern)) {
-      const specifier = match[1];
+  const previous = index === 0 ? undefined : source[index - 1];
+  const next = source[index + word.length];
+  return !isIdentifierCharacter(previous) && !isIdentifierCharacter(next);
+}
 
-      if (!specifier || !specifier.startsWith(".")) {
-        continue;
+function skipWhitespace(source: string, startIndex: number): number {
+  let index = startIndex;
+
+  while (index < source.length && /\s/.test(source[index] ?? "")) {
+    index += 1;
+  }
+
+  return index;
+}
+
+function readStringLiteral(
+  source: string,
+  startIndex: number,
+): { value: string; nextIndex: number } | null {
+  const quote = source[startIndex];
+
+  if (quote !== "'" && quote !== '"' && quote !== "`") {
+    return null;
+  }
+
+  let value = "";
+  let index = startIndex + 1;
+
+  while (index < source.length) {
+    const character = source[index];
+
+    if (!character) {
+      break;
+    }
+
+    if (character === "\\") {
+      const escaped = source[index + 1];
+
+      if (!escaped) {
+        break;
       }
 
-      specifiers.add(specifier);
+      value += escaped;
+      index += 2;
+      continue;
     }
+
+    if (quote === "`" && character === "$" && source[index + 1] === "{") {
+      return null;
+    }
+
+    if (character === quote) {
+      return {
+        value,
+        nextIndex: index + 1,
+      };
+    }
+
+    value += character;
+    index += 1;
+  }
+
+  return null;
+}
+
+function skipLineComment(source: string, startIndex: number): number {
+  let index = startIndex;
+
+  while (index < source.length && source[index] !== "\n") {
+    index += 1;
+  }
+
+  return index;
+}
+
+function skipBlockComment(source: string, startIndex: number): number {
+  let index = startIndex;
+
+  while (index < source.length) {
+    if (source[index] === "*" && source[index + 1] === "/") {
+      return index + 2;
+    }
+
+    index += 1;
+  }
+
+  return index;
+}
+
+function tryExtractRelativeSpecifier(specifier: string): string | null {
+  return specifier.startsWith(".") ? specifier : null;
+}
+
+function parseImportStatement(
+  source: string,
+  startIndex: number,
+): { specifier: string; nextIndex: number } | null {
+  let index = skipWhitespace(source, startIndex + "import".length);
+
+  if (source[index] === "(") {
+    index = skipWhitespace(source, index + 1);
+    const literal = readStringLiteral(source, index);
+
+    if (!literal) {
+      return null;
+    }
+
+    const specifier = tryExtractRelativeSpecifier(literal.value);
+
+    if (!specifier) {
+      return null;
+    }
+
+    return {
+      specifier,
+      nextIndex: literal.nextIndex,
+    };
+  }
+
+  const sideEffectLiteral = readStringLiteral(source, index);
+
+  if (sideEffectLiteral) {
+    const specifier = tryExtractRelativeSpecifier(sideEffectLiteral.value);
+
+    if (!specifier) {
+      return null;
+    }
+
+    return {
+      specifier,
+      nextIndex: sideEffectLiteral.nextIndex,
+    };
+  }
+
+  while (index < source.length) {
+    const character = source[index];
+
+    if (!character) {
+      break;
+    }
+
+    if (character === "/" && source[index + 1] === "/") {
+      index = skipLineComment(source, index + 2);
+      continue;
+    }
+
+    if (character === "/" && source[index + 1] === "*") {
+      index = skipBlockComment(source, index + 2);
+      continue;
+    }
+
+    if (character === "'" || character === '"' || character === "`") {
+      const literal = readStringLiteral(source, index);
+      index = literal?.nextIndex ?? index + 1;
+      continue;
+    }
+
+    if (hasWordBoundary(source, index, "from")) {
+      const literal = readStringLiteral(source, skipWhitespace(source, index + "from".length));
+
+      if (!literal) {
+        return null;
+      }
+
+      const specifier = tryExtractRelativeSpecifier(literal.value);
+
+      if (!specifier) {
+        return null;
+      }
+
+      return {
+        specifier,
+        nextIndex: literal.nextIndex,
+      };
+    }
+
+    index += 1;
+  }
+
+  return null;
+}
+
+function parseExportStatement(
+  source: string,
+  startIndex: number,
+): { specifier: string; nextIndex: number } | null {
+  let index = skipWhitespace(source, startIndex + "export".length);
+
+  while (index < source.length) {
+    const character = source[index];
+
+    if (!character) {
+      break;
+    }
+
+    if (character === "/" && source[index + 1] === "/") {
+      index = skipLineComment(source, index + 2);
+      continue;
+    }
+
+    if (character === "/" && source[index + 1] === "*") {
+      index = skipBlockComment(source, index + 2);
+      continue;
+    }
+
+    if (character === "'" || character === '"' || character === "`") {
+      const literal = readStringLiteral(source, index);
+      index = literal?.nextIndex ?? index + 1;
+      continue;
+    }
+
+    if (hasWordBoundary(source, index, "from")) {
+      const literal = readStringLiteral(source, skipWhitespace(source, index + "from".length));
+
+      if (!literal) {
+        return null;
+      }
+
+      const specifier = tryExtractRelativeSpecifier(literal.value);
+
+      if (!specifier) {
+        return null;
+      }
+
+      return {
+        specifier,
+        nextIndex: literal.nextIndex,
+      };
+    }
+
+    index += 1;
+  }
+
+  return null;
+}
+
+function parseRequireCall(
+  source: string,
+  startIndex: number,
+): { specifier: string; nextIndex: number } | null {
+  let index = skipWhitespace(source, startIndex + "require".length);
+
+  if (source[index] !== "(") {
+    return null;
+  }
+
+  index = skipWhitespace(source, index + 1);
+  const literal = readStringLiteral(source, index);
+
+  if (!literal) {
+    return null;
+  }
+
+  const specifier = tryExtractRelativeSpecifier(literal.value);
+
+  if (!specifier) {
+    return null;
+  }
+
+  return {
+    specifier,
+    nextIndex: literal.nextIndex,
+  };
+}
+
+function collectRelativeImportSpecifiers(content: string): string[] {
+  const specifiers = new Set<string>();
+  let index = 0;
+
+  while (index < content.length) {
+    const character = content[index];
+
+    if (!character) {
+      break;
+    }
+
+    if (character === "/" && content[index + 1] === "/") {
+      index = skipLineComment(content, index + 2);
+      continue;
+    }
+
+    if (character === "/" && content[index + 1] === "*") {
+      index = skipBlockComment(content, index + 2);
+      continue;
+    }
+
+    if (character === "'" || character === '"' || character === "`") {
+      const literal = readStringLiteral(content, index);
+      index = literal?.nextIndex ?? index + 1;
+      continue;
+    }
+
+    if (hasWordBoundary(content, index, "import")) {
+      const parsed = parseImportStatement(content, index);
+
+      if (parsed) {
+        specifiers.add(parsed.specifier);
+        index = Math.max(parsed.nextIndex, index + 1);
+        continue;
+      }
+    } else if (hasWordBoundary(content, index, "export")) {
+      const parsed = parseExportStatement(content, index);
+
+      if (parsed) {
+        specifiers.add(parsed.specifier);
+        index = Math.max(parsed.nextIndex, index + 1);
+        continue;
+      }
+    } else if (hasWordBoundary(content, index, "require")) {
+      const parsed = parseRequireCall(content, index);
+
+      if (parsed) {
+        specifiers.add(parsed.specifier);
+        index = Math.max(parsed.nextIndex, index + 1);
+        continue;
+      }
+    }
+
+    index += 1;
   }
 
   return [...specifiers];
@@ -104,12 +411,19 @@ function resolveRelativeImportPath(
   const baseDirectory = pathPosix.dirname(currentFilePath);
   const resolvedBase = pathPosix.normalize(pathPosix.join(baseDirectory, importSpecifier));
   const candidates = new Set<string>([resolvedBase]);
+  const extension = pathPosix.extname(resolvedBase).toLowerCase();
 
-  if (pathPosix.extname(resolvedBase).length === 0) {
+  if (extension.length === 0) {
     for (const extension of RESOLVABLE_SOURCE_EXTENSIONS) {
       candidates.add(`${resolvedBase}${extension}`);
       candidates.add(pathPosix.join(resolvedBase, `index${extension}`));
     }
+  } else if (extension === ".js" || extension === ".jsx" || extension === ".mjs" || extension === ".cjs") {
+    const baseWithoutExtension = resolvedBase.slice(0, -extension.length);
+    candidates.add(`${baseWithoutExtension}.ts`);
+    candidates.add(`${baseWithoutExtension}.tsx`);
+    candidates.add(pathPosix.join(baseWithoutExtension, "index.ts"));
+    candidates.add(pathPosix.join(baseWithoutExtension, "index.tsx"));
   }
 
   for (const candidate of candidates) {
