@@ -66,8 +66,11 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     repositoryName: record.repositoryName,
     branchLabel: record.branchLabel,
     viewerName: record.viewerName,
+    reanalysisStatus: record.reanalysisStatus ?? "idle",
     lastOpenedAt: record.lastOpenedAt,
     lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt,
+    lastReanalyzeCompletedAt: record.lastReanalyzeCompletedAt ?? null,
+    lastReanalyzeError: record.lastReanalyzeError ?? null,
     availableStatuses: [...reviewGroupStatuses],
     unsupportedSummary: toUnsupportedSummary(record.unsupportedFileAnalyses ?? []),
     groups: record.groups.map((group) => ({

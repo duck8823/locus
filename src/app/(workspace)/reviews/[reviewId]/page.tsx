@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import styles from "./page.module.css";
+import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import { LocalizedDateTime } from "@/app/components/localized-date-time";
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
 import { requestReanalysisAction } from "@/server/presentation/actions/request-reanalysis-action";
@@ -99,9 +100,7 @@ export default async function ReviewWorkspacePage({
           </Link>
           <form action={requestReanalysisAction}>
             <input name="reviewId" type="hidden" value={workspace.reviewId} />
-            <button className={styles.actionButton} type="submit">
-              Reanalyze now
-            </button>
+            <ReanalyzeSubmitButton />
           </form>
         </div>
       </div>
@@ -225,15 +224,48 @@ export default async function ReviewWorkspacePage({
           </div>
           <div className={styles.detailBlock}>
             <span className={styles.muted}>Reanalysis status</span>
-            <p>
-              {workspace.lastReanalyzeRequestedAt ? (
-                <>
-                  Queued at <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
-                </>
-              ) : (
-                "Not requested yet"
-              )}
-            </p>
+            {workspace.reanalysisStatus === "idle" ? (
+              <p>Not requested yet</p>
+            ) : null}
+            {workspace.reanalysisStatus === "running" && workspace.lastReanalyzeRequestedAt ? (
+              <p>
+                Running since{" "}
+                <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+              </p>
+            ) : null}
+            {workspace.reanalysisStatus === "succeeded" ? (
+              <>
+                {workspace.lastReanalyzeCompletedAt ? (
+                  <p>
+                    Succeeded at{" "}
+                    <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
+                  </p>
+                ) : (
+                  <p>Succeeded</p>
+                )}
+                {workspace.lastReanalyzeRequestedAt ? (
+                  <p className={styles.muted}>
+                    Requested at{" "}
+                    <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            {workspace.reanalysisStatus === "failed" ? (
+              <>
+                {workspace.lastReanalyzeCompletedAt ? (
+                  <p>
+                    Failed at{" "}
+                    <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
+                  </p>
+                ) : (
+                  <p>Failed</p>
+                )}
+                {workspace.lastReanalyzeError ? (
+                  <p className={styles.reanalysisError}>{workspace.lastReanalyzeError}</p>
+                ) : null}
+              </>
+            ) : null}
           </div>
 
           <div className={styles.detailBlock}>

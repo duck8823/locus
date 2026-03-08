@@ -5,6 +5,7 @@ import type {
   SemanticSymbolKind,
   UnsupportedFileReason,
 } from "@/server/domain/value-objects/semantic-change";
+import type { ReviewReanalysisStatus } from "@/server/domain/value-objects/reanalysis-status";
 
 export interface ReviewWorkspaceSemanticChangeDto {
   semanticChangeId: string;
@@ -46,8 +47,11 @@ export interface ReviewWorkspaceDto {
   repositoryName: string;
   branchLabel: string;
   viewerName: string;
+  reanalysisStatus: ReviewReanalysisStatus;
   lastOpenedAt: string;
   lastReanalyzeRequestedAt: string | null;
+  lastReanalyzeCompletedAt: string | null;
+  lastReanalyzeError: string | null;
   availableStatuses: ReviewGroupStatus[];
   unsupportedSummary: ReviewWorkspaceUnsupportedSummaryDto;
   groups: ReviewWorkspaceGroupDto[];
