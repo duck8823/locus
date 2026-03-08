@@ -141,6 +141,74 @@
   margin-bottom: 20px;
 }
 
+.semanticChangeList {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.semanticChangeCard {
+  border: 1px solid rgba(154, 167, 209, 0.16);
+  border-radius: 14px;
+  background: rgba(11, 16, 32, 0.45);
+  padding: 10px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.semanticChangeHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.semanticChangeMeta {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.changeBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.changeBadge[data-change-type="added"] {
+  background: rgba(52, 211, 153, 0.16);
+  color: var(--success);
+}
+
+.changeBadge[data-change-type="removed"] {
+  background: rgba(248, 113, 113, 0.2);
+  color: #fca5a5;
+}
+
+.changeBadge[data-change-type="modified"] {
+  background: rgba(124, 156, 255, 0.18);
+  color: var(--accent);
+}
+
+.changeBadge[data-change-type="moved"],
+.changeBadge[data-change-type="renamed"] {
+  background: rgba(251, 191, 36, 0.16);
+  color: var(--warning);
+}
+
+.unsupportedList {
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .archColumns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
