@@ -89,6 +89,12 @@ export function updateProfile(phone: string): string {
   }
 }
 
+class FailingPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
+  async fetchPullRequestSnapshots(): Promise<PullRequestSnapshotBundle> {
+    throw new Error("GitHub API request failed (500): upstream");
+  }
+}
+
 class TestParserAdapter implements ParserAdapter {
   readonly language = "typescript";
   readonly adapterName = "test-parser-adapter";
@@ -193,5 +199,25 @@ describe("IngestGitHubPullRequestUseCase", () => {
     expect(record?.semanticChanges?.length).toBe(1);
     expect(record?.semanticChanges?.[0]?.symbol.displayName).toBe("updateProfile");
     expect(record?.unsupportedFileAnalyses).toEqual([]);
+  });
+
+  it("propagates snapshot provider failures without persisting a review session", async () => {
+    const repository = new InMemoryReviewSessionRepository();
+    const useCase = new IngestGitHubPullRequestUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: new FailingPullRequestSnapshotProvider(),
+    });
+
+    await expect(
+      useCase.execute({
+        reviewId: "github-octocat-locus-pr-999",
+        viewerName: "Demo reviewer",
+        owner: "octocat",
+        repository: "locus",
+        pullRequestNumber: 999,
+      }),
+    ).rejects.toThrow("GitHub API request failed (500): upstream");
+    await expect(repository.findByReviewId("github-octocat-locus-pr-999")).resolves.toBeNull();
   });
 });
