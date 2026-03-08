@@ -143,8 +143,8 @@ function resolveBeforePath(file: GitHubPullRequestFileApiResponse): string | nul
     return null;
   }
 
-  if (file.status === "renamed") {
-    return file.previous_filename ?? null;
+  if (file.status === "renamed" || file.status === "copied") {
+    return file.previous_filename ?? file.filename;
   }
 
   return file.filename;

@@ -194,23 +194,38 @@ describe("GitHubPullRequestSnapshotProvider", () => {
           return jsonResponse([
             { filename: "src/new-file.ts", status: "added" },
             { filename: "src/removed-file.ts", status: "removed" },
+            {
+              filename: "src/copied-file.ts",
+              previous_filename: "src/source-file.ts",
+              status: "copied",
+            },
           ]);
         case "/repos/octocat/locus/pulls/8/files?per_page=100&page=2":
           return jsonResponse([]);
         case "/repos/octocat/locus/git/trees/base-sha?recursive=1":
           return jsonResponse({
             truncated: false,
-            tree: [{ path: "src/removed-file.ts", type: "blob", sha: "blob-base-removed" }],
+            tree: [
+              { path: "src/removed-file.ts", type: "blob", sha: "blob-base-removed" },
+              { path: "src/source-file.ts", type: "blob", sha: "blob-base-source" },
+            ],
           });
         case "/repos/octocat/locus/git/trees/head-sha?recursive=1":
           return jsonResponse({
             truncated: false,
-            tree: [{ path: "src/new-file.ts", type: "blob", sha: "blob-head-new" }],
+            tree: [
+              { path: "src/new-file.ts", type: "blob", sha: "blob-head-new" },
+              { path: "src/copied-file.ts", type: "blob", sha: "blob-head-copied" },
+            ],
           });
         case "/repos/octocat/locus/git/blobs/blob-base-removed":
           return jsonResponse({ encoding: "base64", content: toBase64("export const removed = true;\n") });
+        case "/repos/octocat/locus/git/blobs/blob-base-source":
+          return jsonResponse({ encoding: "base64", content: toBase64("export const source = true;\n") });
         case "/repos/octocat/locus/git/blobs/blob-head-new":
           return jsonResponse({ encoding: "base64", content: toBase64("export const added = true;\n") });
+        case "/repos/octocat/locus/git/blobs/blob-head-copied":
+          return jsonResponse({ encoding: "base64", content: toBase64("export const source = true;\n") });
         default:
           return jsonResponse({ error: `unexpected URL: ${path}` }, 404);
       }
@@ -231,11 +246,16 @@ describe("GitHubPullRequestSnapshotProvider", () => {
 
     const added = bundle.snapshotPairs.find((pair) => pair.filePath === "src/new-file.ts");
     const removed = bundle.snapshotPairs.find((pair) => pair.filePath === "src/removed-file.ts");
+    const copied = bundle.snapshotPairs.find((pair) => pair.filePath === "src/copied-file.ts");
 
     expect(added?.before).toBeNull();
     expect(added?.after?.content).toContain("added = true");
     expect(removed?.before?.content).toContain("removed = true");
     expect(removed?.after).toBeNull();
+    expect(copied?.before?.filePath).toBe("src/source-file.ts");
+    expect(copied?.after?.filePath).toBe("src/copied-file.ts");
+    expect(copied?.before?.content).toContain("source = true");
+    expect(copied?.after?.content).toContain("source = true");
   });
 
   it("fails fast when a GitHub API request times out", async () => {
