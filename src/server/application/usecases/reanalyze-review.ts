@@ -234,8 +234,15 @@ export class ReanalyzeReviewUseCase {
     } catch (error) {
       const completedAt = new Date().toISOString();
       const errorMessage = toReanalysisErrorMessage(error);
-      const latestReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
-      const failedSession = latestReviewSession ?? existingReviewSession;
+      let failedSession = existingReviewSession;
+
+      try {
+        const latestReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
+        failedSession = latestReviewSession ?? existingReviewSession;
+      } catch {
+        failedSession = existingReviewSession;
+      }
+
       failedSession.markReanalysisFailed(completedAt, errorMessage, startedAt);
       await this.dependencies.reviewSessionRepository.save(failedSession);
 

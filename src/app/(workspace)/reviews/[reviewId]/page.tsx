@@ -233,6 +233,9 @@ export default async function ReviewWorkspacePage({
                 <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
               </p>
             ) : null}
+            {workspace.reanalysisStatus === "running" && !workspace.lastReanalyzeRequestedAt ? (
+              <p>Running…</p>
+            ) : null}
             {workspace.reanalysisStatus === "succeeded" ? (
               <>
                 {workspace.lastReanalyzeCompletedAt ? (

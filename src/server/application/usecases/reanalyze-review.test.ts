@@ -18,8 +18,15 @@ import type { SourceSnapshot } from "@/server/domain/value-objects/source-snapsh
 
 class InMemoryReviewSessionRepository implements ReviewSessionRepository {
   private readonly store = new Map<string, ReturnType<ReviewSession["toRecord"]>>();
+  private findByReviewIdCallCount = 0;
+  readonly failOnFindByReviewIdCalls = new Set<number>();
 
   async findByReviewId(reviewId: string): Promise<ReviewSession | null> {
+    this.findByReviewIdCallCount += 1;
+    if (this.failOnFindByReviewIdCalls.has(this.findByReviewIdCallCount)) {
+      throw new Error("findByReviewId failed");
+    }
+
     const record = this.store.get(reviewId);
     return record ? ReviewSession.fromRecord(record) : null;
   }
@@ -511,6 +518,50 @@ describe("ReanalyzeReviewUseCase", () => {
     expect(record?.lastReanalyzeCompletedAt).toBeTruthy();
     expect(record?.reanalysisStatus).toBe("failed");
     expect(record?.lastReanalyzeError).toContain("GitHub API request failed");
+  });
+
+  it("falls back to in-memory session when loading latest state fails in catch", async () => {
+    const repository = new InMemoryReviewSessionRepository();
+    repository.seed(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-12",
+        title: "PR #12: Improve updateProfile validation",
+        repositoryName: "octocat/locus",
+        branchLabel: "feature/update-profile → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 12,
+        },
+        lastOpenedAt: "2026-03-07T00:00:00.000Z",
+        groups: [
+          {
+            groupId: "legacy-group",
+            title: "Legacy group",
+            summary: "Legacy summary",
+            filePath: "src/user-service.ts",
+            status: "unread",
+            upstream: [],
+            downstream: [],
+          },
+        ],
+      }),
+    );
+    repository.failOnFindByReviewIdCalls.add(2);
+    const useCase = new ReanalyzeReviewUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: new FailingPullRequestSnapshotProvider(),
+    });
+
+    const result = await useCase.execute({ reviewId: "github-octocat-locus-pr-12" });
+
+    expect(result.reanalysisStatus).toBe("failed");
+    const persisted = await repository.findByReviewId("github-octocat-locus-pr-12");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("failed");
+    expect(persisted?.toRecord().lastReanalyzeError).toContain("GitHub API request failed");
   });
 
   it("records failed status when source cannot be resolved", async () => {
