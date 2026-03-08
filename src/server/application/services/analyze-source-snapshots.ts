@@ -613,10 +613,11 @@ function mergeArchitectureContext(
     }
 
     const hasArchitecture = outgoing.size > 0 || incoming.size > 0;
+    const shouldKeepArchitecture = hasArchitecture || semanticChange.architecture !== undefined;
 
     return {
       ...semanticChange,
-      architecture: hasArchitecture
+      architecture: shouldKeepArchitecture
         ? {
             ...semanticChange.architecture,
             outgoingNodeIds: [...outgoing].sort(),
