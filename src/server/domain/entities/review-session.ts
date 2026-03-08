@@ -5,6 +5,7 @@ import type {
   UnsupportedFileAnalysis,
 } from "@/server/domain/value-objects/semantic-change";
 import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
+import type { ReviewReanalysisStatus } from "@/server/domain/value-objects/reanalysis-status";
 
 export interface ReviewGroupRecord {
   groupId: string;
@@ -32,6 +33,9 @@ export interface ReviewSessionRecord {
   unsupportedFileAnalyses?: UnsupportedFileAnalysis[];
   lastOpenedAt: string;
   lastReanalyzeRequestedAt: string | null;
+  reanalysisStatus?: ReviewReanalysisStatus;
+  lastReanalyzeCompletedAt?: string | null;
+  lastReanalyzeError?: string | null;
 }
 
 export interface CreateReviewSessionParams {
@@ -47,6 +51,9 @@ export interface CreateReviewSessionParams {
   selectedGroupId?: string | null;
   lastOpenedAt: string;
   lastReanalyzeRequestedAt?: string | null;
+  reanalysisStatus?: ReviewReanalysisStatus;
+  lastReanalyzeCompletedAt?: string | null;
+  lastReanalyzeError?: string | null;
 }
 
 function cloneGroup(group: ReviewGroupRecord): ReviewGroupRecord {
@@ -138,6 +145,17 @@ function assertGroups(groups: ReviewGroupRecord[]): void {
   }
 }
 
+function normalizeReanalysisStatus(
+  status: ReviewReanalysisStatus | undefined,
+  lastReanalyzeRequestedAt: string | null,
+): ReviewReanalysisStatus {
+  if (status) {
+    return status;
+  }
+
+  return lastReanalyzeRequestedAt ? "succeeded" : "idle";
+}
+
 export class ReviewSession {
   private constructor(private readonly record: ReviewSessionRecord) {}
 
@@ -159,6 +177,12 @@ export class ReviewSession {
       unsupportedFileAnalyses: (params.unsupportedFileAnalyses ?? []).map(cloneUnsupportedFileAnalysis),
       lastOpenedAt: params.lastOpenedAt,
       lastReanalyzeRequestedAt: params.lastReanalyzeRequestedAt ?? null,
+      reanalysisStatus: normalizeReanalysisStatus(
+        params.reanalysisStatus,
+        params.lastReanalyzeRequestedAt ?? null,
+      ),
+      lastReanalyzeCompletedAt: params.lastReanalyzeCompletedAt ?? null,
+      lastReanalyzeError: params.lastReanalyzeError ?? null,
     });
   }
 
@@ -167,6 +191,12 @@ export class ReviewSession {
       ...record,
       semanticChanges: record.semanticChanges ?? [],
       unsupportedFileAnalyses: record.unsupportedFileAnalyses ?? [],
+      reanalysisStatus: normalizeReanalysisStatus(
+        record.reanalysisStatus,
+        record.lastReanalyzeRequestedAt ?? null,
+      ),
+      lastReanalyzeCompletedAt: record.lastReanalyzeCompletedAt ?? null,
+      lastReanalyzeError: record.lastReanalyzeError ?? null,
     };
 
     assertGroups(normalizedRecord.groups);
@@ -222,6 +252,29 @@ export class ReviewSession {
 
   requestReanalysis(at: string): void {
     this.record.lastReanalyzeRequestedAt = at;
+    this.record.reanalysisStatus = "running";
+    this.record.lastReanalyzeCompletedAt = null;
+    this.record.lastReanalyzeError = null;
+  }
+
+  markReanalysisSucceeded(at: string, requestedAt?: string): void {
+    if (requestedAt) {
+      this.record.lastReanalyzeRequestedAt = requestedAt;
+    }
+
+    this.record.reanalysisStatus = "succeeded";
+    this.record.lastReanalyzeCompletedAt = at;
+    this.record.lastReanalyzeError = null;
+  }
+
+  markReanalysisFailed(at: string, errorMessage: string, requestedAt?: string): void {
+    if (requestedAt) {
+      this.record.lastReanalyzeRequestedAt = requestedAt;
+    }
+
+    this.record.reanalysisStatus = "failed";
+    this.record.lastReanalyzeCompletedAt = at;
+    this.record.lastReanalyzeError = errorMessage;
   }
 
   toRecord(): ReviewSessionRecord {

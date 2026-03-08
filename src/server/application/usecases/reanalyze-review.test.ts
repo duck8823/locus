@@ -101,6 +101,12 @@ export function updateProfile(phone: string): string {
   }
 }
 
+class FailingPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
+  async fetchPullRequestSnapshots(): Promise<PullRequestSnapshotBundle> {
+    throw new Error("GitHub API request failed (500): upstream");
+  }
+}
+
 class TestParserAdapter implements ParserAdapter {
   readonly language = "typescript";
   readonly adapterName = "test-parser-adapter";
@@ -225,6 +231,8 @@ describe("ReanalyzeReviewUseCase", () => {
       },
     });
     expect(result.snapshotPairCount).toBe(1);
+    expect(result.reanalysisStatus).toBe("succeeded");
+    expect(result.errorMessage).toBeNull();
     expect(result.source).toEqual({
       provider: "github",
       owner: "octocat",
@@ -232,6 +240,9 @@ describe("ReanalyzeReviewUseCase", () => {
       pullRequestNumber: 12,
     });
     expect(record?.lastReanalyzeRequestedAt).toBe("2026-03-08T01:00:00.000Z");
+    expect(record?.lastReanalyzeCompletedAt).toBeTruthy();
+    expect(record?.reanalysisStatus).toBe("succeeded");
+    expect(record?.lastReanalyzeError).toBeNull();
     expect(record?.groups[0]?.status).toBe("reviewed");
     expect(record?.selectedGroupId).toBe(record?.groups[0]?.groupId);
     expect(record?.source).toEqual({
@@ -388,6 +399,7 @@ describe("ReanalyzeReviewUseCase", () => {
 
     expect(snapshotProvider.calls).toBe(0);
     expect(result.snapshotPairCount).toBe(3);
+    expect(result.reanalysisStatus).toBe("succeeded");
     expect(result.source).toEqual({
       provider: "seed_fixture",
       fixtureId: "default",
@@ -433,6 +445,7 @@ describe("ReanalyzeReviewUseCase", () => {
     const result = await useCase.execute({ reviewId: "demo-review" });
 
     expect(snapshotProvider.calls).toBe(0);
+    expect(result.reanalysisStatus).toBe("succeeded");
     expect(result.source).toEqual({
       provider: "seed_fixture",
       fixtureId: "default",
@@ -448,6 +461,100 @@ describe("ReanalyzeReviewUseCase", () => {
         .groups.find((group) => group.filePath === "src/core/user-service.ts")
         ?.status,
     ).toBe("reviewed");
+  });
+
+  it("records failed status and error details when snapshot refresh fails", async () => {
+    const repository = new InMemoryReviewSessionRepository();
+    repository.seed(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-12",
+        title: "PR #12: Improve updateProfile validation",
+        repositoryName: "octocat/locus",
+        branchLabel: "feature/update-profile → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 12,
+        },
+        lastOpenedAt: "2026-03-07T00:00:00.000Z",
+        groups: [
+          {
+            groupId: "legacy-group",
+            title: "Legacy group",
+            summary: "Legacy summary",
+            filePath: "src/user-service.ts",
+            status: "reviewed",
+            upstream: [],
+            downstream: [],
+          },
+        ],
+      }),
+    );
+    const useCase = new ReanalyzeReviewUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: new FailingPullRequestSnapshotProvider(),
+    });
+
+    const result = await useCase.execute({
+      reviewId: "github-octocat-locus-pr-12",
+      requestedAt: "2026-03-08T02:00:00.000Z",
+    });
+    const persisted = await repository.findByReviewId("github-octocat-locus-pr-12");
+    const record = persisted?.toRecord();
+
+    expect(result.reanalysisStatus).toBe("failed");
+    expect(result.errorMessage).toContain("GitHub API request failed");
+    expect(record?.lastReanalyzeRequestedAt).toBe("2026-03-08T02:00:00.000Z");
+    expect(record?.lastReanalyzeCompletedAt).toBeTruthy();
+    expect(record?.reanalysisStatus).toBe("failed");
+    expect(record?.lastReanalyzeError).toContain("GitHub API request failed");
+  });
+
+  it("records failed status when source cannot be resolved", async () => {
+    const repository = new InMemoryReviewSessionRepository();
+    repository.seed(
+      ReviewSession.create({
+        reviewId: "custom-review",
+        title: "Ad-hoc review",
+        repositoryName: "duck8823/locus",
+        branchLabel: "feat/custom",
+        viewerName: "Demo reviewer",
+        lastOpenedAt: "2026-03-07T00:00:00.000Z",
+        groups: [
+          {
+            groupId: "legacy-group",
+            title: "Legacy group",
+            summary: "Legacy summary",
+            filePath: "src/user-service.ts",
+            status: "unread",
+            upstream: [],
+            downstream: [],
+          },
+        ],
+      }),
+    );
+    const useCase = new ReanalyzeReviewUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: new StubPullRequestSnapshotProvider(),
+    });
+
+    const result = await useCase.execute({
+      reviewId: "custom-review",
+      requestedAt: "2026-03-08T02:30:00.000Z",
+    });
+    const persisted = await repository.findByReviewId("custom-review");
+
+    expect(result.reanalysisStatus).toBe("failed");
+    expect(result.source).toBeNull();
+    expect(result.errorMessage).toContain("Reanalysis source is not available");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("failed");
+    expect(persisted?.toRecord().lastReanalyzeError).toContain(
+      "Reanalysis source is not available",
+    );
   });
 
   it("raises when the review session does not exist", async () => {
