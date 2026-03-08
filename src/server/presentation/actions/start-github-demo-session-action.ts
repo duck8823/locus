@@ -92,7 +92,7 @@ function createDemoErrorMessage(error: unknown): string {
 
 export async function startGitHubDemoSessionAction(formData: FormData): Promise<void> {
   const viewerName = "Demo reviewer";
-  let reviewId = "";
+  let redirectPath = "/";
 
   try {
     const owner = readRequiredValue({
@@ -114,7 +114,7 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
       label: "GitHub pull request number",
     });
     const pullRequestNumber = parsePullRequestNumber(pullRequestNumberRaw);
-    reviewId = createReviewId(owner, repository, pullRequestNumber);
+    const reviewId = createReviewId(owner, repository, pullRequestNumber);
 
     const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } = getDependencies();
     const useCase = new IngestGitHubPullRequestUseCase({
@@ -140,10 +140,11 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
     });
 
     revalidatePath(`/reviews/${reviewId}`);
+    redirectPath = `/reviews/${reviewId}`;
   } catch (error) {
     const message = createDemoErrorMessage(error);
-    redirect(`/?githubDemoError=${encodeURIComponent(message)}`);
+    redirectPath = `/?githubDemoError=${encodeURIComponent(message)}`;
   }
 
-  redirect(`/reviews/${reviewId}`);
+  redirect(redirectPath);
 }
