@@ -60,15 +60,18 @@ function parseSymbolNode(raw: string): ArchitectureNodeView {
   const normalizedKind = kind.trim().length > 0 ? kind.trim() : "symbol";
   const remainingSegments = segments.slice(1);
   const hasExplicitSymbolName = remainingSegments.length > 0;
-  const symbolName = (remainingSegments.at(-1) ?? primarySegment).trim() || "unknown";
   const containerSegments = [
     ...primaryContainerParts,
     ...remainingSegments.slice(0, Math.max(remainingSegments.length - 1, 0)),
   ].filter((part) => part !== SYMBOL_ROOT_SEGMENT && part.length > 0);
   const container = containerSegments.join(".");
-  const displayName = container.length > 0 ? `${container}.${symbolName}` : symbolName;
+  let label = `${normalizedKind} symbol`;
 
-  const label = hasExplicitSymbolName ? `${displayName} (${normalizedKind})` : `${normalizedKind} symbol`;
+  if (hasExplicitSymbolName) {
+    const symbolName = remainingSegments.at(-1)?.trim() || "unknown";
+    const displayName = container.length > 0 ? `${container}.${symbolName}` : symbolName;
+    label = `${displayName} (${normalizedKind})`;
+  }
 
   return {
     raw,
@@ -98,7 +101,9 @@ export function toArchitectureNodeView(raw: string): ArchitectureNodeView {
 }
 
 export function groupArchitectureNodes(rawNodes: string[]): ArchitectureNodeGroups {
-  const trimmed = rawNodes.map((rawNode) => rawNode.trim()).filter((rawNode) => rawNode.length > 0);
+  const trimmed = rawNodes
+    .map((rawNode) => rawNode.trim())
+    .filter((rawNode) => rawNode.length > 0);
   const deduplicated = [...new Set(trimmed)];
   const groups: ArchitectureNodeGroups = {
     layer: [],

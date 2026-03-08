@@ -154,7 +154,7 @@
   padding: 12px 14px;
 }
 
-.archColumn h3 {
+.archColumnHeading {
   margin-bottom: 10px;
   font-size: 14px;
   letter-spacing: 0.04em;
@@ -167,7 +167,7 @@
   gap: 10px;
 }
 
-.archSection h4 {
+.archSectionHeading {
   margin-bottom: 6px;
   font-size: 13px;
   color: var(--foreground);

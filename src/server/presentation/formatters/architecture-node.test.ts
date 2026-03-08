@@ -41,10 +41,34 @@ describe("architecture-node formatter", () => {
       "unknown:raw",
     ]);
 
-    expect(grouped.layer).toHaveLength(1);
-    expect(grouped.file).toHaveLength(1);
-    expect(grouped.symbol).toHaveLength(1);
-    expect(grouped.unknown).toHaveLength(1);
+    expect(grouped.layer).toEqual([
+      {
+        raw: "layer:domain",
+        kind: "layer",
+        label: "domain",
+      },
+    ]);
+    expect(grouped.file).toEqual([
+      {
+        raw: "file:src/domain/user-service.ts",
+        kind: "file",
+        label: "src/domain/user-service.ts",
+      },
+    ]);
+    expect(grouped.symbol).toEqual([
+      {
+        raw: "symbol:function::<root>::createUser",
+        kind: "symbol",
+        label: "createUser (function)",
+      },
+    ]);
+    expect(grouped.unknown).toEqual([
+      {
+        raw: "unknown:raw",
+        kind: "unknown",
+        label: "unknown:raw",
+      },
+    ]);
   });
 
   it("handles empty and unknown node payloads safely", () => {

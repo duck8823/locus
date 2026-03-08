@@ -194,12 +194,16 @@ export default async function ReviewWorkspacePage({
             <div className={styles.archColumns}>
               {architectureColumns.map((column) => {
                 const groupedNodes = groupArchitectureNodes(column.nodes);
-                const categories = ARCHITECTURE_CATEGORY_ORDER.map((category) => [category, groupedNodes[category]] as const)
+                const categories = ARCHITECTURE_CATEGORY_ORDER
+                  .map((category) => [
+                    category,
+                    groupedNodes[category],
+                  ] as const)
                   .filter(([, nodes]) => nodes.length > 0);
 
                 return (
                   <div key={column.label} className={styles.archColumn}>
-                    <h3>{column.label}</h3>
+                    <h3 className={styles.archColumnHeading}>{column.label}</h3>
                     {categories.length === 0 ? (
                       <p className={styles.muted}>No related nodes.</p>
                     ) : (
@@ -210,7 +214,12 @@ export default async function ReviewWorkspacePage({
                             aria-labelledby={`arch-${column.label.toLowerCase()}-${category}`}
                             className={styles.archSection}
                           >
-                            <h4 id={`arch-${column.label.toLowerCase()}-${category}`}>{ARCHITECTURE_CATEGORY_LABELS[category]}</h4>
+                            <h4
+                              id={`arch-${column.label.toLowerCase()}-${category}`}
+                              className={styles.archSectionHeading}
+                            >
+                              {ARCHITECTURE_CATEGORY_LABELS[category]}
+                            </h4>
                             <ul className={styles.archNodeList}>
                               {nodes.map((node) => (
                                 <li key={`${column.label}-${node.raw}`}>
