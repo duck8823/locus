@@ -177,4 +177,31 @@ describe("GitHubPullRequestSnapshotProvider", () => {
       after: null,
     });
   });
+
+  it("fails fast when a GitHub API request times out", async () => {
+    const fetchImpl: typeof fetch = (_input, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    const provider = new GitHubPullRequestSnapshotProvider({
+      token: "",
+      apiBaseUrl: "https://api.github.com",
+      fetchImpl,
+      requestTimeoutMs: 5,
+    });
+
+    await expect(
+      provider.fetchPullRequestSnapshots({
+        reviewId: "github-pr-timeout",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 99,
+        },
+      }),
+    ).rejects.toThrow("timed out");
+  });
 });
