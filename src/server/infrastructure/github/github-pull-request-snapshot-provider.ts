@@ -54,6 +54,17 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_BLOB_FETCH_CONCURRENCY = 8;
 const MAX_PULL_REQUEST_FILES = 300;
 
+class GitHubApiError extends Error {
+  constructor(
+    readonly statusCode: number,
+    readonly path: string,
+    readonly responseBody: string,
+  ) {
+    super(`GitHub API request failed (${statusCode}): ${path}\n${responseBody}`);
+    this.name = "GitHubApiError";
+  }
+}
+
 export interface GitHubPullRequestSnapshotProviderOptions {
   token?: string;
   apiBaseUrl?: string;
@@ -144,7 +155,7 @@ function resolveBeforePath(file: GitHubPullRequestFileApiResponse): string | nul
   }
 
   if (file.status === "renamed" || file.status === "copied") {
-    return file.previous_filename ?? file.filename;
+    return file.previous_filename ?? null;
   }
 
   return file.filename;
@@ -450,7 +461,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
         return raw.toString("utf8");
       })
       .catch((error: unknown) => {
-        if (error instanceof Error && error.message.includes("GitHub API request failed (404):")) {
+        if (error instanceof GitHubApiError && error.statusCode === 404) {
           return null;
         }
 
@@ -489,7 +500,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
         return raw.toString("utf8");
       })
       .catch((error: unknown) => {
-        if (error instanceof Error && error.message.includes("GitHub API request failed (404):")) {
+        if (error instanceof GitHubApiError && error.statusCode === 404) {
           return null;
         }
 
@@ -531,7 +542,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(`GitHub API request failed (${response.status}): ${path}\n${body}`);
+      throw new GitHubApiError(response.status, path, body);
     }
 
     return (await response.json()) as T;

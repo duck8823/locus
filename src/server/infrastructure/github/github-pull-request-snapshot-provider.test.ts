@@ -199,6 +199,10 @@ describe("GitHubPullRequestSnapshotProvider", () => {
               previous_filename: "src/source-file.ts",
               status: "copied",
             },
+            {
+              filename: "src/copied-without-source.ts",
+              status: "copied",
+            },
           ]);
         case "/repos/octocat/locus/pulls/8/files?per_page=100&page=2":
           return jsonResponse([]);
@@ -216,6 +220,7 @@ describe("GitHubPullRequestSnapshotProvider", () => {
             tree: [
               { path: "src/new-file.ts", type: "blob", sha: "blob-head-new" },
               { path: "src/copied-file.ts", type: "blob", sha: "blob-head-copied" },
+              { path: "src/copied-without-source.ts", type: "blob", sha: "blob-head-copied-missing-source" },
             ],
           });
         case "/repos/octocat/locus/git/blobs/blob-base-removed":
@@ -226,6 +231,8 @@ describe("GitHubPullRequestSnapshotProvider", () => {
           return jsonResponse({ encoding: "base64", content: toBase64("export const added = true;\n") });
         case "/repos/octocat/locus/git/blobs/blob-head-copied":
           return jsonResponse({ encoding: "base64", content: toBase64("export const source = true;\n") });
+        case "/repos/octocat/locus/git/blobs/blob-head-copied-missing-source":
+          return jsonResponse({ encoding: "base64", content: toBase64("export const copiedOnly = true;\n") });
         default:
           return jsonResponse({ error: `unexpected URL: ${path}` }, 404);
       }
@@ -247,6 +254,7 @@ describe("GitHubPullRequestSnapshotProvider", () => {
     const added = bundle.snapshotPairs.find((pair) => pair.filePath === "src/new-file.ts");
     const removed = bundle.snapshotPairs.find((pair) => pair.filePath === "src/removed-file.ts");
     const copied = bundle.snapshotPairs.find((pair) => pair.filePath === "src/copied-file.ts");
+    const copiedWithoutSource = bundle.snapshotPairs.find((pair) => pair.filePath === "src/copied-without-source.ts");
 
     expect(added?.before).toBeNull();
     expect(added?.after?.content).toContain("added = true");
@@ -256,6 +264,8 @@ describe("GitHubPullRequestSnapshotProvider", () => {
     expect(copied?.after?.filePath).toBe("src/copied-file.ts");
     expect(copied?.before?.content).toContain("source = true");
     expect(copied?.after?.content).toContain("source = true");
+    expect(copiedWithoutSource?.before).toBeNull();
+    expect(copiedWithoutSource?.after?.content).toContain("copiedOnly = true");
   });
 
   it("fails fast when a GitHub API request times out", async () => {
