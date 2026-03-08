@@ -9,6 +9,7 @@ import type {
 import { ReviewSession, type ReviewSessionRecord, type ReviewGroupRecord } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
 import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
+import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
 import type { ReviewGroupStatus } from "@/server/domain/value-objects/review-status";
 import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
 
@@ -27,16 +28,10 @@ export interface ReanalyzeReviewResult {
   reviewSession: ReviewSession;
   snapshotPairCount: number;
   source: ReviewSessionSource;
+  lastReanalyzeRequestedAt: string;
 }
 
 function inferLegacySource(record: ReviewSessionRecord): ReviewSessionSource | null {
-  if (record.reviewId === "demo-review") {
-    return {
-      provider: "seed_fixture",
-      fixtureId: "default",
-    };
-  }
-
   const pullRequestNumberMatch = /^PR\s+#(\d+):/.exec(record.title);
   const pullRequestNumber = pullRequestNumberMatch ? Number(pullRequestNumberMatch[1]) : NaN;
   const repositoryMatch = /^([^/]+)\/([^/]+)$/.exec(record.repositoryName.trim());
@@ -55,6 +50,10 @@ function inferLegacySource(record: ReviewSessionRecord): ReviewSessionSource | n
 
 function resolveReviewSource(record: ReviewSessionRecord): ReviewSessionSource | null {
   return record.source ?? inferLegacySource(record);
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unsupported review source provider: ${JSON.stringify(value)}`);
 }
 
 function createGroupStatusLookups(
@@ -122,43 +121,50 @@ export class ReanalyzeReviewUseCase {
     const source = resolveReviewSource(previousRecord);
 
     if (!source) {
-      throw new Error(`Reanalysis source is not available for review session: ${reviewId}`);
+      throw new ReanalyzeSourceUnavailableError(reviewId);
     }
 
     let refreshedReviewSession: ReviewSession;
     let snapshotPairCount = 0;
 
-    if (source.provider === "github") {
-      const bundle = await this.dependencies.pullRequestSnapshotProvider.fetchPullRequestSnapshots({
-        reviewId,
-        source,
-      });
-      snapshotPairCount = bundle.snapshotPairs.length;
-      refreshedReviewSession = await createAnalyzedReviewSession({
-        reviewId,
-        title: bundle.title,
-        repositoryName: bundle.repositoryName,
-        branchLabel: bundle.branchLabel,
-        viewerName: previousRecord.viewerName,
-        source,
-        createdAt: timestamp,
-        snapshotPairs: bundle.snapshotPairs,
-        parserAdapters: this.dependencies.parserAdapters,
-      });
-    } else {
-      const snapshotPairs = createSeedSourceSnapshotPairs(reviewId);
-      snapshotPairCount = snapshotPairs.length;
-      refreshedReviewSession = await createAnalyzedReviewSession({
-        reviewId,
-        title: previousRecord.title,
-        repositoryName: previousRecord.repositoryName,
-        branchLabel: previousRecord.branchLabel,
-        viewerName: previousRecord.viewerName,
-        source,
-        createdAt: timestamp,
-        snapshotPairs,
-        parserAdapters: this.dependencies.parserAdapters,
-      });
+    switch (source.provider) {
+      case "github": {
+        const bundle = await this.dependencies.pullRequestSnapshotProvider.fetchPullRequestSnapshots({
+          reviewId,
+          source,
+        });
+        snapshotPairCount = bundle.snapshotPairs.length;
+        refreshedReviewSession = await createAnalyzedReviewSession({
+          reviewId,
+          title: bundle.title,
+          repositoryName: bundle.repositoryName,
+          branchLabel: bundle.branchLabel,
+          viewerName: previousRecord.viewerName,
+          source,
+          createdAt: timestamp,
+          snapshotPairs: bundle.snapshotPairs,
+          parserAdapters: this.dependencies.parserAdapters,
+        });
+        break;
+      }
+      case "seed_fixture": {
+        const snapshotPairs = createSeedSourceSnapshotPairs(reviewId);
+        snapshotPairCount = snapshotPairs.length;
+        refreshedReviewSession = await createAnalyzedReviewSession({
+          reviewId,
+          title: previousRecord.title,
+          repositoryName: previousRecord.repositoryName,
+          branchLabel: previousRecord.branchLabel,
+          viewerName: previousRecord.viewerName,
+          source,
+          createdAt: timestamp,
+          snapshotPairs,
+          parserAdapters: this.dependencies.parserAdapters,
+        });
+        break;
+      }
+      default:
+        return assertNever(source);
     }
 
     const mergedRecord = mergePreviousReviewProgress({
@@ -175,6 +181,7 @@ export class ReanalyzeReviewUseCase {
       reviewSession: mergedReviewSession,
       snapshotPairCount,
       source,
+      lastReanalyzeRequestedAt: timestamp,
     };
   }
 }

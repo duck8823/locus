@@ -85,24 +85,31 @@ function cloneUnsupportedFileAnalysis(record: UnsupportedFileAnalysis): Unsuppor
   };
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unsupported review session source provider: ${JSON.stringify(value)}`);
+}
+
 function cloneSource(source: ReviewSessionSource | undefined): ReviewSessionSource | undefined {
   if (!source) {
     return undefined;
   }
 
-  if (source.provider === "github") {
-    return {
-      provider: "github",
-      owner: source.owner,
-      repository: source.repository,
-      pullRequestNumber: source.pullRequestNumber,
-    };
+  switch (source.provider) {
+    case "github":
+      return {
+        provider: "github",
+        owner: source.owner,
+        repository: source.repository,
+        pullRequestNumber: source.pullRequestNumber,
+      };
+    case "seed_fixture":
+      return {
+        provider: "seed_fixture",
+        fixtureId: source.fixtureId,
+      };
   }
 
-  return {
-    provider: "seed_fixture",
-    fixtureId: source.fixtureId,
-  };
+  return assertNever(source);
 }
 
 function cloneRecord(record: ReviewSessionRecord): ReviewSessionRecord {
