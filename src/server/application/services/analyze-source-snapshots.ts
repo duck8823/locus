@@ -81,7 +81,7 @@ function hasWordBoundary(source: string, index: number, word: string): boolean {
 
   const previous = index === 0 ? undefined : source[index - 1];
   const next = source[index + word.length];
-  return !isIdentifierCharacter(previous) && !isIdentifierCharacter(next);
+  return previous !== "." && !isIdentifierCharacter(previous) && !isIdentifierCharacter(next);
 }
 
 function skipWhitespace(source: string, startIndex: number): number {
@@ -97,7 +97,7 @@ function skipWhitespace(source: string, startIndex: number): number {
 function readStringLiteral(
   source: string,
   startIndex: number,
-): { value: string; nextIndex: number } | null {
+): { value: string; nextIndex: number; hasInterpolation: boolean } | null {
   const quote = source[startIndex];
 
   if (quote !== "'" && quote !== '"' && quote !== "`") {
@@ -106,6 +106,7 @@ function readStringLiteral(
 
   let value = "";
   let index = startIndex + 1;
+  let hasInterpolation = false;
 
   while (index < source.length) {
     const character = source[index];
@@ -127,13 +128,50 @@ function readStringLiteral(
     }
 
     if (quote === "`" && character === "$" && source[index + 1] === "{") {
-      return null;
+      hasInterpolation = true;
+      let braceDepth = 1;
+      index += 2;
+
+      while (index < source.length && braceDepth > 0) {
+        const nestedCharacter = source[index];
+
+        if (!nestedCharacter) {
+          break;
+        }
+
+        if (nestedCharacter === "/" && source[index + 1] === "/") {
+          index = skipLineComment(source, index + 2);
+          continue;
+        }
+
+        if (nestedCharacter === "/" && source[index + 1] === "*") {
+          index = skipBlockComment(source, index + 2);
+          continue;
+        }
+
+        if (nestedCharacter === "'" || nestedCharacter === '"' || nestedCharacter === "`") {
+          const nestedLiteral = readStringLiteral(source, index);
+          index = nestedLiteral?.nextIndex ?? index + 1;
+          continue;
+        }
+
+        if (nestedCharacter === "{") {
+          braceDepth += 1;
+        } else if (nestedCharacter === "}") {
+          braceDepth -= 1;
+        }
+
+        index += 1;
+      }
+
+      continue;
     }
 
     if (character === quote) {
       return {
         value,
         nextIndex: index + 1,
+        hasInterpolation,
       };
     }
 
@@ -181,11 +219,15 @@ function parseImportStatement(
   let bracketDepth = 0;
   let parenthesisDepth = 0;
 
+  if (source[index] === ".") {
+    return null;
+  }
+
   if (source[index] === "(") {
     index = skipWhitespace(source, index + 1);
     const literal = readStringLiteral(source, index);
 
-    if (!literal) {
+    if (!literal || literal.hasInterpolation) {
       return null;
     }
 
@@ -203,7 +245,7 @@ function parseImportStatement(
 
   const sideEffectLiteral = readStringLiteral(source, index);
 
-  if (sideEffectLiteral) {
+  if (sideEffectLiteral && !sideEffectLiteral.hasInterpolation) {
     const specifier = tryExtractRelativeSpecifier(sideEffectLiteral.value);
 
     if (!specifier) {
@@ -247,7 +289,7 @@ function parseImportStatement(
     ) {
       const literal = readStringLiteral(source, skipWhitespace(source, index + "from".length));
 
-      if (!literal) {
+      if (!literal || literal.hasInterpolation) {
         return null;
       }
 
@@ -323,7 +365,7 @@ function parseExportStatement(
     ) {
       const literal = readStringLiteral(source, skipWhitespace(source, index + "from".length));
 
-      if (!literal) {
+      if (!literal || literal.hasInterpolation) {
         return null;
       }
 
@@ -372,7 +414,7 @@ function parseRequireCall(
   index = skipWhitespace(source, index + 1);
   const literal = readStringLiteral(source, index);
 
-  if (!literal) {
+  if (!literal || literal.hasInterpolation) {
     return null;
   }
 

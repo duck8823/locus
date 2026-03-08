@@ -1190,4 +1190,125 @@ export const run = async () => import('../domain/real-dynamic');
       ]),
     );
   });
+
+  it("does not treat import.meta as a module import", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "import-meta-review",
+      snapshotPairs: [
+        {
+          fileId: "file-main",
+          filePath: "src/application/main.ts",
+          before: {
+            snapshotId: "import-meta-review:file-main:before",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const run = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "import-meta-review:file-main:after",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "after",
+            content: `
+const url = import.meta.url;
+const config = { from: '../domain/not-a-dependency' };
+export const run = () => url.length > 0;
+`.trim(),
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-not-a-dependency",
+          filePath: "src/domain/not-a-dependency.ts",
+          before: {
+            snapshotId: "import-meta-review:file-not-a-dependency:before",
+            fileId: "file-not-a-dependency",
+            filePath: "src/domain/not-a-dependency.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const untouched = true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "import-meta-review:file-not-a-dependency:after",
+            fileId: "file-not-a-dependency",
+            filePath: "src/domain/not-a-dependency.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const untouched = true;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const mainChange = result.semanticChanges.find((change) => change.fileId === "file-main");
+    expect(mainChange?.architecture?.outgoingNodeIds ?? []).not.toContain(
+      "file:src/domain/not-a-dependency.ts",
+    );
+  });
+
+  it("skips template literal interpolation bodies while parsing imports", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "template-literal-review",
+      snapshotPairs: [
+        {
+          fileId: "file-main",
+          filePath: "src/application/main.ts",
+          before: {
+            snapshotId: "template-literal-review:file-main:before",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const run = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "template-literal-review:file-main:after",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "after",
+            content: `
+const message = \`template \${(() => "from '../domain/ignored'")()}\`;
+export const run = () => message.length;
+`.trim(),
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-ignored",
+          filePath: "src/domain/ignored.ts",
+          before: {
+            snapshotId: "template-literal-review:file-ignored:before",
+            fileId: "file-ignored",
+            filePath: "src/domain/ignored.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const ignored = true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "template-literal-review:file-ignored:after",
+            fileId: "file-ignored",
+            filePath: "src/domain/ignored.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const ignored = true;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const mainChange = result.semanticChanges.find((change) => change.fileId === "file-main");
+    expect(mainChange?.architecture?.outgoingNodeIds ?? []).not.toContain("file:src/domain/ignored.ts");
+  });
 });
