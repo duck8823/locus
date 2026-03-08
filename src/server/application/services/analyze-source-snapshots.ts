@@ -177,6 +177,9 @@ function parseImportStatement(
   startIndex: number,
 ): { specifier: string; nextIndex: number } | null {
   let index = skipWhitespace(source, startIndex + "import".length);
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let parenthesisDepth = 0;
 
   if (source[index] === "(") {
     index = skipWhitespace(source, index + 1);
@@ -236,7 +239,12 @@ function parseImportStatement(
       continue;
     }
 
-    if (hasWordBoundary(source, index, "from")) {
+    if (
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      parenthesisDepth === 0 &&
+      hasWordBoundary(source, index, "from")
+    ) {
       const literal = readStringLiteral(source, skipWhitespace(source, index + "from".length));
 
       if (!literal) {
@@ -255,6 +263,20 @@ function parseImportStatement(
       };
     }
 
+    if (character === "{") {
+      braceDepth += 1;
+    } else if (character === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (character === "[") {
+      bracketDepth += 1;
+    } else if (character === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (character === "(") {
+      parenthesisDepth += 1;
+    } else if (character === ")" && parenthesisDepth > 0) {
+      parenthesisDepth -= 1;
+    }
+
     index += 1;
   }
 
@@ -266,6 +288,9 @@ function parseExportStatement(
   startIndex: number,
 ): { specifier: string; nextIndex: number } | null {
   let index = skipWhitespace(source, startIndex + "export".length);
+  let braceDepth = 0;
+  let bracketDepth = 0;
+  let parenthesisDepth = 0;
 
   while (index < source.length) {
     const character = source[index];
@@ -290,7 +315,12 @@ function parseExportStatement(
       continue;
     }
 
-    if (hasWordBoundary(source, index, "from")) {
+    if (
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      parenthesisDepth === 0 &&
+      hasWordBoundary(source, index, "from")
+    ) {
       const literal = readStringLiteral(source, skipWhitespace(source, index + "from".length));
 
       if (!literal) {
@@ -307,6 +337,20 @@ function parseExportStatement(
         specifier,
         nextIndex: literal.nextIndex,
       };
+    }
+
+    if (character === "{") {
+      braceDepth += 1;
+    } else if (character === "}" && braceDepth > 0) {
+      braceDepth -= 1;
+    } else if (character === "[") {
+      bracketDepth += 1;
+    } else if (character === "]" && bracketDepth > 0) {
+      bracketDepth -= 1;
+    } else if (character === "(") {
+      parenthesisDepth += 1;
+    } else if (character === ")" && parenthesisDepth > 0) {
+      parenthesisDepth -= 1;
     }
 
     index += 1;
@@ -414,9 +458,9 @@ function resolveRelativeImportPath(
   const extension = pathPosix.extname(resolvedBase).toLowerCase();
 
   if (extension.length === 0) {
-    for (const extension of RESOLVABLE_SOURCE_EXTENSIONS) {
-      candidates.add(`${resolvedBase}${extension}`);
-      candidates.add(pathPosix.join(resolvedBase, `index${extension}`));
+    for (const ext of RESOLVABLE_SOURCE_EXTENSIONS) {
+      candidates.add(`${resolvedBase}${ext}`);
+      candidates.add(pathPosix.join(resolvedBase, `index${ext}`));
     }
   } else if (extension === ".js" || extension === ".jsx" || extension === ".mjs" || extension === ".cjs") {
     const baseWithoutExtension = resolvedBase.slice(0, -extension.length);

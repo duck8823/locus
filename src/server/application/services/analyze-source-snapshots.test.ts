@@ -1049,4 +1049,145 @@ export const run = async () => import('../domain/real-dynamic');
     expect(outgoing).toContain("file:src/domain/b.ts");
     expect(outgoing).not.toContain("layer:domain");
   });
+
+  it("parses imports that contain a symbol literally named from", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "from-symbol-review",
+      snapshotPairs: [
+        {
+          fileId: "file-main",
+          filePath: "src/application/main.ts",
+          before: {
+            snapshotId: "from-symbol-review:file-main:before",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const run = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "from-symbol-review:file-main:after",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "after",
+            content: "import { from } from '../domain/keyword-target';\nexport const run = () => from();",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-target",
+          filePath: "src/domain/keyword-target.ts",
+          before: {
+            snapshotId: "from-symbol-review:file-target:before",
+            fileId: "file-target",
+            filePath: "src/domain/keyword-target.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const from = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "from-symbol-review:file-target:after",
+            fileId: "file-target",
+            filePath: "src/domain/keyword-target.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const from = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const mainChange = result.semanticChanges.find((change) => change.fileId === "file-main");
+    expect(mainChange?.architecture?.outgoingNodeIds ?? []).toContain(
+      "file:src/domain/keyword-target.ts",
+    );
+  });
+
+  it("parses re-export statements for architecture context", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "re-export-review",
+      snapshotPairs: [
+        {
+          fileId: "file-barrel",
+          filePath: "src/application/barrel.ts",
+          before: {
+            snapshotId: "re-export-review:file-barrel:before",
+            fileId: "file-barrel",
+            filePath: "src/application/barrel.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const noop = true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "re-export-review:file-barrel:after",
+            fileId: "file-barrel",
+            filePath: "src/application/barrel.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export { helper } from '../domain/helper';\nexport * from '../domain/shared';",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-helper",
+          filePath: "src/domain/helper.ts",
+          before: {
+            snapshotId: "re-export-review:file-helper:before",
+            fileId: "file-helper",
+            filePath: "src/domain/helper.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const helper = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "re-export-review:file-helper:after",
+            fileId: "file-helper",
+            filePath: "src/domain/helper.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const helper = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-shared",
+          filePath: "src/domain/shared.ts",
+          before: {
+            snapshotId: "re-export-review:file-shared:before",
+            fileId: "file-shared",
+            filePath: "src/domain/shared.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const shared = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "re-export-review:file-shared:after",
+            fileId: "file-shared",
+            filePath: "src/domain/shared.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const shared = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const barrelChange = result.semanticChanges.find((change) => change.fileId === "file-barrel");
+    expect(barrelChange?.architecture?.outgoingNodeIds ?? []).toEqual(
+      expect.arrayContaining([
+        "file:src/domain/helper.ts",
+        "file:src/domain/shared.ts",
+      ]),
+    );
+  });
 });
