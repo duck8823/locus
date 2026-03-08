@@ -16,6 +16,20 @@ function formatReviewGroupStatus(status: string) {
   return status.replaceAll("_", " ");
 }
 
+function formatSemanticChangeType(changeType: string) {
+  return changeType.replaceAll("_", " ");
+}
+
+function formatCodeRegion(
+  region: { filePath: string; startLine: number; endLine: number } | null,
+): string {
+  if (!region) {
+    return "—";
+  }
+
+  return `${region.filePath}:${region.startLine}-${region.endLine}`;
+}
+
 const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
   layer: true,
   file: true,
@@ -153,6 +167,44 @@ export default async function ReviewWorkspacePage({
                   </button>
                 ))}
               </form>
+
+              <div className={styles.detailBlock}>
+                <span className={styles.muted}>
+                  Semantic changes ({selectedGroup.semanticChanges.length})
+                </span>
+                {selectedGroup.semanticChanges.length > 0 ? (
+                  <ul className={styles.semanticChangeList}>
+                    {selectedGroup.semanticChanges.map((change) => (
+                      <li key={change.semanticChangeId} className={styles.semanticChangeCard}>
+                        <div className={styles.semanticChangeHeader}>
+                          <strong>{change.symbolDisplayName}</strong>
+                          <span
+                            className={styles.changeBadge}
+                            data-change-type={change.changeType}
+                          >
+                            {formatSemanticChangeType(change.changeType)}
+                          </span>
+                        </div>
+                        <p className={styles.semanticChangeMeta}>
+                          kind: {change.symbolKind}
+                          {change.signatureSummary ? ` · signature: ${change.signatureSummary}` : ""}
+                          {change.bodySummary ? ` · body: ${change.bodySummary}` : ""}
+                        </p>
+                        <p className={styles.semanticChangeMeta}>
+                          before: {formatCodeRegion(change.before)}
+                        </p>
+                        <p className={styles.semanticChangeMeta}>
+                          after: {formatCodeRegion(change.after)}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className={styles.groupSummary}>
+                    No semantic change details were recorded for this group.
+                  </p>
+                )}
+              </div>
             </>
           ) : (
             <div className={styles.detailBlock}>
@@ -182,6 +234,33 @@ export default async function ReviewWorkspacePage({
                 "Not requested yet"
               )}
             </p>
+          </div>
+
+          <div className={styles.detailBlock}>
+            <span className={styles.muted}>Analysis coverage</span>
+            {workspace.unsupportedSummary.totalCount === 0 ? (
+              <p>All changed files were covered by active parser adapters.</p>
+            ) : (
+              <>
+                <p>
+                  {workspace.unsupportedSummary.totalCount} file(s) were excluded from semantic
+                  analysis.
+                </p>
+                <ul className={styles.unsupportedList}>
+                  {workspace.unsupportedSummary.byReason.map((entry) => (
+                    <li key={entry.reason}>
+                      {entry.reason}: {entry.count}
+                    </li>
+                  ))}
+                </ul>
+                {workspace.unsupportedSummary.sampleFilePaths.length > 0 ? (
+                  <p className={styles.muted}>
+                    Sample files (up to 5):{" "}
+                    {workspace.unsupportedSummary.sampleFilePaths.join(", ")}
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
         </section>
 

@@ -1,9 +1,64 @@
 import { reviewGroupStatuses } from "@/server/domain/value-objects/review-status";
 import type { ReviewSession } from "@/server/domain/entities/review-session";
-import type { ReviewWorkspaceDto } from "@/server/presentation/dto/review-workspace-dto";
+import type {
+  SemanticChange,
+  UnsupportedFileAnalysis,
+  UnsupportedFileReason,
+} from "@/server/domain/value-objects/semantic-change";
+import type {
+  ReviewWorkspaceDto,
+  ReviewWorkspaceSemanticChangeDto,
+  ReviewWorkspaceUnsupportedSummaryDto,
+} from "@/server/presentation/dto/review-workspace-dto";
+
+const UNSUPPORTED_SAMPLE_LIMIT = 5;
+
+function toSemanticChangeDto(change: SemanticChange): ReviewWorkspaceSemanticChangeDto {
+  return {
+    semanticChangeId: change.semanticChangeId,
+    symbolDisplayName: change.symbol.displayName,
+    symbolKind: change.symbol.kind,
+    changeType: change.change.type,
+    signatureSummary: change.change.signatureSummary ?? null,
+    bodySummary: change.change.bodySummary ?? null,
+    before: change.before ? { ...change.before } : null,
+    after: change.after ? { ...change.after } : null,
+  };
+}
+
+function toUnsupportedSummary(
+  unsupportedFileAnalyses: UnsupportedFileAnalysis[],
+): ReviewWorkspaceUnsupportedSummaryDto {
+  const reasonCounts = new Map<UnsupportedFileReason, number>();
+
+  for (const entry of unsupportedFileAnalyses) {
+    reasonCounts.set(entry.reason, (reasonCounts.get(entry.reason) ?? 0) + 1);
+  }
+
+  const byReason = [...reasonCounts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([reason, count]) => ({
+      reason,
+      count,
+    }));
+
+  const sampleFilePaths = unsupportedFileAnalyses
+    .map((entry) => entry.filePath.trim())
+    .filter((filePath) => filePath.length > 0)
+    .slice(0, UNSUPPORTED_SAMPLE_LIMIT);
+
+  return {
+    totalCount: unsupportedFileAnalyses.length,
+    byReason,
+    sampleFilePaths,
+  };
+}
 
 export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorkspaceDto {
   const record = reviewSession.toRecord();
+  const semanticChangeMap = new Map(
+    (record.semanticChanges ?? []).map((change) => [change.semanticChangeId, change] as const),
+  );
 
   return {
     reviewId: record.reviewId,
@@ -14,6 +69,7 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     lastOpenedAt: record.lastOpenedAt,
     lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt,
     availableStatuses: [...reviewGroupStatuses],
+    unsupportedSummary: toUnsupportedSummary(record.unsupportedFileAnalyses ?? []),
     groups: record.groups.map((group) => ({
       groupId: group.groupId,
       title: group.title,
@@ -23,6 +79,10 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
       isSelected: group.groupId === record.selectedGroupId,
       upstream: [...group.upstream],
       downstream: [...group.downstream],
+      semanticChanges: (group.semanticChangeIds ?? [])
+        .map((semanticChangeId) => semanticChangeMap.get(semanticChangeId))
+        .filter((semanticChange): semanticChange is SemanticChange => !!semanticChange)
+        .map(toSemanticChangeDto),
     })),
   };
 }
