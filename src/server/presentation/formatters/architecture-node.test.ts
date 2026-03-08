@@ -55,7 +55,7 @@ describe("architecture-node formatter", () => {
     expect(toArchitectureNodeView("file:")).toEqual({
       raw: "file:",
       kind: "file",
-      label: "file:",
+      label: "unknown",
     });
     expect(toArchitectureNodeView("symbol:")).toEqual({
       raw: "symbol:",
@@ -81,5 +81,13 @@ describe("architecture-node formatter", () => {
       "src/m.ts",
       "src/z.ts",
     ]);
+  });
+
+  it("formats symbol-only payloads without duplicated kind labels", () => {
+    expect(toArchitectureNodeView("symbol:method")).toEqual({
+      raw: "symbol:method",
+      kind: "symbol",
+      label: "method symbol",
+    });
   });
 });

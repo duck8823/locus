@@ -28,11 +28,12 @@ function parseLayerNode(raw: string): ArchitectureNodeView {
 
 function parseFileNode(raw: string): ArchitectureNodeView {
   const value = raw.slice("file:".length).trim();
+  const normalized = value.length > 0 ? value : "unknown";
 
   return {
     raw,
     kind: "file",
-    label: value.length > 0 ? value : raw,
+    label: normalized,
   };
 }
 
@@ -60,10 +61,12 @@ function parseSymbolNode(raw: string): ArchitectureNodeView {
   const container = containerSegments.join(".");
   const displayName = container.length > 0 ? `${container}.${symbolName}` : symbolName;
 
+  const label = displayName === normalizedKind ? `${displayName} symbol` : `${displayName} (${normalizedKind})`;
+
   return {
     raw,
     kind: "symbol",
-    label: `${displayName} (${normalizedKind})`,
+    label,
   };
 }
 
