@@ -7,9 +7,34 @@ import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-wo
 import { requestReanalysisAction } from "@/server/presentation/actions/request-reanalysis-action";
 import { selectReviewGroupAction } from "@/server/presentation/actions/select-review-group-action";
 import { setReviewGroupStatusAction } from "@/server/presentation/actions/set-review-group-status-action";
+import {
+  groupArchitectureNodes,
+  type ArchitectureNodeGroups,
+} from "@/server/presentation/formatters/architecture-node";
 
 function formatReviewGroupStatus(status: string) {
   return status.replaceAll("_", " ");
+}
+
+const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
+  layer: true,
+  file: true,
+  symbol: true,
+  unknown: true,
+};
+const ARCHITECTURE_CATEGORY_ORDER = Object.keys(
+  ARCHITECTURE_CATEGORY_FLAGS,
+) as Array<keyof ArchitectureNodeGroups>;
+const ARCHITECTURE_CATEGORY_LABELS: Record<keyof ArchitectureNodeGroups, string> = {
+  layer: "Layers",
+  file: "Files",
+  symbol: "Symbols",
+  unknown: "Others",
+};
+
+interface ArchitectureColumn {
+  label: "Upstream" | "Downstream";
+  nodes: string[];
 }
 
 export default async function ReviewWorkspacePage({
@@ -28,6 +53,12 @@ export default async function ReviewWorkspacePage({
   const workspace = await loadReviewWorkspaceDto({ reviewId });
   const selectedGroup =
     workspace.groups.find((group) => group.isSelected) ?? workspace.groups[0];
+  const architectureColumns: ArchitectureColumn[] = selectedGroup
+    ? [
+        { label: "Upstream", nodes: selectedGroup.upstream },
+        { label: "Downstream", nodes: selectedGroup.downstream },
+      ]
+    : [];
 
   return (
     <main className={styles.page}>
@@ -160,20 +191,50 @@ export default async function ReviewWorkspacePage({
             Slice 1 keeps this to immediate neighbors only.
           </p>
           {selectedGroup ? (
-            <ul className={styles.archList}>
-              {selectedGroup.upstream.map((node) => (
-                <li key={`upstream-${node}`}>
-                  <strong>Upstream</strong>
-                  <p className={styles.groupSummary}>{node}</p>
-                </li>
-              ))}
-              {selectedGroup.downstream.map((node) => (
-                <li key={`downstream-${node}`}>
-                  <strong>Downstream</strong>
-                  <p className={styles.groupSummary}>{node}</p>
-                </li>
-              ))}
-            </ul>
+            <div className={styles.archColumns}>
+              {architectureColumns.map((column) => {
+                const groupedNodes = groupArchitectureNodes(column.nodes);
+                const categories = ARCHITECTURE_CATEGORY_ORDER
+                  .map((category) => [
+                    category,
+                    groupedNodes[category],
+                  ] as const)
+                  .filter(([, nodes]) => nodes.length > 0);
+
+                return (
+                  <div key={column.label} className={styles.archColumn}>
+                    <h3 className={styles.archColumnHeading}>{column.label}</h3>
+                    {categories.length === 0 ? (
+                      <p className={styles.muted}>No related nodes.</p>
+                    ) : (
+                      <div className={styles.archSections}>
+                        {categories.map(([category, nodes]) => (
+                          <section
+                            key={`${column.label}-${category}`}
+                            aria-labelledby={`arch-${column.label.toLowerCase()}-${category}`}
+                            className={styles.archSection}
+                          >
+                            <h4
+                              id={`arch-${column.label.toLowerCase()}-${category}`}
+                              className={styles.archSectionHeading}
+                            >
+                              {ARCHITECTURE_CATEGORY_LABELS[category]}
+                            </h4>
+                            <ul className={styles.archNodeList}>
+                              {nodes.map((node) => (
+                                <li key={`${column.label}-${node.raw}`}>
+                                  <span className={styles.archNodeLabel}>{node.label}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </section>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <p className={styles.muted}>
               Architecture context will appear after the first change group is available.
