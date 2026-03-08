@@ -41,11 +41,18 @@ interface GitHubBlobApiResponse {
   encoding?: string;
 }
 
+interface GitHubContentApiResponse {
+  type?: string;
+  content?: string;
+  encoding?: string;
+}
+
 type FetchLike = typeof fetch;
 
 const BINARY_CONTROL_CHAR_THRESHOLD = 0.3;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const DEFAULT_BLOB_FETCH_CONCURRENCY = 8;
+const MAX_PULL_REQUEST_FILES = 300;
 
 export interface GitHubPullRequestSnapshotProviderOptions {
   token?: string;
@@ -213,6 +220,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
       this.fetchTreeMap(input.source, pullRequest.head.sha),
     ]);
     const blobContentCache = new Map<string, Promise<string | null>>();
+    const pathContentCache = new Map<string, Promise<string | null>>();
 
     const snapshotPairs = await mapWithConcurrencyLimit(
       changedFiles,
@@ -222,11 +230,25 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
         const afterPath = resolveAfterPath(file);
         const pairPath = afterPath ?? beforePath ?? file.filename;
         const language = detectLanguage(afterPath ?? beforePath);
-        const beforeBlobSha = beforePath ? baseTree.get(beforePath) ?? null : null;
-        const afterBlobSha = afterPath ? headTree.get(afterPath) ?? null : null;
+        const beforeBlobSha = beforePath && baseTree ? baseTree.get(beforePath) ?? null : null;
+        const afterBlobSha = afterPath && headTree ? headTree.get(afterPath) ?? null : null;
         const [beforeContent, afterContent] = await Promise.all([
-          beforeBlobSha ? this.getBlobText(input.source, beforeBlobSha, blobContentCache) : Promise.resolve(null),
-          afterBlobSha ? this.getBlobText(input.source, afterBlobSha, blobContentCache) : Promise.resolve(null),
+          this.resolveSnapshotContent({
+            source: input.source,
+            blobSha: beforeBlobSha,
+            filePath: beforePath,
+            commitSha: pullRequest.base.sha,
+            blobCache: blobContentCache,
+            pathCache: pathContentCache,
+          }),
+          this.resolveSnapshotContent({
+            source: input.source,
+            blobSha: afterBlobSha,
+            filePath: afterPath,
+            commitSha: pullRequest.head.sha,
+            blobCache: blobContentCache,
+            pathCache: pathContentCache,
+          }),
         ]);
         const fileId = createStableId(input.reviewId, beforePath ?? "", afterPath ?? "", file.status);
         const providerMetadata = {
@@ -332,6 +354,11 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
       }
 
       files.push(...currentPageFiles);
+      if (files.length > MAX_PULL_REQUEST_FILES) {
+        throw new Error(
+          `Pull request changed files exceed maximum supported count (${MAX_PULL_REQUEST_FILES}).`,
+        );
+      }
 
       if (currentPageFiles.length < 100) {
         break;
@@ -343,13 +370,13 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     return files;
   }
 
-  private async fetchTreeMap(source: GitHubPullRequestRef, commitSha: string): Promise<Map<string, string>> {
+  private async fetchTreeMap(source: GitHubPullRequestRef, commitSha: string): Promise<Map<string, string> | null> {
     const treeResponse = await this.requestJson<GitHubTreeApiResponse>(
       `/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/git/trees/${commitSha}?recursive=1`,
     );
 
     if (treeResponse.truncated) {
-      throw new Error(`GitHub tree response was truncated for commit ${commitSha}.`);
+      return null;
     }
 
     const tree = new Map<string, string>();
@@ -363,6 +390,74 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     }
 
     return tree;
+  }
+
+  private async resolveSnapshotContent(params: {
+    source: GitHubPullRequestRef;
+    blobSha: string | null;
+    filePath: string | null;
+    commitSha: string;
+    blobCache: Map<string, Promise<string | null>>;
+    pathCache: Map<string, Promise<string | null>>;
+  }): Promise<string | null> {
+    if (params.blobSha) {
+      return this.getBlobText(params.source, params.blobSha, params.blobCache);
+    }
+
+    if (!params.filePath) {
+      return null;
+    }
+
+    return this.getContentByPath({
+      source: params.source,
+      filePath: params.filePath,
+      commitSha: params.commitSha,
+      cache: params.pathCache,
+    });
+  }
+
+  private async getContentByPath(params: {
+    source: GitHubPullRequestRef;
+    filePath: string;
+    commitSha: string;
+    cache: Map<string, Promise<string | null>>;
+  }): Promise<string | null> {
+    const cacheKey = `${params.commitSha}:${params.filePath}`;
+    const cached = params.cache.get(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
+    const encodedPath = params.filePath
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    const loader = this.requestJson<GitHubContentApiResponse>(
+      `/repos/${encodeURIComponent(params.source.owner)}/${encodeURIComponent(params.source.repository)}/contents/${encodedPath}?ref=${encodeURIComponent(params.commitSha)}`,
+    )
+      .then((content) => {
+        if (content.type !== "file" || content.encoding !== "base64" || typeof content.content !== "string") {
+          return null;
+        }
+
+        const raw = Buffer.from(content.content.replaceAll("\n", ""), "base64");
+
+        if (isLikelyBinary(raw)) {
+          return null;
+        }
+
+        return raw.toString("utf8");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message.includes("GitHub API request failed (404):")) {
+          return null;
+        }
+
+        throw error;
+      });
+    params.cache.set(cacheKey, loader);
+    return loader;
   }
 
   private async getBlobText(

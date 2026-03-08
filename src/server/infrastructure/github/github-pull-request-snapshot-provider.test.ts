@@ -204,4 +204,108 @@ describe("GitHubPullRequestSnapshotProvider", () => {
       }),
     ).rejects.toThrow("timed out");
   });
+
+  it("falls back to content API when recursive trees are truncated", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      const path = `${url.pathname}${url.search}`;
+
+      switch (path) {
+        case "/repos/octocat/locus/pulls/314":
+          return jsonResponse({
+            title: "Refactor entrypoint",
+            base: { ref: "main", sha: "base-sha" },
+            head: { ref: "feature/refactor", sha: "head-sha" },
+          });
+        case "/repos/octocat/locus/pulls/314/files?per_page=100&page=1":
+          return jsonResponse([
+            {
+              filename: "src/main.ts",
+              status: "modified",
+            },
+          ]);
+        case "/repos/octocat/locus/pulls/314/files?per_page=100&page=2":
+          return jsonResponse([]);
+        case "/repos/octocat/locus/git/trees/base-sha?recursive=1":
+          return jsonResponse({
+            truncated: true,
+            tree: [],
+          });
+        case "/repos/octocat/locus/git/trees/head-sha?recursive=1":
+          return jsonResponse({
+            truncated: true,
+            tree: [],
+          });
+        case "/repos/octocat/locus/contents/src/main.ts?ref=base-sha":
+          return jsonResponse({ type: "file", encoding: "base64", content: toBase64("export const value = 1;\n") });
+        case "/repos/octocat/locus/contents/src/main.ts?ref=head-sha":
+          return jsonResponse({ type: "file", encoding: "base64", content: toBase64("export const value = 2;\n") });
+        default:
+          return jsonResponse({ error: `unexpected URL: ${path}` }, 404);
+      }
+    };
+
+    const provider = new GitHubPullRequestSnapshotProvider({
+      apiBaseUrl: "https://api.github.com",
+      fetchImpl,
+    });
+    const bundle = await provider.fetchPullRequestSnapshots({
+      reviewId: "github-pr-314",
+      source: {
+        provider: "github",
+        owner: "octocat",
+        repository: "locus",
+        pullRequestNumber: 314,
+      },
+    });
+
+    expect(bundle.snapshotPairs).toHaveLength(1);
+    expect(bundle.snapshotPairs[0]?.before?.content).toContain("value = 1");
+    expect(bundle.snapshotPairs[0]?.after?.content).toContain("value = 2");
+  });
+
+  it("rejects pull requests with too many changed files", async () => {
+    const hundredFiles = Array.from({ length: 100 }, (_, index) => ({
+      filename: `src/file-${index}.ts`,
+      status: "modified",
+    }));
+    const singleFile = [{ filename: "src/file-300.ts", status: "modified" }];
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      const path = `${url.pathname}${url.search}`;
+
+      switch (path) {
+        case "/repos/octocat/locus/pulls/9000":
+          return jsonResponse({
+            title: "Big refactor",
+            base: { ref: "main", sha: "base-sha" },
+            head: { ref: "feature/big-refactor", sha: "head-sha" },
+          });
+        case "/repos/octocat/locus/pulls/9000/files?per_page=100&page=1":
+        case "/repos/octocat/locus/pulls/9000/files?per_page=100&page=2":
+        case "/repos/octocat/locus/pulls/9000/files?per_page=100&page=3":
+          return jsonResponse(hundredFiles);
+        case "/repos/octocat/locus/pulls/9000/files?per_page=100&page=4":
+          return jsonResponse(singleFile);
+        default:
+          return jsonResponse({ error: `unexpected URL: ${path}` }, 404);
+      }
+    };
+    const provider = new GitHubPullRequestSnapshotProvider({
+      apiBaseUrl: "https://api.github.com",
+      fetchImpl,
+    });
+
+    await expect(
+      provider.fetchPullRequestSnapshots({
+        reviewId: "github-pr-9000",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 9000,
+        },
+      }),
+    ).rejects.toThrow("Pull request changed files exceed maximum supported count (300).");
+  });
 });
