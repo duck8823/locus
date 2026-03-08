@@ -29,6 +29,7 @@ interface DiffPlan {
 interface SnapshotDependencySource {
   filePath: string;
   content: string;
+  isRemoved: boolean;
 }
 
 interface FileDependencyContext {
@@ -43,12 +44,6 @@ const RESOLVABLE_SOURCE_EXTENSIONS = [
   ".jsx",
   ".mjs",
   ".cjs",
-  ".py",
-  ".go",
-  ".java",
-  ".rb",
-  ".rs",
-  ".php",
 ];
 
 function createStableId(...parts: string[]): string {
@@ -75,7 +70,7 @@ function inferDominantLayer(filePath: string): string | undefined {
   return undefined;
 }
 
-function collectImportSpecifiers(content: string): string[] {
+function collectRelativeImportSpecifiers(content: string): string[] {
   const specifiers = new Set<string>();
   const patterns = [
     /\bimport\s+(?:type\s+)?(?:[^"'`]+?\s+from\s+)?["'`]([^"'`]+)["'`]/g,
@@ -130,14 +125,20 @@ function collectDependencySources(snapshotPairs: SourceSnapshotPair[]): Snapshot
   const sourcesByPath = new Map<string, SnapshotDependencySource>();
 
   for (const pair of snapshotPairs) {
-    for (const snapshot of [pair.before, pair.after]) {
-      if (!snapshot) {
-        continue;
-      }
+    if (pair.after) {
+      sourcesByPath.set(pair.after.filePath, {
+        filePath: pair.after.filePath,
+        content: pair.after.content,
+        isRemoved: false,
+      });
+      continue;
+    }
 
-      sourcesByPath.set(snapshot.filePath, {
-        filePath: snapshot.filePath,
-        content: snapshot.content,
+    if (pair.before) {
+      sourcesByPath.set(pair.before.filePath, {
+        filePath: pair.before.filePath,
+        content: pair.before.content,
+        isRemoved: true,
       });
     }
   }
@@ -155,7 +156,7 @@ function buildFileDependencyContext(snapshotPairs: SourceSnapshotPair[]): FileDe
     const outgoing = outgoingByPath.get(source.filePath) ?? new Set<string>();
     outgoingByPath.set(source.filePath, outgoing);
 
-    for (const importSpecifier of collectImportSpecifiers(source.content)) {
+    for (const importSpecifier of collectRelativeImportSpecifiers(source.content)) {
       const resolvedPath = resolveRelativeImportPath(source.filePath, importSpecifier, knownFilePaths);
 
       if (!resolvedPath || resolvedPath === source.filePath) {
@@ -164,9 +165,11 @@ function buildFileDependencyContext(snapshotPairs: SourceSnapshotPair[]): FileDe
 
       outgoing.add(resolvedPath);
 
-      const incoming = incomingByPath.get(resolvedPath) ?? new Set<string>();
-      incoming.add(source.filePath);
-      incomingByPath.set(resolvedPath, incoming);
+      if (!source.isRemoved) {
+        const incoming = incomingByPath.get(resolvedPath) ?? new Set<string>();
+        incoming.add(source.filePath);
+        incomingByPath.set(resolvedPath, incoming);
+      }
     }
   }
 
@@ -191,18 +194,18 @@ function mergeArchitectureContext(
     const incoming = new Set<string>(semanticChange.architecture?.incomingNodeIds ?? []);
     const currentLayer = inferDominantLayer(filePath);
 
-    for (const downstreamPath of dependencies.outgoingByPath.get(filePath) ?? []) {
-      outgoing.add(`file:${downstreamPath}`);
-      const downstreamLayer = inferDominantLayer(downstreamPath);
+    for (const dependencyPath of dependencies.outgoingByPath.get(filePath) ?? []) {
+      outgoing.add(`file:${dependencyPath}`);
+      const downstreamLayer = inferDominantLayer(dependencyPath);
 
       if (downstreamLayer && downstreamLayer !== currentLayer) {
         outgoing.add(`layer:${downstreamLayer}`);
       }
     }
 
-    for (const upstreamPath of dependencies.incomingByPath.get(filePath) ?? []) {
-      incoming.add(`file:${upstreamPath}`);
-      const upstreamLayer = inferDominantLayer(upstreamPath);
+    for (const dependentPath of dependencies.incomingByPath.get(filePath) ?? []) {
+      incoming.add(`file:${dependentPath}`);
+      const upstreamLayer = inferDominantLayer(dependentPath);
 
       if (upstreamLayer && upstreamLayer !== currentLayer) {
         incoming.add(`layer:${upstreamLayer}`);
@@ -215,6 +218,7 @@ function mergeArchitectureContext(
       ...semanticChange,
       architecture: hasArchitecture
         ? {
+            ...semanticChange.architecture,
             outgoingNodeIds: [...outgoing].sort(),
             incomingNodeIds: [...incoming].sort(),
           }

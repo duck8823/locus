@@ -729,5 +729,58 @@ describe("analyzeSourceSnapshots", () => {
     expect(byFileId.get("file-repository")?.architecture?.incomingNodeIds).toEqual(
       expect.arrayContaining(["file:src/domain/user-service.ts", "layer:domain"]),
     );
+    expect(byFileId.get("file-controller")?.architecture?.incomingNodeIds ?? []).toEqual([]);
+    expect(byFileId.get("file-repository")?.architecture?.outgoingNodeIds ?? []).toEqual([]);
+  });
+
+  it("does not attach removed-file dependents as incoming neighbors", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "removed-dependent-review",
+      snapshotPairs: [
+        {
+          fileId: "file-consumer",
+          filePath: "src/application/consumer.ts",
+          before: {
+            snapshotId: "removed-dependent-review:file-consumer:before",
+            fileId: "file-consumer",
+            filePath: "src/application/consumer.ts",
+            language: "typescript",
+            revision: "before",
+            content:
+              "import { createUser } from '../domain/user-service';\nexport const run = () => createUser();",
+            metadata: { codeHost: "github" },
+          },
+          after: null,
+        },
+        {
+          fileId: "file-service",
+          filePath: "src/domain/user-service.ts",
+          before: {
+            snapshotId: "removed-dependent-review:file-service:before",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const createUser = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "removed-dependent-review:file-service:after",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const createUser = () => 2;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const serviceChange = result.semanticChanges.find((change) => change.fileId === "file-service");
+    expect(serviceChange?.architecture?.incomingNodeIds ?? []).not.toContain(
+      "file:src/application/consumer.ts",
+    );
   });
 });
