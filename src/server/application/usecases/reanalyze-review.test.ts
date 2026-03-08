@@ -337,6 +337,56 @@ describe("ReanalyzeReviewUseCase", () => {
     expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-08T01:00:00.000Z");
   });
 
+  it("infers legacy seed fixture source metadata for demo sessions", async () => {
+    const repository = new InMemoryReviewSessionRepository();
+    repository.seed(
+      ReviewSession.create({
+        reviewId: "demo-review",
+        title: "Demo semantic review workspace",
+        repositoryName: "duck8823/locus",
+        branchLabel: "feat/semantic-analysis-spike",
+        viewerName: "Demo reviewer",
+        lastOpenedAt: "2026-03-07T00:00:00.000Z",
+        groups: [
+          {
+            groupId: "legacy-group",
+            title: "Legacy group",
+            summary: "Legacy summary",
+            filePath: "src/core/user-service.ts",
+            status: "reviewed",
+            upstream: [],
+            downstream: [],
+          },
+        ],
+      }),
+    );
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    const useCase = new ReanalyzeReviewUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+    });
+
+    const result = await useCase.execute({ reviewId: "demo-review" });
+
+    expect(snapshotProvider.calls).toBe(0);
+    expect(result.source).toEqual({
+      provider: "seed_fixture",
+      fixtureId: "default",
+    });
+    const persisted = await repository.findByReviewId("demo-review");
+    expect(persisted?.toRecord().source).toEqual({
+      provider: "seed_fixture",
+      fixtureId: "default",
+    });
+    expect(
+      persisted
+        ?.toRecord()
+        .groups.find((group) => group.filePath === "src/core/user-service.ts")
+        ?.status,
+    ).toBe("reviewed");
+  });
+
   it("raises when the review session does not exist", async () => {
     const repository = new InMemoryReviewSessionRepository();
     const useCase = new ReanalyzeReviewUseCase({

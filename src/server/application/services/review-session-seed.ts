@@ -11,6 +11,7 @@ export interface CreateSeedReviewSessionInput {
 }
 
 export const defaultSeedFixtureId = "default";
+export const defaultSeedReviewId = "demo-review";
 
 export async function createSeedReviewSession({
   reviewId,

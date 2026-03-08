@@ -2,6 +2,10 @@ import { createAnalyzedReviewSession } from "@/server/application/services/creat
 import {
   createSeedSourceSnapshotPairs,
 } from "@/server/application/services/seed-source-snapshot-fixture";
+import {
+  defaultSeedFixtureId,
+  defaultSeedReviewId,
+} from "@/server/application/services/review-session-seed";
 import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 import type {
   PullRequestSnapshotProvider,
@@ -32,6 +36,13 @@ export interface ReanalyzeReviewResult {
 }
 
 function inferLegacySource(record: ReviewSessionRecord): ReviewSessionSource | null {
+  if (record.reviewId === defaultSeedReviewId) {
+    return {
+      provider: "seed_fixture",
+      fixtureId: defaultSeedFixtureId,
+    };
+  }
+
   const pullRequestNumberMatch = /^PR\s+#(\d+):/.exec(record.title);
   const pullRequestNumber = pullRequestNumberMatch ? Number(pullRequestNumberMatch[1]) : NaN;
   const repositoryMatch = /^([^/]+)\/([^/]+)$/.exec(record.repositoryName.trim());
