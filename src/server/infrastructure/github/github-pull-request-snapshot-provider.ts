@@ -454,6 +454,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
           return null;
         }
 
+        params.cache.delete(cacheKey);
         throw error;
       });
     params.cache.set(cacheKey, loader);
@@ -473,19 +474,28 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
 
     const loader = this.requestJson<GitHubBlobApiResponse>(
       `/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/git/blobs/${blobSha}`,
-    ).then((blob) => {
-      if (blob.encoding !== "base64" || typeof blob.content !== "string") {
-        return null;
-      }
+    )
+      .then((blob) => {
+        if (blob.encoding !== "base64" || typeof blob.content !== "string") {
+          return null;
+        }
 
-      const raw = Buffer.from(blob.content.replaceAll("\n", ""), "base64");
+        const raw = Buffer.from(blob.content.replaceAll("\n", ""), "base64");
 
-      if (isLikelyBinary(raw)) {
-        return null;
-      }
+        if (isLikelyBinary(raw)) {
+          return null;
+        }
 
-      return raw.toString("utf8");
-    });
+        return raw.toString("utf8");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.message.includes("GitHub API request failed (404):")) {
+          return null;
+        }
+
+        cache.delete(blobSha);
+        throw error;
+      });
     cache.set(blobSha, loader);
     return loader;
   }

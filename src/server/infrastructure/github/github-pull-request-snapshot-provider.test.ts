@@ -178,6 +178,66 @@ describe("GitHubPullRequestSnapshotProvider", () => {
     });
   });
 
+  it("supports added and removed file snapshots", async () => {
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = new URL(String(input));
+      const path = `${url.pathname}${url.search}`;
+
+      switch (path) {
+        case "/repos/octocat/locus/pulls/8":
+          return jsonResponse({
+            title: "Add and remove files",
+            base: { ref: "main", sha: "base-sha" },
+            head: { ref: "feature/files", sha: "head-sha" },
+          });
+        case "/repos/octocat/locus/pulls/8/files?per_page=100&page=1":
+          return jsonResponse([
+            { filename: "src/new-file.ts", status: "added" },
+            { filename: "src/removed-file.ts", status: "removed" },
+          ]);
+        case "/repos/octocat/locus/pulls/8/files?per_page=100&page=2":
+          return jsonResponse([]);
+        case "/repos/octocat/locus/git/trees/base-sha?recursive=1":
+          return jsonResponse({
+            truncated: false,
+            tree: [{ path: "src/removed-file.ts", type: "blob", sha: "blob-base-removed" }],
+          });
+        case "/repos/octocat/locus/git/trees/head-sha?recursive=1":
+          return jsonResponse({
+            truncated: false,
+            tree: [{ path: "src/new-file.ts", type: "blob", sha: "blob-head-new" }],
+          });
+        case "/repos/octocat/locus/git/blobs/blob-base-removed":
+          return jsonResponse({ encoding: "base64", content: toBase64("export const removed = true;\n") });
+        case "/repos/octocat/locus/git/blobs/blob-head-new":
+          return jsonResponse({ encoding: "base64", content: toBase64("export const added = true;\n") });
+        default:
+          return jsonResponse({ error: `unexpected URL: ${path}` }, 404);
+      }
+    };
+    const provider = new GitHubPullRequestSnapshotProvider({
+      apiBaseUrl: "https://api.github.com",
+      fetchImpl,
+    });
+    const bundle = await provider.fetchPullRequestSnapshots({
+      reviewId: "github-pr-8",
+      source: {
+        provider: "github",
+        owner: "octocat",
+        repository: "locus",
+        pullRequestNumber: 8,
+      },
+    });
+
+    const added = bundle.snapshotPairs.find((pair) => pair.filePath === "src/new-file.ts");
+    const removed = bundle.snapshotPairs.find((pair) => pair.filePath === "src/removed-file.ts");
+
+    expect(added?.before).toBeNull();
+    expect(added?.after?.content).toContain("added = true");
+    expect(removed?.before?.content).toContain("removed = true");
+    expect(removed?.after).toBeNull();
+  });
+
   it("fails fast when a GitHub API request times out", async () => {
     const fetchImpl: typeof fetch = (_input, init) =>
       new Promise<Response>((_resolve, reject) => {
@@ -203,6 +263,25 @@ describe("GitHubPullRequestSnapshotProvider", () => {
         },
       }),
     ).rejects.toThrow("timed out");
+  });
+
+  it("throws with request path when GitHub API returns a non-success response", async () => {
+    const provider = new GitHubPullRequestSnapshotProvider({
+      apiBaseUrl: "https://api.github.com",
+      fetchImpl: async () => jsonResponse({ message: "Internal Server Error" }, 500),
+    });
+
+    await expect(
+      provider.fetchPullRequestSnapshots({
+        reviewId: "github-pr-500",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 500,
+        },
+      }),
+    ).rejects.toThrow("/repos/octocat/locus/pulls/500");
   });
 
   it("falls back to content API when recursive trees are truncated", async () => {
