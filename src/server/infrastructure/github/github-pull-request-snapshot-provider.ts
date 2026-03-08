@@ -22,11 +22,9 @@ interface GitHubPullRequestFileApiResponse {
   filename: string;
   status: string;
   previous_filename?: string;
-  sha?: string;
   additions?: number;
   deletions?: number;
   changes?: number;
-  patch?: string;
 }
 
 interface GitHubTreeApiResponse {
@@ -43,12 +41,36 @@ interface GitHubBlobApiResponse {
   encoding?: string;
 }
 
+interface GitHubContentApiResponse {
+  type?: string;
+  content?: string;
+  encoding?: string;
+}
+
 type FetchLike = typeof fetch;
+
+const BINARY_CONTROL_CHAR_THRESHOLD = 0.3;
+const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
+const DEFAULT_BLOB_FETCH_CONCURRENCY = 8;
+const MAX_PULL_REQUEST_FILES = 300;
+
+class GitHubApiError extends Error {
+  constructor(
+    readonly statusCode: number,
+    readonly path: string,
+    readonly responseBody: string,
+  ) {
+    super(`GitHub API request failed (${statusCode}): ${path}\n${responseBody}`);
+    this.name = "GitHubApiError";
+  }
+}
 
 export interface GitHubPullRequestSnapshotProviderOptions {
   token?: string;
   apiBaseUrl?: string;
   fetchImpl?: FetchLike;
+  requestTimeoutMs?: number;
+  maxBlobFetchConcurrency?: number;
 }
 
 function createStableId(...parts: string[]): string {
@@ -66,7 +88,7 @@ function detectLanguage(filePath: string | null): string | null {
     return "tsx";
   }
 
-  if (normalized.endsWith(".ts") || normalized.endsWith(".d.ts")) {
+  if (normalized.endsWith(".ts")) {
     return "typescript";
   }
 
@@ -124,7 +146,7 @@ function isLikelyBinary(buffer: Buffer): boolean {
     }
   }
 
-  return controlCharacterCount / buffer.length > 0.3;
+  return controlCharacterCount / buffer.length > BINARY_CONTROL_CHAR_THRESHOLD;
 }
 
 function resolveBeforePath(file: GitHubPullRequestFileApiResponse): string | null {
@@ -132,7 +154,7 @@ function resolveBeforePath(file: GitHubPullRequestFileApiResponse): string | nul
     return null;
   }
 
-  if (file.status === "renamed") {
+  if (file.status === "renamed" || file.status === "copied") {
     return file.previous_filename ?? null;
   }
 
@@ -147,16 +169,53 @@ function resolveAfterPath(file: GitHubPullRequestFileApiResponse): string | null
   return file.filename;
 }
 
+async function mapWithConcurrencyLimit<T, TResult>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<TResult>,
+): Promise<TResult[]> {
+  const safeConcurrency = Math.max(1, Math.floor(concurrency));
+  const results = new Array<TResult>(items.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: Math.min(safeConcurrency, items.length) }, async () => {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+
+      if (currentIndex >= items.length) {
+        return;
+      }
+
+      results[currentIndex] = await mapper(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
 export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
   private readonly token: string | null;
   private readonly apiBaseUrl: string;
   private readonly fetchImpl: FetchLike;
+  private readonly requestTimeoutMs: number;
+  private readonly maxBlobFetchConcurrency: number;
 
   constructor(options: GitHubPullRequestSnapshotProviderOptions = {}) {
     const configuredToken = options.token ?? process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN ?? null;
     this.token = configuredToken && configuredToken.trim().length > 0 ? configuredToken.trim() : null;
     this.apiBaseUrl = options.apiBaseUrl ?? "https://api.github.com";
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.requestTimeoutMs = Math.max(1, options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS);
+    this.maxBlobFetchConcurrency = Math.max(
+      1,
+      Math.floor(options.maxBlobFetchConcurrency ?? DEFAULT_BLOB_FETCH_CONCURRENCY),
+    );
   }
 
   async fetchPullRequestSnapshots(input: {
@@ -172,70 +231,88 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
       this.fetchTreeMap(input.source, pullRequest.head.sha),
     ]);
     const blobContentCache = new Map<string, Promise<string | null>>();
-    const snapshotPairs: SourceSnapshotPair[] = [];
+    const pathContentCache = new Map<string, Promise<string | null>>();
 
-    for (const file of changedFiles) {
-      const beforePath = resolveBeforePath(file);
-      const afterPath = resolveAfterPath(file);
-      const pairPath = afterPath ?? beforePath ?? file.filename;
-      const language = detectLanguage(afterPath ?? beforePath);
-      const beforeBlobSha = beforePath ? baseTree.get(beforePath) ?? null : null;
-      const afterBlobSha = afterPath ? headTree.get(afterPath) ?? null : null;
-      const beforeContent = beforeBlobSha
-        ? await this.getBlobText(input.source, beforeBlobSha, blobContentCache)
-        : null;
-      const afterContent = afterBlobSha
-        ? await this.getBlobText(input.source, afterBlobSha, blobContentCache)
-        : null;
-      const fileId = createStableId(input.reviewId, beforePath ?? "", afterPath ?? "", file.status);
-      const providerMetadata = {
-        status: file.status,
-        previousFilePath: file.previous_filename,
-        additions: file.additions,
-        deletions: file.deletions,
-        changes: file.changes,
-      };
-
-      const before = beforeContent === null
-        ? null
-        : this.createSnapshot({
-            reviewId: input.reviewId,
-            fileId,
-            filePath: beforePath ?? pairPath,
-            language,
-            revision: "before",
-            content: beforeContent,
+    const snapshotPairs = await mapWithConcurrencyLimit(
+      changedFiles,
+      this.maxBlobFetchConcurrency,
+      async (file): Promise<SourceSnapshotPair> => {
+        const beforePath = resolveBeforePath(file);
+        const afterPath = resolveAfterPath(file);
+        const pairPath = afterPath ?? beforePath ?? file.filename;
+        const language = detectLanguage(afterPath ?? beforePath);
+        const beforeBlobSha = beforePath && baseTree ? baseTree.get(beforePath) ?? null : null;
+        const afterBlobSha = afterPath && headTree ? headTree.get(afterPath) ?? null : null;
+        const [beforeContent, afterContent] = await Promise.all([
+          this.resolveSnapshotContent({
             source: input.source,
+            blobSha: beforeBlobSha,
+            filePath: beforePath,
             commitSha: pullRequest.base.sha,
-            providerMetadata: {
-              ...providerMetadata,
-              blobSha: beforeBlobSha,
-            },
-          });
-      const after = afterContent === null
-        ? null
-        : this.createSnapshot({
-            reviewId: input.reviewId,
-            fileId,
-            filePath: afterPath ?? pairPath,
-            language,
-            revision: "after",
-            content: afterContent,
+            blobCache: blobContentCache,
+            pathCache: pathContentCache,
+          }),
+          this.resolveSnapshotContent({
             source: input.source,
+            blobSha: afterBlobSha,
+            filePath: afterPath,
             commitSha: pullRequest.head.sha,
-            providerMetadata: {
-              ...providerMetadata,
-              blobSha: afterBlobSha,
-            },
-          });
+            blobCache: blobContentCache,
+            pathCache: pathContentCache,
+          }),
+        ]);
+        const fileId = createStableId(input.reviewId, beforePath ?? "", afterPath ?? "", file.status);
+        const providerMetadata = {
+          status: file.status,
+          previousFilePath: file.previous_filename,
+          additions: file.additions,
+          deletions: file.deletions,
+          changes: file.changes,
+        };
 
-      snapshotPairs.push({
-        fileId,
-        filePath: pairPath,
-        before,
-        after,
-      });
-    }
+        const before =
+          beforeContent === null
+            ? null
+            : this.createSnapshot({
+                reviewId: input.reviewId,
+                fileId,
+                filePath: beforePath ?? pairPath,
+                language,
+                revision: "before",
+                content: beforeContent,
+                source: input.source,
+                commitSha: pullRequest.base.sha,
+                providerMetadata: {
+                  ...providerMetadata,
+                  blobSha: beforeBlobSha,
+                },
+              });
+        const after =
+          afterContent === null
+            ? null
+            : this.createSnapshot({
+                reviewId: input.reviewId,
+                fileId,
+                filePath: afterPath ?? pairPath,
+                language,
+                revision: "after",
+                content: afterContent,
+                source: input.source,
+                commitSha: pullRequest.head.sha,
+                providerMetadata: {
+                  ...providerMetadata,
+                  blobSha: afterBlobSha,
+                },
+              });
+
+        return {
+          fileId,
+          filePath: pairPath,
+          before,
+          after,
+        };
+      },
+    );
 
     return {
       title: `PR #${input.source.pullRequestNumber}: ${pullRequest.title}`,
@@ -288,6 +365,11 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
       }
 
       files.push(...currentPageFiles);
+      if (files.length > MAX_PULL_REQUEST_FILES) {
+        throw new Error(
+          `Pull request changed files exceed maximum supported count (${MAX_PULL_REQUEST_FILES}).`,
+        );
+      }
 
       if (currentPageFiles.length < 100) {
         break;
@@ -299,13 +381,13 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     return files;
   }
 
-  private async fetchTreeMap(source: GitHubPullRequestRef, commitSha: string): Promise<Map<string, string>> {
+  private async fetchTreeMap(source: GitHubPullRequestRef, commitSha: string): Promise<Map<string, string> | null> {
     const treeResponse = await this.requestJson<GitHubTreeApiResponse>(
       `/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/git/trees/${commitSha}?recursive=1`,
     );
 
     if (treeResponse.truncated) {
-      throw new Error(`GitHub tree response was truncated for commit ${commitSha}.`);
+      return null;
     }
 
     const tree = new Map<string, string>();
@@ -321,6 +403,75 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     return tree;
   }
 
+  private async resolveSnapshotContent(params: {
+    source: GitHubPullRequestRef;
+    blobSha: string | null;
+    filePath: string | null;
+    commitSha: string;
+    blobCache: Map<string, Promise<string | null>>;
+    pathCache: Map<string, Promise<string | null>>;
+  }): Promise<string | null> {
+    if (params.blobSha) {
+      return this.getBlobText(params.source, params.blobSha, params.blobCache);
+    }
+
+    if (!params.filePath) {
+      return null;
+    }
+
+    return this.getContentByPath({
+      source: params.source,
+      filePath: params.filePath,
+      commitSha: params.commitSha,
+      cache: params.pathCache,
+    });
+  }
+
+  private async getContentByPath(params: {
+    source: GitHubPullRequestRef;
+    filePath: string;
+    commitSha: string;
+    cache: Map<string, Promise<string | null>>;
+  }): Promise<string | null> {
+    const cacheKey = `${params.commitSha}:${params.filePath}`;
+    const cached = params.cache.get(cacheKey);
+
+    if (cached) {
+      return cached;
+    }
+
+    const encodedPath = params.filePath
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    const loader = this.requestJson<GitHubContentApiResponse>(
+      `/repos/${encodeURIComponent(params.source.owner)}/${encodeURIComponent(params.source.repository)}/contents/${encodedPath}?ref=${encodeURIComponent(params.commitSha)}`,
+    )
+      .then((content) => {
+        if (content.type !== "file" || content.encoding !== "base64" || typeof content.content !== "string") {
+          return null;
+        }
+
+        const raw = Buffer.from(content.content.replaceAll("\n", ""), "base64");
+
+        if (isLikelyBinary(raw)) {
+          return null;
+        }
+
+        return raw.toString("utf8");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof GitHubApiError && error.statusCode === 404) {
+          return null;
+        }
+
+        params.cache.delete(cacheKey);
+        throw error;
+      });
+    params.cache.set(cacheKey, loader);
+    return loader;
+  }
+
   private async getBlobText(
     source: GitHubPullRequestRef,
     blobSha: string,
@@ -334,19 +485,28 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
 
     const loader = this.requestJson<GitHubBlobApiResponse>(
       `/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/git/blobs/${blobSha}`,
-    ).then((blob) => {
-      if (blob.encoding !== "base64" || typeof blob.content !== "string") {
-        return null;
-      }
+    )
+      .then((blob) => {
+        if (blob.encoding !== "base64" || typeof blob.content !== "string") {
+          return null;
+        }
 
-      const raw = Buffer.from(blob.content.replaceAll("\n", ""), "base64");
+        const raw = Buffer.from(blob.content.replaceAll("\n", ""), "base64");
 
-      if (isLikelyBinary(raw)) {
-        return null;
-      }
+        if (isLikelyBinary(raw)) {
+          return null;
+        }
 
-      return raw.toString("utf8");
-    });
+        return raw.toString("utf8");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof GitHubApiError && error.statusCode === 404) {
+          return null;
+        }
+
+        cache.delete(blobSha);
+        throw error;
+      });
     cache.set(blobSha, loader);
     return loader;
   }
@@ -361,13 +521,28 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
       headers.authorization = `Bearer ${this.token}`;
     }
 
-    const response = await this.fetchImpl(`${this.apiBaseUrl}${path}`, {
-      headers,
-    });
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => abortController.abort(), this.requestTimeoutMs);
+    let response: Response;
+
+    try {
+      response = await this.fetchImpl(`${this.apiBaseUrl}${path}`, {
+        headers,
+        signal: abortController.signal,
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new Error(`GitHub API request timed out after ${this.requestTimeoutMs}ms: ${path}`);
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(`GitHub API request failed (${response.status}): ${path}\n${body}`);
+      throw new GitHubApiError(response.status, path, body);
     }
 
     return (await response.json()) as T;

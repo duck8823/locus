@@ -3,10 +3,22 @@ import styles from "./page.module.css";
 import { startDemoSessionAction } from "@/server/presentation/actions/start-demo-session-action";
 import { startGitHubDemoSessionAction } from "@/server/presentation/actions/start-github-demo-session-action";
 
-export default function MarketingPage() {
+interface MarketingPageSearchParams {
+  githubDemoError?: string | string[];
+}
+
+export default async function MarketingPage({
+  searchParams,
+}: {
+  searchParams: Promise<MarketingPageSearchParams>;
+}) {
+  const resolvedSearchParams = await searchParams;
   const defaultGitHubOwner = process.env.LOCUS_GITHUB_DEMO_OWNER ?? "";
   const defaultGitHubRepository = process.env.LOCUS_GITHUB_DEMO_REPO ?? "";
   const defaultGitHubPullRequestNumber = process.env.LOCUS_GITHUB_DEMO_PR_NUMBER ?? "";
+  const githubDemoError = Array.isArray(resolvedSearchParams.githubDemoError)
+    ? resolvedSearchParams.githubDemoError[0]
+    : resolvedSearchParams.githubDemoError;
 
   return (
     <main className={styles.page}>
@@ -69,6 +81,7 @@ export default function MarketingPage() {
                 Open GitHub PR demo
               </button>
             </form>
+            {githubDemoError ? <p className={styles.errorBanner}>{githubDemoError}</p> : null}
             <p className={styles.demoHint}>
               Public repositories work without <code>GITHUB_TOKEN</code>, but rate limits are lower.
               Environment variables are optional defaults.
