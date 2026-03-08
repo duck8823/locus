@@ -8,10 +8,11 @@ import { readRequiredString } from "@/server/presentation/actions/read-required-
 
 export async function requestReanalysisAction(formData: FormData): Promise<void> {
   const reviewId = readRequiredString(formData, "reviewId");
-  const { reviewSessionRepository, analysisJobScheduler } = getDependencies();
+  const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } = getDependencies();
   const useCase = new ReanalyzeReviewUseCase({
     reviewSessionRepository,
-    analysisJobScheduler,
+    parserAdapters,
+    pullRequestSnapshotProvider,
   });
 
   await useCase.execute({ reviewId });

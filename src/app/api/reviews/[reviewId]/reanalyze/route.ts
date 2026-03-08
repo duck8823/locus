@@ -12,20 +12,22 @@ export async function POST(
     const { reviewId } = await context.params;
     const body = await request.json().catch(() => null);
     parseReanalyzeRequest(body);
-    const { reviewSessionRepository, analysisJobScheduler } = getDependencies();
+    const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } = getDependencies();
     const useCase = new ReanalyzeReviewUseCase({
       reviewSessionRepository,
-      analysisJobScheduler,
+      parserAdapters,
+      pullRequestSnapshotProvider,
     });
     const result = await useCase.execute({ reviewId });
 
     return NextResponse.json(
       {
         reviewId,
-        jobId: result.scheduledJob.jobId,
-        acceptedAt: result.scheduledJob.acceptedAt,
+        snapshotPairCount: result.snapshotPairCount,
+        source: result.source,
+        lastReanalyzeRequestedAt: result.reviewSession.toRecord().lastReanalyzeRequestedAt,
       },
-      { status: 202 },
+      { status: 200 },
     );
   } catch (error) {
     if (error instanceof ReviewSessionNotFoundError) {
