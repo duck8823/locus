@@ -91,7 +91,7 @@ export function toArchitectureNodeView(raw: string): ArchitectureNodeView {
 }
 
 export function groupArchitectureNodes(rawNodes: string[]): ArchitectureNodeGroups {
-  const deduplicated = [...new Set(rawNodes)];
+  const deduplicated = [...new Set(rawNodes.map((rawNode) => rawNode.trim()).filter((rawNode) => rawNode.length > 0))];
   const groups: ArchitectureNodeGroups = {
     layer: [],
     file: [],

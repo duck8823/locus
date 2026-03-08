@@ -194,7 +194,7 @@ export default async function ReviewWorkspacePage({
                             <ul className={styles.archNodeList}>
                               {nodes.map((node) => (
                                 <li key={`${column.label}-${node.raw}`}>
-                                  <p className={styles.archNodeLabel}>{node.label}</p>
+                                  <span className={styles.archNodeLabel}>{node.label}</span>
                                 </li>
                               ))}
                             </ul>

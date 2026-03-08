@@ -34,6 +34,7 @@ describe("architecture-node formatter", () => {
   it("groups and deduplicates architecture nodes", () => {
     const grouped = groupArchitectureNodes([
       "layer:domain",
+      "   ",
       "layer:domain",
       "file:src/domain/user-service.ts",
       "symbol:function::<root>::createUser",
