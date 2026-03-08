@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { ReanalyzeReviewUseCase } from "@/server/application/usecases/reanalyze-review";
 import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
-import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
 import { getDependencies } from "@/server/composition/dependencies";
 import { parseReanalyzeRequest } from "@/server/presentation/api/parse-reanalyze-request";
 
@@ -26,17 +25,16 @@ export async function POST(
         reviewId,
         snapshotPairCount: result.snapshotPairCount,
         source: result.source,
+        reanalysisStatus: result.reanalysisStatus,
         lastReanalyzeRequestedAt: result.lastReanalyzeRequestedAt,
+        lastReanalyzeCompletedAt: result.lastReanalyzeCompletedAt,
+        errorMessage: result.errorMessage,
       },
       { status: 200 },
     );
   } catch (error) {
     if (error instanceof ReviewSessionNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
-    }
-
-    if (error instanceof ReanalyzeSourceUnavailableError) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
     return NextResponse.json(

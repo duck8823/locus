@@ -66,6 +66,10 @@ describe("toReviewWorkspaceDto", () => {
       branchLabel: "feat/semantic-analysis-spike",
       viewerName: "Duck",
       lastOpenedAt: "2026-03-08T00:00:00.000Z",
+      lastReanalyzeRequestedAt: "2026-03-08T01:00:00.000Z",
+      reanalysisStatus: "failed",
+      lastReanalyzeCompletedAt: "2026-03-08T01:00:09.000Z",
+      lastReanalyzeError: "GitHub API request failed",
       selectedGroupId: "group-1",
       groups: [
         {
@@ -116,6 +120,11 @@ describe("toReviewWorkspaceDto", () => {
     });
 
     const dto = toReviewWorkspaceDto(reviewSession);
+
+    expect(dto.reanalysisStatus).toBe("failed");
+    expect(dto.lastReanalyzeRequestedAt).toBe("2026-03-08T01:00:00.000Z");
+    expect(dto.lastReanalyzeCompletedAt).toBe("2026-03-08T01:00:09.000Z");
+    expect(dto.lastReanalyzeError).toBe("GitHub API request failed");
 
     expect(dto.groups[0]?.semanticChanges).toEqual([
       {
@@ -185,6 +194,11 @@ describe("toReviewWorkspaceDto", () => {
     });
 
     const dto = toReviewWorkspaceDto(reviewSession);
+
+    expect(dto.reanalysisStatus).toBe("idle");
+    expect(dto.lastReanalyzeRequestedAt).toBeNull();
+    expect(dto.lastReanalyzeCompletedAt).toBeNull();
+    expect(dto.lastReanalyzeError).toBeNull();
 
     expect(dto.unsupportedSummary).toEqual({
       totalCount: 0,

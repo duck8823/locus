@@ -58,6 +58,44 @@ describe("ReviewSession", () => {
     expect(() => session.selectGroup("missing")).toThrow(ReviewGroupNotFoundError);
   });
 
+  it("tracks running/succeeded/failed reanalysis metadata", () => {
+    const session = createSession();
+
+    session.requestReanalysis("2026-03-08T00:00:00.000Z");
+    expect(session.toRecord().reanalysisStatus).toBe("running");
+    expect(session.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-08T00:00:00.000Z");
+
+    session.markReanalysisSucceeded("2026-03-08T00:00:10.000Z");
+    expect(session.toRecord().reanalysisStatus).toBe("succeeded");
+    expect(session.toRecord().lastReanalyzeCompletedAt).toBe("2026-03-08T00:00:10.000Z");
+    expect(session.toRecord().lastReanalyzeError).toBeNull();
+
+    session.markReanalysisFailed(
+      "2026-03-08T00:00:20.000Z",
+      "GitHub API request failed",
+      "2026-03-08T00:00:15.000Z",
+    );
+    expect(session.toRecord().reanalysisStatus).toBe("failed");
+    expect(session.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-08T00:00:15.000Z");
+    expect(session.toRecord().lastReanalyzeCompletedAt).toBe("2026-03-08T00:00:20.000Z");
+    expect(session.toRecord().lastReanalyzeError).toBe("GitHub API request failed");
+  });
+
+  it("normalizes legacy reanalysis fields", () => {
+    const legacyRecord = {
+      ...createSession().toRecord(),
+      lastReanalyzeRequestedAt: "2026-03-08T00:00:00.000Z",
+      reanalysisStatus: undefined,
+      lastReanalyzeCompletedAt: undefined,
+      lastReanalyzeError: undefined,
+    };
+    const session = ReviewSession.fromRecord(legacyRecord);
+
+    expect(session.toRecord().reanalysisStatus).toBe("succeeded");
+    expect(session.toRecord().lastReanalyzeCompletedAt).toBeNull();
+    expect(session.toRecord().lastReanalyzeError).toBeNull();
+  });
+
   it("clones source metadata defensively", () => {
     const session = ReviewSession.create({
       ...createSession().toRecord(),

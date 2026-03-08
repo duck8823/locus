@@ -16,6 +16,7 @@ import { ReviewSessionNotFoundError } from "@/server/application/errors/review-s
 import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
 import type { ReviewGroupStatus } from "@/server/domain/value-objects/review-status";
 import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
+import type { ReviewReanalysisStatus } from "@/server/domain/value-objects/reanalysis-status";
 
 export interface ReanalyzeReviewInput {
   reviewId: string;
@@ -31,8 +32,11 @@ export interface ReanalyzeReviewDependencies {
 export interface ReanalyzeReviewResult {
   reviewSession: ReviewSession;
   snapshotPairCount: number;
-  source: ReviewSessionSource;
-  lastReanalyzeRequestedAt: string;
+  source: ReviewSessionSource | null;
+  reanalysisStatus: ReviewReanalysisStatus;
+  lastReanalyzeRequestedAt: string | null;
+  lastReanalyzeCompletedAt: string | null;
+  errorMessage: string | null;
 }
 
 function inferLegacySource(record: ReviewSessionRecord): ReviewSessionSource | null {
@@ -65,6 +69,31 @@ function resolveReviewSource(record: ReviewSessionRecord): ReviewSessionSource |
 
 function assertNever(value: never): never {
   throw new Error(`Unsupported review source provider: ${JSON.stringify(value)}`);
+}
+
+function toReanalysisErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Unknown error while reanalyzing review.";
+}
+
+function isSupersededRun(record: ReviewSessionRecord, startedAt: string): boolean {
+  const latestRequestedAt = record.lastReanalyzeRequestedAt;
+
+  if (!latestRequestedAt || latestRequestedAt === startedAt) {
+    return false;
+  }
+
+  const latestRequestedAtEpochMs = Date.parse(latestRequestedAt);
+  const startedAtEpochMs = Date.parse(startedAt);
+
+  if (Number.isNaN(latestRequestedAtEpochMs) || Number.isNaN(startedAtEpochMs)) {
+    return false;
+  }
+
+  return latestRequestedAtEpochMs > startedAtEpochMs;
 }
 
 function createGroupStatusLookups(
@@ -121,7 +150,7 @@ export class ReanalyzeReviewUseCase {
   constructor(private readonly dependencies: ReanalyzeReviewDependencies) {}
 
   async execute({ reviewId, requestedAt }: ReanalyzeReviewInput): Promise<ReanalyzeReviewResult> {
-    const timestamp = requestedAt ?? new Date().toISOString();
+    const startedAt = requestedAt ?? new Date().toISOString();
     const existingReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
 
     if (!existingReviewSession) {
@@ -132,69 +161,162 @@ export class ReanalyzeReviewUseCase {
     const source = resolveReviewSource(previousRecord);
 
     if (!source) {
-      throw new ReanalyzeSourceUnavailableError(reviewId);
+      const completedAt = new Date().toISOString();
+      const unavailableError = new ReanalyzeSourceUnavailableError(reviewId);
+      existingReviewSession.markReanalysisFailed(completedAt, unavailableError.message, startedAt);
+      await this.dependencies.reviewSessionRepository.save(existingReviewSession);
+
+      return {
+        reviewSession: existingReviewSession,
+        snapshotPairCount: 0,
+        source: null,
+        reanalysisStatus: "failed",
+        lastReanalyzeRequestedAt: startedAt,
+        lastReanalyzeCompletedAt: completedAt,
+        errorMessage: unavailableError.message,
+      };
     }
 
-    let refreshedReviewSession: ReviewSession;
+    existingReviewSession.requestReanalysis(startedAt);
+    await this.dependencies.reviewSessionRepository.save(existingReviewSession);
+
     let snapshotPairCount = 0;
 
-    switch (source.provider) {
-      case "github": {
-        const bundle = await this.dependencies.pullRequestSnapshotProvider.fetchPullRequestSnapshots({
-          reviewId,
-          source,
-        });
-        snapshotPairCount = bundle.snapshotPairs.length;
-        refreshedReviewSession = await createAnalyzedReviewSession({
-          reviewId,
-          title: bundle.title,
-          repositoryName: bundle.repositoryName,
-          branchLabel: bundle.branchLabel,
-          viewerName: previousRecord.viewerName,
-          source,
-          createdAt: timestamp,
-          snapshotPairs: bundle.snapshotPairs,
-          parserAdapters: this.dependencies.parserAdapters,
-        });
-        break;
+    try {
+      let refreshedReviewSession: ReviewSession;
+
+      switch (source.provider) {
+        case "github": {
+          const bundle = await this.dependencies.pullRequestSnapshotProvider.fetchPullRequestSnapshots({
+            reviewId,
+            source,
+          });
+          snapshotPairCount = bundle.snapshotPairs.length;
+          refreshedReviewSession = await createAnalyzedReviewSession({
+            reviewId,
+            title: bundle.title,
+            repositoryName: bundle.repositoryName,
+            branchLabel: bundle.branchLabel,
+            viewerName: previousRecord.viewerName,
+            source,
+            createdAt: startedAt,
+            snapshotPairs: bundle.snapshotPairs,
+            parserAdapters: this.dependencies.parserAdapters,
+          });
+          break;
+        }
+        case "seed_fixture": {
+          const snapshotPairs = createSeedSourceSnapshotPairs(reviewId);
+          snapshotPairCount = snapshotPairs.length;
+          refreshedReviewSession = await createAnalyzedReviewSession({
+            reviewId,
+            title: previousRecord.title,
+            repositoryName: previousRecord.repositoryName,
+            branchLabel: previousRecord.branchLabel,
+            viewerName: previousRecord.viewerName,
+            source,
+            createdAt: startedAt,
+            snapshotPairs,
+            parserAdapters: this.dependencies.parserAdapters,
+          });
+          break;
+        }
+        default:
+          return assertNever(source);
       }
-      case "seed_fixture": {
-        const snapshotPairs = createSeedSourceSnapshotPairs(reviewId);
-        snapshotPairCount = snapshotPairs.length;
-        refreshedReviewSession = await createAnalyzedReviewSession({
-          reviewId,
-          title: previousRecord.title,
-          repositoryName: previousRecord.repositoryName,
-          branchLabel: previousRecord.branchLabel,
-          viewerName: previousRecord.viewerName,
-          source,
-          createdAt: timestamp,
-          snapshotPairs,
-          parserAdapters: this.dependencies.parserAdapters,
-        });
-        break;
+
+      const completedAt = new Date().toISOString();
+      const latestReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
+      const latestProgressRecord = latestReviewSession?.toRecord() ?? previousRecord;
+
+      if (isSupersededRun(latestProgressRecord, startedAt) && latestReviewSession) {
+        return {
+          reviewSession: latestReviewSession,
+          snapshotPairCount,
+          source: latestProgressRecord.source ?? source,
+          reanalysisStatus: latestProgressRecord.reanalysisStatus ?? "idle",
+          lastReanalyzeRequestedAt: latestProgressRecord.lastReanalyzeRequestedAt,
+          lastReanalyzeCompletedAt: latestProgressRecord.lastReanalyzeCompletedAt ?? null,
+          errorMessage: latestProgressRecord.lastReanalyzeError ?? null,
+        };
       }
-      default:
-        return assertNever(source);
+
+      const mergedRecord = mergePreviousReviewProgress({
+        previousRecord: latestProgressRecord,
+        nextRecord: refreshedReviewSession.toRecord(),
+        requestedAt: startedAt,
+        source,
+      });
+      const mergedReviewSession = ReviewSession.fromRecord(mergedRecord);
+      mergedReviewSession.markReanalysisSucceeded(completedAt, startedAt);
+
+      await this.dependencies.reviewSessionRepository.save(mergedReviewSession);
+
+      return {
+        reviewSession: mergedReviewSession,
+        snapshotPairCount,
+        source,
+        reanalysisStatus: "succeeded",
+        lastReanalyzeRequestedAt: startedAt,
+        lastReanalyzeCompletedAt: completedAt,
+        errorMessage: null,
+      };
+    } catch (error) {
+      const completedAt = new Date().toISOString();
+      const errorMessage = toReanalysisErrorMessage(error);
+      let failedSession = existingReviewSession;
+      let latestStateReloadFailed = false;
+
+      try {
+        const latestReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
+        failedSession = latestReviewSession ?? existingReviewSession;
+
+        if (latestReviewSession) {
+          const latestRecord = latestReviewSession.toRecord();
+
+          if (isSupersededRun(latestRecord, startedAt)) {
+            return {
+              reviewSession: latestReviewSession,
+              snapshotPairCount,
+              source: latestRecord.source ?? source,
+              reanalysisStatus: latestRecord.reanalysisStatus ?? "idle",
+              lastReanalyzeRequestedAt: latestRecord.lastReanalyzeRequestedAt,
+              lastReanalyzeCompletedAt: latestRecord.lastReanalyzeCompletedAt ?? null,
+              errorMessage: latestRecord.lastReanalyzeError ?? null,
+            };
+          }
+        }
+      } catch {
+        failedSession = existingReviewSession;
+        latestStateReloadFailed = true;
+      }
+
+      if (latestStateReloadFailed) {
+        const fallbackRecord = existingReviewSession.toRecord();
+
+        return {
+          reviewSession: existingReviewSession,
+          snapshotPairCount,
+          source: fallbackRecord.source ?? source,
+          reanalysisStatus: fallbackRecord.reanalysisStatus ?? "running",
+          lastReanalyzeRequestedAt: fallbackRecord.lastReanalyzeRequestedAt,
+          lastReanalyzeCompletedAt: fallbackRecord.lastReanalyzeCompletedAt ?? null,
+          errorMessage,
+        };
+      }
+
+      failedSession.markReanalysisFailed(completedAt, errorMessage, startedAt);
+      await this.dependencies.reviewSessionRepository.save(failedSession);
+
+      return {
+        reviewSession: failedSession,
+        snapshotPairCount,
+        source,
+        reanalysisStatus: "failed",
+        lastReanalyzeRequestedAt: startedAt,
+        lastReanalyzeCompletedAt: completedAt,
+        errorMessage,
+      };
     }
-
-    const latestReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
-    const latestProgressRecord = latestReviewSession?.toRecord() ?? previousRecord;
-    const mergedRecord = mergePreviousReviewProgress({
-      previousRecord: latestProgressRecord,
-      nextRecord: refreshedReviewSession.toRecord(),
-      requestedAt: timestamp,
-      source,
-    });
-    const mergedReviewSession = ReviewSession.fromRecord(mergedRecord);
-
-    await this.dependencies.reviewSessionRepository.save(mergedReviewSession);
-
-    return {
-      reviewSession: mergedReviewSession,
-      snapshotPairCount,
-      source,
-      lastReanalyzeRequestedAt: timestamp,
-    };
   }
 }
