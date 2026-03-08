@@ -74,7 +74,14 @@ function inferDominantLayer(filePath: string): string | undefined {
 }
 
 function supportsImportGraphParsing(language: string | null): boolean {
-  return language === "typescript" || language === "javascript" || language === "tsx" || language === "jsx";
+  return (
+    language === "typescript" ||
+    language === "javascript" ||
+    language === "tsx" ||
+    language === "jsx" ||
+    language === "typescriptreact" ||
+    language === "javascriptreact"
+  );
 }
 
 function isIdentifierCharacter(value: string | undefined): boolean {
@@ -136,7 +143,51 @@ function readStringLiteral(
 
     if (quote === "`" && character === "$" && source[index + 1] === "{") {
       hasInterpolation = true;
-      index += 1;
+      index += 2;
+      let braceDepth = 1;
+
+      while (index < source.length && braceDepth > 0) {
+        const nestedCharacter = source[index];
+
+        if (!nestedCharacter) {
+          break;
+        }
+
+        if (nestedCharacter === "/" && source[index + 1] === "/") {
+          index = skipLineComment(source, index + 2);
+          continue;
+        }
+
+        if (nestedCharacter === "/" && source[index + 1] === "*") {
+          index = skipBlockComment(source, index + 2);
+          continue;
+        }
+
+        if (
+          nestedCharacter === "/" &&
+          source[index + 1] !== "/" &&
+          source[index + 1] !== "*" &&
+          isLikelyRegexLiteralStart(source, index)
+        ) {
+          index = skipRegularExpressionLiteral(source, index);
+          continue;
+        }
+
+        if (nestedCharacter === "'" || nestedCharacter === '"' || nestedCharacter === "`") {
+          const nestedLiteral = readStringLiteral(source, index);
+          index = nestedLiteral?.nextIndex ?? index + 1;
+          continue;
+        }
+
+        if (nestedCharacter === "{") {
+          braceDepth += 1;
+        } else if (nestedCharacter === "}") {
+          braceDepth -= 1;
+        }
+
+        index += 1;
+      }
+
       continue;
     }
 
@@ -171,6 +222,76 @@ function skipBlockComment(source: string, startIndex: number): number {
   while (index < source.length) {
     if (source[index] === "*" && source[index + 1] === "/") {
       return index + 2;
+    }
+
+    index += 1;
+  }
+
+  return index;
+}
+
+function previousNonWhitespaceCharacter(source: string, startIndex: number): string | null {
+  let index = startIndex;
+
+  while (index >= 0) {
+    const character = source[index];
+
+    if (character && !/\s/.test(character)) {
+      return character;
+    }
+
+    index -= 1;
+  }
+
+  return null;
+}
+
+function isLikelyRegexLiteralStart(source: string, slashIndex: number): boolean {
+  const previousCharacter = previousNonWhitespaceCharacter(source, slashIndex - 1);
+
+  if (previousCharacter === null) {
+    return true;
+  }
+
+  return "([{=,:;!?&|+-*%^~<>".includes(previousCharacter);
+}
+
+function skipRegularExpressionLiteral(source: string, startIndex: number): number {
+  let index = startIndex + 1;
+  let inCharacterClass = false;
+
+  while (index < source.length) {
+    const character = source[index];
+
+    if (!character || character === "\n") {
+      return index;
+    }
+
+    if (character === "\\") {
+      index += 2;
+      continue;
+    }
+
+    if (character === "[" && !inCharacterClass) {
+      inCharacterClass = true;
+      index += 1;
+      continue;
+    }
+
+    if (character === "]" && inCharacterClass) {
+      inCharacterClass = false;
+      index += 1;
+      continue;
+    }
+
+    if (character === "/" && !inCharacterClass) {
+      index += 1;
+
+      while (/[A-Za-z]/.test(source[index] ?? "")) {
+        index += 1;
+      }
+
+      return index;
     }
 
     index += 1;
@@ -307,6 +428,7 @@ function parseExportStatement(
   let braceDepth = 0;
   let bracketDepth = 0;
   let parenthesisDepth = 0;
+  let sawStatementContent = false;
 
   while (index < source.length) {
     const character = source[index];
@@ -329,6 +451,20 @@ function parseExportStatement(
       const literal = readStringLiteral(source, index);
       index = literal?.nextIndex ?? index + 1;
       continue;
+    }
+
+    if (character === ";" && braceDepth === 0 && bracketDepth === 0 && parenthesisDepth === 0) {
+      return null;
+    }
+
+    if (
+      character === "\n" &&
+      sawStatementContent &&
+      braceDepth === 0 &&
+      bracketDepth === 0 &&
+      parenthesisDepth === 0
+    ) {
+      return null;
     }
 
     if (
@@ -368,6 +504,10 @@ function parseExportStatement(
       parenthesisDepth += 1;
     } else if (character === ")" && parenthesisDepth > 0) {
       parenthesisDepth -= 1;
+    }
+
+    if (!/\s/.test(character)) {
+      sawStatementContent = true;
     }
 
     index += 1;
