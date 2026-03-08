@@ -1,5 +1,6 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -44,10 +45,49 @@ function readRequiredValue(params: {
   throw new Error(`${params.label} is required.`);
 }
 
-function createReviewId(owner: string, repository: string, pullRequestNumber: number): string {
-  return `github-${owner}-${repository}-pr-${pullRequestNumber}`
+function parsePullRequestNumber(rawValue: string): number {
+  if (!/^\d+$/.test(rawValue)) {
+    throw new Error("GitHub pull request number must be a positive integer.");
+  }
+
+  const pullRequestNumber = Number(rawValue);
+
+  if (!Number.isInteger(pullRequestNumber) || pullRequestNumber <= 0) {
+    throw new Error("GitHub pull request number must be a positive integer.");
+  }
+
+  return pullRequestNumber;
+}
+
+function normalizeSegment(value: string): string {
+  return value
     .toLowerCase()
-    .replaceAll(/[^a-z0-9-]/g, "-");
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-+|-+$/g, "");
+}
+
+function createReviewId(owner: string, repository: string, pullRequestNumber: number): string {
+  const normalizedOwner = normalizeSegment(owner) || "owner";
+  const normalizedRepository = normalizeSegment(repository) || "repo";
+  const discriminator = createHash("sha256")
+    .update(`${owner}\u0000${repository}\u0000${pullRequestNumber}`)
+    .digest("hex")
+    .slice(0, 10);
+
+  return `github-${normalizedOwner}-${normalizedRepository}-pr-${pullRequestNumber}-${discriminator}`;
+}
+
+function createDemoErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "GitHub demo を開始できませんでした。";
+  }
+
+  if (error.message.includes("GitHub API request failed") || error.message.includes("timed out")) {
+    return "GitHub PR の取得に失敗しました。owner/repository/PR number、レート制限、認証設定を確認してください。";
+  }
+
+  const firstLine = error.message.split("\n", 1)[0] ?? "GitHub demo を開始できませんでした。";
+  return firstLine.slice(0, 180);
 }
 
 export async function startGitHubDemoSessionAction(formData: FormData): Promise<void> {
@@ -69,11 +109,7 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
     envName: "LOCUS_GITHUB_DEMO_PR_NUMBER",
     label: "GitHub pull request number",
   });
-  const pullRequestNumber = Number.parseInt(pullRequestNumberRaw, 10);
-
-  if (!Number.isInteger(pullRequestNumber) || pullRequestNumber <= 0) {
-    throw new Error("GitHub pull request number must be a positive integer.");
-  }
+  const pullRequestNumber = parsePullRequestNumber(pullRequestNumberRaw);
 
   const viewerName = "Demo reviewer";
   const cookieStore = await cookies();
@@ -92,13 +128,19 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
     parserAdapters,
     pullRequestSnapshotProvider,
   });
-  await useCase.execute({
-    reviewId,
-    viewerName,
-    owner,
-    repository,
-    pullRequestNumber,
-  });
+
+  try {
+    await useCase.execute({
+      reviewId,
+      viewerName,
+      owner,
+      repository,
+      pullRequestNumber,
+    });
+  } catch (error) {
+    const message = createDemoErrorMessage(error);
+    redirect(`/?githubDemoError=${encodeURIComponent(message)}`);
+  }
 
   revalidatePath(`/reviews/${reviewId}`);
   redirect(`/reviews/${reviewId}`);
