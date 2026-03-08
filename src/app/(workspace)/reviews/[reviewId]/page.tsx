@@ -24,6 +24,11 @@ const ARCHITECTURE_CATEGORY_LABELS: Record<keyof ArchitectureNodeGroups, string>
   unknown: "Others",
 };
 
+interface ArchitectureColumn {
+  label: "Upstream" | "Downstream";
+  nodes: string[];
+}
+
 export default async function ReviewWorkspacePage({
   params,
 }: {
@@ -40,6 +45,12 @@ export default async function ReviewWorkspacePage({
   const workspace = await loadReviewWorkspaceDto({ reviewId });
   const selectedGroup =
     workspace.groups.find((group) => group.isSelected) ?? workspace.groups[0];
+  const architectureColumns: ArchitectureColumn[] = selectedGroup
+    ? [
+        { label: "Upstream", nodes: selectedGroup.upstream },
+        { label: "Downstream", nodes: selectedGroup.downstream },
+      ]
+    : [];
 
   return (
     <main className={styles.page}>
@@ -173,10 +184,7 @@ export default async function ReviewWorkspacePage({
           </p>
           {selectedGroup ? (
             <div className={styles.archColumns}>
-              {[
-                { label: "Upstream", nodes: selectedGroup.upstream },
-                { label: "Downstream", nodes: selectedGroup.downstream },
-              ].map((column) => {
+              {architectureColumns.map((column) => {
                 const groupedNodes = groupArchitectureNodes(column.nodes);
                 const categories = ARCHITECTURE_CATEGORY_ORDER.map((category) => [category, groupedNodes[category]] as const)
                   .filter(([, nodes]) => nodes.length > 0);

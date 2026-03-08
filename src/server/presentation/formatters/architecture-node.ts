@@ -59,6 +59,7 @@ function parseSymbolNode(raw: string): ArchitectureNodeView {
   const [kind = "symbol", ...primaryContainerParts] = primarySegment.split(":");
   const normalizedKind = kind.trim().length > 0 ? kind.trim() : "symbol";
   const remainingSegments = segments.slice(1);
+  const hasExplicitSymbolName = remainingSegments.length > 0;
   const symbolName = (remainingSegments.at(-1) ?? primarySegment).trim() || "unknown";
   const containerSegments = [
     ...primaryContainerParts,
@@ -67,7 +68,7 @@ function parseSymbolNode(raw: string): ArchitectureNodeView {
   const container = containerSegments.join(".");
   const displayName = container.length > 0 ? `${container}.${symbolName}` : symbolName;
 
-  const label = displayName === normalizedKind ? `${displayName} symbol` : `${displayName} (${normalizedKind})`;
+  const label = hasExplicitSymbolName ? `${displayName} (${normalizedKind})` : `${normalizedKind} symbol`;
 
   return {
     raw,

@@ -92,6 +92,14 @@ describe("architecture-node formatter", () => {
     });
   });
 
+  it("keeps explicit symbol names even when they match the kind", () => {
+    expect(toArchitectureNodeView("symbol:function::function")).toEqual({
+      raw: "symbol:function::function",
+      kind: "symbol",
+      label: "function (function)",
+    });
+  });
+
   it("formats nested symbol containers consistently", () => {
     expect(toArchitectureNodeView("symbol:method:App:Users::Service::save")).toEqual({
       raw: "symbol:method:App:Users::Service::save",
