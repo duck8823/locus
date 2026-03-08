@@ -69,8 +69,10 @@ function normalizeSegment(value: string): string {
 function createReviewId(owner: string, repository: string, pullRequestNumber: number): string {
   const normalizedOwner = normalizeSegment(owner) || "owner";
   const normalizedRepository = normalizeSegment(repository) || "repo";
+  const canonicalOwner = owner.trim().toLowerCase();
+  const canonicalRepository = repository.trim().toLowerCase();
   const discriminator = createHash("sha256")
-    .update(`${owner}\u0000${repository}\u0000${pullRequestNumber}`)
+    .update(`${canonicalOwner}\u0000${canonicalRepository}\u0000${pullRequestNumber}`)
     .digest("hex")
     .slice(0, 10);
 
