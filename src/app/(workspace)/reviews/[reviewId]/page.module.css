@@ -166,6 +166,7 @@
 .semanticChangeMeta {
   color: var(--muted);
   font-size: 13px;
+  overflow-wrap: break-word;
 }
 
 .changeBadge {

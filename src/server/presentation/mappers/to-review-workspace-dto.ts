@@ -11,11 +11,7 @@ import type {
   ReviewWorkspaceUnsupportedSummaryDto,
 } from "@/server/presentation/dto/review-workspace-dto";
 
-const unsupportedReasonOrder: UnsupportedFileReason[] = [
-  "unsupported_language",
-  "parser_failed",
-  "binary_file",
-];
+const UNSUPPORTED_SAMPLE_LIMIT = 5;
 
 function toSemanticChangeDto(change: SemanticChange): ReviewWorkspaceSemanticChangeDto {
   return {
@@ -33,14 +29,23 @@ function toSemanticChangeDto(change: SemanticChange): ReviewWorkspaceSemanticCha
 function toUnsupportedSummary(
   unsupportedFileAnalyses: UnsupportedFileAnalysis[],
 ): ReviewWorkspaceUnsupportedSummaryDto {
-  const byReason = unsupportedReasonOrder
-    .map((reason) => ({
-      reason,
-      count: unsupportedFileAnalyses.filter((entry) => entry.reason === reason).length,
-    }))
-    .filter((entry) => entry.count > 0);
+  const reasonCounts = new Map<UnsupportedFileReason, number>();
 
-  const sampleFilePaths = unsupportedFileAnalyses.slice(0, 5).map((entry) => entry.filePath);
+  for (const entry of unsupportedFileAnalyses) {
+    reasonCounts.set(entry.reason, (reasonCounts.get(entry.reason) ?? 0) + 1);
+  }
+
+  const byReason = [...reasonCounts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([reason, count]) => ({
+      reason,
+      count,
+    }));
+
+  const sampleFilePaths = unsupportedFileAnalyses
+    .map((entry) => entry.filePath.trim())
+    .filter((filePath) => filePath.length > 0)
+    .slice(0, UNSUPPORTED_SAMPLE_LIMIT);
 
   return {
     totalCount: unsupportedFileAnalyses.length,

@@ -253,9 +253,12 @@ export default async function ReviewWorkspacePage({
                     </li>
                   ))}
                 </ul>
-                <p className={styles.muted}>
-                  Sample files: {workspace.unsupportedSummary.sampleFilePaths.join(", ")}
-                </p>
+                {workspace.unsupportedSummary.sampleFilePaths.length > 0 ? (
+                  <p className={styles.muted}>
+                    Sample files (up to 5):{" "}
+                    {workspace.unsupportedSummary.sampleFilePaths.join(", ")}
+                  </p>
+                ) : null}
               </>
             )}
           </div>

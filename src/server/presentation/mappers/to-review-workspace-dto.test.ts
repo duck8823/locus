@@ -155,9 +155,9 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.unsupportedSummary).toEqual({
       totalCount: 3,
       byReason: [
-        { reason: "unsupported_language", count: 1 },
-        { reason: "parser_failed", count: 1 },
         { reason: "binary_file", count: 1 },
+        { reason: "parser_failed", count: 1 },
+        { reason: "unsupported_language", count: 1 },
       ],
       sampleFilePaths: ["assets/logo.png", "src/app.vue", "src/broken.ts"],
     });
