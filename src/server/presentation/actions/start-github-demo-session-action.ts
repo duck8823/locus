@@ -91,45 +91,38 @@ function createDemoErrorMessage(error: unknown): string {
 }
 
 export async function startGitHubDemoSessionAction(formData: FormData): Promise<void> {
-  const owner = readRequiredValue({
-    formData,
-    formFieldName: "owner",
-    envName: "LOCUS_GITHUB_DEMO_OWNER",
-    label: "GitHub owner",
-  });
-  const repository = readRequiredValue({
-    formData,
-    formFieldName: "repository",
-    envName: "LOCUS_GITHUB_DEMO_REPO",
-    label: "GitHub repository",
-  });
-  const pullRequestNumberRaw = readRequiredValue({
-    formData,
-    formFieldName: "pullRequestNumber",
-    envName: "LOCUS_GITHUB_DEMO_PR_NUMBER",
-    label: "GitHub pull request number",
-  });
-  const pullRequestNumber = parsePullRequestNumber(pullRequestNumberRaw);
-
   const viewerName = "Demo reviewer";
-  const cookieStore = await cookies();
-
-  cookieStore.set(demoViewerCookieName, viewerName, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
-
-  const reviewId = createReviewId(owner, repository, pullRequestNumber);
-  const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } = getDependencies();
-  const useCase = new IngestGitHubPullRequestUseCase({
-    reviewSessionRepository,
-    parserAdapters,
-    pullRequestSnapshotProvider,
-  });
+  let reviewId = "";
 
   try {
+    const owner = readRequiredValue({
+      formData,
+      formFieldName: "owner",
+      envName: "LOCUS_GITHUB_DEMO_OWNER",
+      label: "GitHub owner",
+    });
+    const repository = readRequiredValue({
+      formData,
+      formFieldName: "repository",
+      envName: "LOCUS_GITHUB_DEMO_REPO",
+      label: "GitHub repository",
+    });
+    const pullRequestNumberRaw = readRequiredValue({
+      formData,
+      formFieldName: "pullRequestNumber",
+      envName: "LOCUS_GITHUB_DEMO_PR_NUMBER",
+      label: "GitHub pull request number",
+    });
+    const pullRequestNumber = parsePullRequestNumber(pullRequestNumberRaw);
+    reviewId = createReviewId(owner, repository, pullRequestNumber);
+
+    const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } = getDependencies();
+    const useCase = new IngestGitHubPullRequestUseCase({
+      reviewSessionRepository,
+      parserAdapters,
+      pullRequestSnapshotProvider,
+    });
+
     await useCase.execute({
       reviewId,
       viewerName,
@@ -137,11 +130,20 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
       repository,
       pullRequestNumber,
     });
+
+    const cookieStore = await cookies();
+    cookieStore.set(demoViewerCookieName, viewerName, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+
+    revalidatePath(`/reviews/${reviewId}`);
   } catch (error) {
     const message = createDemoErrorMessage(error);
     redirect(`/?githubDemoError=${encodeURIComponent(message)}`);
   }
 
-  revalidatePath(`/reviews/${reviewId}`);
   redirect(`/reviews/${reviewId}`);
 }
