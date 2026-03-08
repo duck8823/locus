@@ -37,6 +37,12 @@ function parseFileNode(raw: string): ArchitectureNodeView {
   };
 }
 
+/**
+ * Expected payload format:
+ * - symbol:<kind>::<name>
+ * - symbol:<kind>:<container>::<name>
+ * - symbol:<kind>:<container1>:<container2>::<name>
+ */
 function parseSymbolNode(raw: string): ArchitectureNodeView {
   const payload = raw.slice("symbol:".length).trim();
 
@@ -91,7 +97,8 @@ export function toArchitectureNodeView(raw: string): ArchitectureNodeView {
 }
 
 export function groupArchitectureNodes(rawNodes: string[]): ArchitectureNodeGroups {
-  const deduplicated = [...new Set(rawNodes.map((rawNode) => rawNode.trim()).filter((rawNode) => rawNode.length > 0))];
+  const trimmed = rawNodes.map((rawNode) => rawNode.trim()).filter((rawNode) => rawNode.length > 0);
+  const deduplicated = [...new Set(trimmed)];
   const groups: ArchitectureNodeGroups = {
     layer: [],
     file: [],

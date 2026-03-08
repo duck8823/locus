@@ -189,8 +189,12 @@ export default async function ReviewWorkspacePage({
                     ) : (
                       <div className={styles.archSections}>
                         {categories.map(([category, nodes]) => (
-                          <section key={`${column.label}-${category}`} className={styles.archSection}>
-                            <h4>{ARCHITECTURE_CATEGORY_LABELS[category]}</h4>
+                          <section
+                            key={`${column.label}-${category}`}
+                            aria-labelledby={`arch-${column.label.toLowerCase()}-${category}`}
+                            className={styles.archSection}
+                          >
+                            <h4 id={`arch-${column.label.toLowerCase()}-${category}`}>{ARCHITECTURE_CATEGORY_LABELS[category]}</h4>
                             <ul className={styles.archNodeList}>
                               {nodes.map((node) => (
                                 <li key={`${column.label}-${node.raw}`}>

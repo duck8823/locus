@@ -91,4 +91,12 @@ describe("architecture-node formatter", () => {
       label: "method symbol",
     });
   });
+
+  it("formats nested symbol containers consistently", () => {
+    expect(toArchitectureNodeView("symbol:method:App:Users::Service::save")).toEqual({
+      raw: "symbol:method:App:Users::Service::save",
+      kind: "symbol",
+      label: "App.Users.Service.save (method)",
+    });
+  });
 });
