@@ -33,9 +33,9 @@ export interface ReanalyzeReviewResult {
   reviewSession: ReviewSession;
   snapshotPairCount: number;
   source: ReviewSessionSource | null;
-  reanalysisStatus: Exclude<ReviewReanalysisStatus, "idle" | "running">;
-  lastReanalyzeRequestedAt: string;
-  lastReanalyzeCompletedAt: string;
+  reanalysisStatus: ReviewReanalysisStatus;
+  lastReanalyzeRequestedAt: string | null;
+  lastReanalyzeCompletedAt: string | null;
   errorMessage: string | null;
 }
 
@@ -77,6 +77,10 @@ function toReanalysisErrorMessage(error: unknown): string {
   }
 
   return "Unknown error while reanalyzing review.";
+}
+
+function isSupersededRun(record: ReviewSessionRecord, startedAt: string): boolean {
+  return record.lastReanalyzeRequestedAt !== startedAt;
 }
 
 function createGroupStatusLookups(
@@ -211,6 +215,19 @@ export class ReanalyzeReviewUseCase {
       const completedAt = new Date().toISOString();
       const latestReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
       const latestProgressRecord = latestReviewSession?.toRecord() ?? previousRecord;
+
+      if (isSupersededRun(latestProgressRecord, startedAt) && latestReviewSession) {
+        return {
+          reviewSession: latestReviewSession,
+          snapshotPairCount,
+          source: latestProgressRecord.source ?? source,
+          reanalysisStatus: latestProgressRecord.reanalysisStatus ?? "idle",
+          lastReanalyzeRequestedAt: latestProgressRecord.lastReanalyzeRequestedAt,
+          lastReanalyzeCompletedAt: latestProgressRecord.lastReanalyzeCompletedAt ?? null,
+          errorMessage: latestProgressRecord.lastReanalyzeError ?? null,
+        };
+      }
+
       const mergedRecord = mergePreviousReviewProgress({
         previousRecord: latestProgressRecord,
         nextRecord: refreshedReviewSession.toRecord(),
@@ -239,6 +256,22 @@ export class ReanalyzeReviewUseCase {
       try {
         const latestReviewSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
         failedSession = latestReviewSession ?? existingReviewSession;
+
+        if (latestReviewSession) {
+          const latestRecord = latestReviewSession.toRecord();
+
+          if (isSupersededRun(latestRecord, startedAt)) {
+            return {
+              reviewSession: latestReviewSession,
+              snapshotPairCount,
+              source: latestRecord.source ?? source,
+              reanalysisStatus: latestRecord.reanalysisStatus ?? "idle",
+              lastReanalyzeRequestedAt: latestRecord.lastReanalyzeRequestedAt,
+              lastReanalyzeCompletedAt: latestRecord.lastReanalyzeCompletedAt ?? null,
+              errorMessage: latestRecord.lastReanalyzeError ?? null,
+            };
+          }
+        }
       } catch {
         failedSession = existingReviewSession;
       }
