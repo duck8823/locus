@@ -16,22 +16,13 @@ function formatReviewGroupStatus(status: string) {
   return status.replaceAll("_", " ");
 }
 
-function architectureCategoryLabel(
-  category: keyof ArchitectureNodeGroups,
-): string {
-  switch (category) {
-    case "layer":
-      return "Layers";
-    case "file":
-      return "Files";
-    case "symbol":
-      return "Symbols";
-    case "unknown":
-      return "Others";
-    default:
-      return "Nodes";
-  }
-}
+const ARCHITECTURE_CATEGORY_ORDER = ["layer", "file", "symbol", "unknown"] as const;
+const ARCHITECTURE_CATEGORY_LABELS: Record<keyof ArchitectureNodeGroups, string> = {
+  layer: "Layers",
+  file: "Files",
+  symbol: "Symbols",
+  unknown: "Others",
+};
 
 export default async function ReviewWorkspacePage({
   params,
@@ -187,9 +178,8 @@ export default async function ReviewWorkspacePage({
                 { label: "Downstream", nodes: selectedGroup.downstream },
               ].map((column) => {
                 const groupedNodes = groupArchitectureNodes(column.nodes);
-                const categories = Object.entries(groupedNodes).filter(([, nodes]) => nodes.length > 0) as Array<
-                  [keyof ArchitectureNodeGroups, ArchitectureNodeGroups[keyof ArchitectureNodeGroups]]
-                >;
+                const categories = ARCHITECTURE_CATEGORY_ORDER.map((category) => [category, groupedNodes[category]] as const)
+                  .filter(([, nodes]) => nodes.length > 0);
 
                 return (
                   <div key={column.label} className={styles.archColumn}>
@@ -200,7 +190,7 @@ export default async function ReviewWorkspacePage({
                       <div className={styles.archSections}>
                         {categories.map(([category, nodes]) => (
                           <section key={`${column.label}-${category}`} className={styles.archSection}>
-                            <h4>{architectureCategoryLabel(category)}</h4>
+                            <h4>{ARCHITECTURE_CATEGORY_LABELS[category]}</h4>
                             <ul className={styles.archNodeList}>
                               {nodes.map((node) => (
                                 <li key={`${column.label}-${node.raw}`}>

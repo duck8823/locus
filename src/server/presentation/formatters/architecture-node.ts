@@ -37,12 +37,22 @@ function parseFileNode(raw: string): ArchitectureNodeView {
 }
 
 function parseSymbolNode(raw: string): ArchitectureNodeView {
-  const payload = raw.slice("symbol:".length);
+  const payload = raw.slice("symbol:".length).trim();
+
+  if (payload.length === 0) {
+    return {
+      raw,
+      kind: "symbol",
+      label: "unknown symbol",
+    };
+  }
+
   const segments = payload.split("::");
   const primarySegment = segments[0] ?? "symbol";
   const [kind = "symbol", ...primaryContainerParts] = primarySegment.split(":");
+  const normalizedKind = kind.trim().length > 0 ? kind.trim() : "symbol";
   const remainingSegments = segments.slice(1);
-  const symbolName = remainingSegments.at(-1) ?? primarySegment;
+  const symbolName = (remainingSegments.at(-1) ?? primarySegment).trim() || "unknown";
   const containerSegments = [
     ...primaryContainerParts,
     ...remainingSegments.slice(0, Math.max(remainingSegments.length - 1, 0)),
@@ -53,7 +63,7 @@ function parseSymbolNode(raw: string): ArchitectureNodeView {
   return {
     raw,
     kind: "symbol",
-    label: `${displayName} (${kind})`,
+    label: `${displayName} (${normalizedKind})`,
   };
 }
 

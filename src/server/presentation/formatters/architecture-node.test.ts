@@ -45,4 +45,41 @@ describe("architecture-node formatter", () => {
     expect(grouped.symbol).toHaveLength(1);
     expect(grouped.unknown).toHaveLength(1);
   });
+
+  it("handles empty and unknown node payloads safely", () => {
+    expect(toArchitectureNodeView("layer:")).toEqual({
+      raw: "layer:",
+      kind: "layer",
+      label: "unknown",
+    });
+    expect(toArchitectureNodeView("file:")).toEqual({
+      raw: "file:",
+      kind: "file",
+      label: "file:",
+    });
+    expect(toArchitectureNodeView("symbol:")).toEqual({
+      raw: "symbol:",
+      kind: "symbol",
+      label: "unknown symbol",
+    });
+    expect(toArchitectureNodeView("module:foo")).toEqual({
+      raw: "module:foo",
+      kind: "unknown",
+      label: "module:foo",
+    });
+  });
+
+  it("sorts grouped labels alphabetically", () => {
+    const grouped = groupArchitectureNodes([
+      "file:src/z.ts",
+      "file:src/a.ts",
+      "file:src/m.ts",
+    ]);
+
+    expect(grouped.file.map((node) => node.label)).toEqual([
+      "src/a.ts",
+      "src/m.ts",
+      "src/z.ts",
+    ]);
+  });
 });
