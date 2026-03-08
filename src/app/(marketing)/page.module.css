@@ -145,7 +145,7 @@
 }
 
 .demoHint code {
-  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
     monospace;
   background: rgba(11, 16, 32, 0.5);
   border: 1px solid rgba(154, 167, 209, 0.2);
