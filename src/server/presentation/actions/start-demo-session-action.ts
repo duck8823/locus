@@ -3,9 +3,9 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { OpenReviewWorkspaceUseCase } from "@/server/application/usecases/open-review-workspace";
+import { defaultSeedReviewId } from "@/server/application/services/review-session-seed";
 import { getDependencies } from "@/server/composition/dependencies";
 
-const demoReviewId = "demo-review";
 const demoViewerCookieName = "locus-demo-viewer";
 
 export async function startDemoSessionAction(): Promise<void> {
@@ -21,7 +21,7 @@ export async function startDemoSessionAction(): Promise<void> {
 
   const { reviewSessionRepository, parserAdapters } = getDependencies();
   const useCase = new OpenReviewWorkspaceUseCase({ reviewSessionRepository, parserAdapters });
-  await useCase.execute({ reviewId: demoReviewId, viewerName });
+  await useCase.execute({ reviewId: defaultSeedReviewId, viewerName });
 
-  redirect(`/reviews/${demoReviewId}`);
+  redirect(`/reviews/${defaultSeedReviewId}`);
 }

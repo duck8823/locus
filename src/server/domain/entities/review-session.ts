@@ -4,6 +4,7 @@ import type {
   SemanticChange,
   UnsupportedFileAnalysis,
 } from "@/server/domain/value-objects/semantic-change";
+import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
 
 export interface ReviewGroupRecord {
   groupId: string;
@@ -24,6 +25,7 @@ export interface ReviewSessionRecord {
   repositoryName: string;
   branchLabel: string;
   viewerName: string;
+  source?: ReviewSessionSource;
   selectedGroupId: string | null;
   groups: ReviewGroupRecord[];
   semanticChanges?: SemanticChange[];
@@ -38,6 +40,7 @@ export interface CreateReviewSessionParams {
   repositoryName: string;
   branchLabel: string;
   viewerName: string;
+  source?: ReviewSessionSource;
   groups: ReviewGroupRecord[];
   semanticChanges?: SemanticChange[];
   unsupportedFileAnalyses?: UnsupportedFileAnalysis[];
@@ -82,9 +85,37 @@ function cloneUnsupportedFileAnalysis(record: UnsupportedFileAnalysis): Unsuppor
   };
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unsupported review session source provider: ${JSON.stringify(value)}`);
+}
+
+function cloneSource(source: ReviewSessionSource | undefined): ReviewSessionSource | undefined {
+  if (!source) {
+    return undefined;
+  }
+
+  switch (source.provider) {
+    case "github":
+      return {
+        provider: "github",
+        owner: source.owner,
+        repository: source.repository,
+        pullRequestNumber: source.pullRequestNumber,
+      };
+    case "seed_fixture":
+      return {
+        provider: "seed_fixture",
+        fixtureId: source.fixtureId,
+      };
+  }
+
+  return assertNever(source);
+}
+
 function cloneRecord(record: ReviewSessionRecord): ReviewSessionRecord {
   return {
     ...record,
+    source: cloneSource(record.source),
     groups: record.groups.map(cloneGroup),
     semanticChanges: (record.semanticChanges ?? []).map(cloneSemanticChange),
     unsupportedFileAnalyses: (record.unsupportedFileAnalyses ?? []).map(cloneUnsupportedFileAnalysis),
@@ -121,6 +152,7 @@ export class ReviewSession {
       repositoryName: params.repositoryName,
       branchLabel: params.branchLabel,
       viewerName: params.viewerName,
+      source: cloneSource(params.source),
       selectedGroupId,
       groups: params.groups.map(cloneGroup),
       semanticChanges: (params.semanticChanges ?? []).map(cloneSemanticChange),

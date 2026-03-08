@@ -56,6 +56,7 @@ export class IngestGitHubPullRequestUseCase {
       repositoryName: bundle.repositoryName,
       branchLabel: bundle.branchLabel,
       viewerName,
+      source: bundle.source,
       createdAt: timestamp,
       snapshotPairs: bundle.snapshotPairs,
       parserAdapters: this.dependencies.parserAdapters,

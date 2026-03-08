@@ -10,6 +10,9 @@ export interface CreateSeedReviewSessionInput {
   parserAdapters: ParserAdapter[];
 }
 
+export const defaultSeedFixtureId = "default";
+export const defaultSeedReviewId = "demo-review";
+
 export async function createSeedReviewSession({
   reviewId,
   viewerName,
@@ -22,6 +25,10 @@ export async function createSeedReviewSession({
     repositoryName: "duck8823/locus",
     branchLabel: "feat/semantic-analysis-spike",
     viewerName,
+    source: {
+      provider: "seed_fixture",
+      fixtureId: defaultSeedFixtureId,
+    },
     createdAt,
     snapshotPairs: createSeedSourceSnapshotPairs(reviewId),
     parserAdapters,

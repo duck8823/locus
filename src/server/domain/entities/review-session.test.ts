@@ -57,4 +57,31 @@ describe("ReviewSession", () => {
 
     expect(() => session.selectGroup("missing")).toThrow(ReviewGroupNotFoundError);
   });
+
+  it("clones source metadata defensively", () => {
+    const session = ReviewSession.create({
+      ...createSession().toRecord(),
+      source: {
+        provider: "github",
+        owner: "octocat",
+        repository: "locus",
+        pullRequestNumber: 12,
+      },
+    });
+
+    const record = session.toRecord();
+    if (!record.source || record.source.provider !== "github") {
+      throw new Error("unexpected source");
+    }
+
+    record.source.owner = "tampered-owner";
+
+    const reloadedRecord = session.toRecord();
+    expect(reloadedRecord.source).toEqual({
+      provider: "github",
+      owner: "octocat",
+      repository: "locus",
+      pullRequestNumber: 12,
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ReanalyzeReviewUseCase } from "@/server/application/usecases/reanalyze-review";
 import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
+import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
 import { getDependencies } from "@/server/composition/dependencies";
 import { parseReanalyzeRequest } from "@/server/presentation/api/parse-reanalyze-request";
 
@@ -12,24 +13,30 @@ export async function POST(
     const { reviewId } = await context.params;
     const body = await request.json().catch(() => null);
     parseReanalyzeRequest(body);
-    const { reviewSessionRepository, analysisJobScheduler } = getDependencies();
+    const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } = getDependencies();
     const useCase = new ReanalyzeReviewUseCase({
       reviewSessionRepository,
-      analysisJobScheduler,
+      parserAdapters,
+      pullRequestSnapshotProvider,
     });
     const result = await useCase.execute({ reviewId });
 
     return NextResponse.json(
       {
         reviewId,
-        jobId: result.scheduledJob.jobId,
-        acceptedAt: result.scheduledJob.acceptedAt,
+        snapshotPairCount: result.snapshotPairCount,
+        source: result.source,
+        lastReanalyzeRequestedAt: result.lastReanalyzeRequestedAt,
       },
-      { status: 202 },
+      { status: 200 },
     );
   } catch (error) {
     if (error instanceof ReviewSessionNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
+    }
+
+    if (error instanceof ReanalyzeSourceUnavailableError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
     return NextResponse.json(

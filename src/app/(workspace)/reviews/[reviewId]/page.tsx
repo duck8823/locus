@@ -100,7 +100,7 @@ export default async function ReviewWorkspacePage({
           <form action={requestReanalysisAction}>
             <input name="reviewId" type="hidden" value={workspace.reviewId} />
             <button className={styles.actionButton} type="submit">
-              Queue reanalysis stub
+              Reanalyze now
             </button>
           </form>
         </div>
