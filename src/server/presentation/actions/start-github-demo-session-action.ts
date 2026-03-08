@@ -86,8 +86,11 @@ function createDemoErrorMessage(error: unknown): string {
     return "GitHub PR の取得に失敗しました。owner/repository/PR number、レート制限、認証設定を確認してください。";
   }
 
-  const firstLine = error.message.split("\n", 1)[0] ?? "GitHub demo を開始できませんでした。";
-  return firstLine.slice(0, 180);
+  if (error.message.endsWith(" is required.") || error.message === "GitHub pull request number must be a positive integer.") {
+    return error.message;
+  }
+
+  return "GitHub demo を開始できませんでした。入力値と設定を確認してください。";
 }
 
 export async function startGitHubDemoSessionAction(formData: FormData): Promise<void> {
