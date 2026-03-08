@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { posix as pathPosix } from "node:path";
 import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 import type { SourceSnapshot, SourceSnapshotPair } from "@/server/domain/value-objects/source-snapshot";
 import type {
@@ -25,6 +26,31 @@ interface DiffPlan {
   afterSnapshot: SourceSnapshot | null;
 }
 
+interface SnapshotDependencySource {
+  filePath: string;
+  content: string;
+}
+
+interface FileDependencyContext {
+  outgoingByPath: Map<string, Set<string>>;
+  incomingByPath: Map<string, Set<string>>;
+}
+
+const RESOLVABLE_SOURCE_EXTENSIONS = [
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".go",
+  ".java",
+  ".rb",
+  ".rs",
+  ".php",
+];
+
 function createStableId(...parts: string[]): string {
   return createHash("sha256").update(parts.join("::")).digest("hex").slice(0, 20);
 }
@@ -47,6 +73,154 @@ function inferDominantLayer(filePath: string): string | undefined {
   }
 
   return undefined;
+}
+
+function collectImportSpecifiers(content: string): string[] {
+  const specifiers = new Set<string>();
+  const patterns = [
+    /\bimport\s+(?:type\s+)?(?:[^"'`]+?\s+from\s+)?["'`]([^"'`]+)["'`]/g,
+    /\bexport\s+(?:type\s+)?(?:[^"'`]+?\s+from\s+)?["'`]([^"'`]+)["'`]/g,
+    /\brequire\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g,
+    /\bimport\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g,
+  ];
+
+  for (const pattern of patterns) {
+    pattern.lastIndex = 0;
+
+    for (const match of content.matchAll(pattern)) {
+      const specifier = match[1];
+
+      if (!specifier || !specifier.startsWith(".")) {
+        continue;
+      }
+
+      specifiers.add(specifier);
+    }
+  }
+
+  return [...specifiers];
+}
+
+function resolveRelativeImportPath(
+  currentFilePath: string,
+  importSpecifier: string,
+  knownFilePaths: Set<string>,
+): string | null {
+  const baseDirectory = pathPosix.dirname(currentFilePath);
+  const resolvedBase = pathPosix.normalize(pathPosix.join(baseDirectory, importSpecifier));
+  const candidates = new Set<string>([resolvedBase]);
+
+  if (pathPosix.extname(resolvedBase).length === 0) {
+    for (const extension of RESOLVABLE_SOURCE_EXTENSIONS) {
+      candidates.add(`${resolvedBase}${extension}`);
+      candidates.add(pathPosix.join(resolvedBase, `index${extension}`));
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (knownFilePaths.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function collectDependencySources(snapshotPairs: SourceSnapshotPair[]): SnapshotDependencySource[] {
+  const sourcesByPath = new Map<string, SnapshotDependencySource>();
+
+  for (const pair of snapshotPairs) {
+    for (const snapshot of [pair.before, pair.after]) {
+      if (!snapshot) {
+        continue;
+      }
+
+      sourcesByPath.set(snapshot.filePath, {
+        filePath: snapshot.filePath,
+        content: snapshot.content,
+      });
+    }
+  }
+
+  return [...sourcesByPath.values()];
+}
+
+function buildFileDependencyContext(snapshotPairs: SourceSnapshotPair[]): FileDependencyContext {
+  const sources = collectDependencySources(snapshotPairs);
+  const knownFilePaths = new Set(sources.map((source) => source.filePath));
+  const outgoingByPath = new Map<string, Set<string>>();
+  const incomingByPath = new Map<string, Set<string>>();
+
+  for (const source of sources) {
+    const outgoing = outgoingByPath.get(source.filePath) ?? new Set<string>();
+    outgoingByPath.set(source.filePath, outgoing);
+
+    for (const importSpecifier of collectImportSpecifiers(source.content)) {
+      const resolvedPath = resolveRelativeImportPath(source.filePath, importSpecifier, knownFilePaths);
+
+      if (!resolvedPath || resolvedPath === source.filePath) {
+        continue;
+      }
+
+      outgoing.add(resolvedPath);
+
+      const incoming = incomingByPath.get(resolvedPath) ?? new Set<string>();
+      incoming.add(source.filePath);
+      incomingByPath.set(resolvedPath, incoming);
+    }
+  }
+
+  return {
+    outgoingByPath,
+    incomingByPath,
+  };
+}
+
+function mergeArchitectureContext(
+  semanticChanges: SemanticChange[],
+  dependencies: FileDependencyContext,
+): SemanticChange[] {
+  return semanticChanges.map((semanticChange) => {
+    const filePath = semanticChange.after?.filePath ?? semanticChange.before?.filePath;
+
+    if (!filePath) {
+      return semanticChange;
+    }
+
+    const outgoing = new Set<string>(semanticChange.architecture?.outgoingNodeIds ?? []);
+    const incoming = new Set<string>(semanticChange.architecture?.incomingNodeIds ?? []);
+    const currentLayer = inferDominantLayer(filePath);
+
+    for (const downstreamPath of dependencies.outgoingByPath.get(filePath) ?? []) {
+      outgoing.add(`file:${downstreamPath}`);
+      const downstreamLayer = inferDominantLayer(downstreamPath);
+
+      if (downstreamLayer && downstreamLayer !== currentLayer) {
+        outgoing.add(`layer:${downstreamLayer}`);
+      }
+    }
+
+    for (const upstreamPath of dependencies.incomingByPath.get(filePath) ?? []) {
+      incoming.add(`file:${upstreamPath}`);
+      const upstreamLayer = inferDominantLayer(upstreamPath);
+
+      if (upstreamLayer && upstreamLayer !== currentLayer) {
+        incoming.add(`layer:${upstreamLayer}`);
+      }
+    }
+
+    const hasArchitecture = outgoing.size > 0 || incoming.size > 0;
+
+    return {
+      ...semanticChange,
+      architecture: hasArchitecture
+        ? {
+            outgoingNodeIds: [...outgoing].sort(),
+            incomingNodeIds: [...incoming].sort(),
+          }
+        : undefined,
+    };
+  });
 }
 
 function selectAdapter(
@@ -73,7 +247,7 @@ export async function analyzeSourceSnapshots({
   snapshotPairs,
   parserAdapters,
 }: AnalyzeSourceSnapshotsInput): Promise<AnalyzeSourceSnapshotsResult> {
-  const semanticChanges: SemanticChange[] = [];
+  let semanticChanges: SemanticChange[] = [];
   const unsupportedFiles: UnsupportedFileAnalysis[] = [];
 
   for (const pair of snapshotPairs) {
@@ -222,6 +396,11 @@ export async function analyzeSourceSnapshots({
       });
     }
   }
+
+  semanticChanges = mergeArchitectureContext(
+    semanticChanges,
+    buildFileDependencyContext(snapshotPairs),
+  );
 
   const groupedByFile = new Map<string, SemanticChange[]>();
 

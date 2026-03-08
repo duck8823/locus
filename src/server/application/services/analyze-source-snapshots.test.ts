@@ -273,6 +273,111 @@ class OverloadDiscriminatorAdapter implements ParserAdapter {
   }
 }
 
+class BasicArchitectureParserAdapter implements ParserAdapter {
+  readonly language = "typescript";
+  readonly adapterName = "basic-architecture-adapter";
+
+  supports(file: SourceSnapshot): boolean {
+    return file.language === "typescript";
+  }
+
+  async parse(snapshot: SourceSnapshot): Promise<ParsedSnapshot> {
+    return {
+      snapshotId: snapshot.snapshotId,
+      adapterName: this.adapterName,
+      language: this.language,
+      raw: snapshot,
+    };
+  }
+
+  async diff(input: { before: ParsedSnapshot | null; after: ParsedSnapshot | null }): Promise<ParserDiffResult> {
+    const beforeSnapshot = input.before?.raw as SourceSnapshot | undefined;
+    const afterSnapshot = input.after?.raw as SourceSnapshot | undefined;
+    const filePath = afterSnapshot?.filePath ?? beforeSnapshot?.filePath ?? "src/unknown.ts";
+
+    if (!beforeSnapshot && afterSnapshot) {
+      return {
+        adapterName: this.adapterName,
+        language: this.language,
+        items: [
+          {
+            symbolKey: `function::<root>::added::${filePath}`,
+            displayName: "addedSymbol",
+            kind: "function",
+            changeType: "added",
+            afterRegion: {
+              filePath,
+              startLine: 1,
+              endLine: 1,
+            },
+          },
+        ],
+      };
+    }
+
+    if (beforeSnapshot && !afterSnapshot) {
+      return {
+        adapterName: this.adapterName,
+        language: this.language,
+        items: [
+          {
+            symbolKey: `function::<root>::removed::${filePath}`,
+            displayName: "removedSymbol",
+            kind: "function",
+            changeType: "removed",
+            beforeRegion: {
+              filePath,
+              startLine: 1,
+              endLine: 1,
+            },
+          },
+        ],
+      };
+    }
+
+    if (!beforeSnapshot || !afterSnapshot || beforeSnapshot.content === afterSnapshot.content) {
+      return {
+        adapterName: this.adapterName,
+        language: this.language,
+        items: [],
+      };
+    }
+
+    return {
+      adapterName: this.adapterName,
+      language: this.language,
+      items: [
+        {
+          symbolKey: `function::<root>::modified::${filePath}`,
+          displayName: "modifiedSymbol",
+          kind: "function",
+          changeType: "modified",
+          beforeRegion: {
+            filePath,
+            startLine: 1,
+            endLine: 1,
+          },
+          afterRegion: {
+            filePath,
+            startLine: 1,
+            endLine: 1,
+          },
+        },
+      ],
+    };
+  }
+
+  capabilities(): ParserCapabilities {
+    return {
+      callableDiff: true,
+      importGraph: false,
+      renameDetection: false,
+      moveDetection: false,
+      typeAwareSummary: false,
+    };
+  }
+}
+
 describe("analyzeSourceSnapshots", () => {
   it("creates semantic changes, groups, and unsupported file records", async () => {
     const result = await analyzeSourceSnapshots({
@@ -532,5 +637,97 @@ describe("analyzeSourceSnapshots", () => {
     expect(new Set(semanticChangeIds).size).toBe(2);
     expect(result.groups).toHaveLength(1);
     expect(new Set(result.groups[0]?.semanticChangeIds ?? []).size).toBe(2);
+  });
+
+  it("attaches immediate file/layer neighbors from relative imports", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "architecture-review",
+      snapshotPairs: [
+        {
+          fileId: "file-controller",
+          filePath: "src/application/user-controller.ts",
+          before: {
+            snapshotId: "architecture-review:file-controller:before",
+            fileId: "file-controller",
+            filePath: "src/application/user-controller.ts",
+            language: "typescript",
+            revision: "before",
+            content: "import { createUser } from '../domain/user-service';\nexport const run = () => createUser();",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "architecture-review:file-controller:after",
+            fileId: "file-controller",
+            filePath: "src/application/user-controller.ts",
+            language: "typescript",
+            revision: "after",
+            content:
+              "import { createUser } from '../domain/user-service';\nexport const run = () => createUser('active');",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-service",
+          filePath: "src/domain/user-service.ts",
+          before: {
+            snapshotId: "architecture-review:file-service:before",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "import { insertUser } from '../infrastructure/user-repository';\nexport const createUser = () => insertUser();",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "architecture-review:file-service:after",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "after",
+            content:
+              "import { insertUser } from '../infrastructure/user-repository';\nexport const createUser = (status:string) => insertUser(status);",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-repository",
+          filePath: "src/infrastructure/user-repository.ts",
+          before: {
+            snapshotId: "architecture-review:file-repository:before",
+            fileId: "file-repository",
+            filePath: "src/infrastructure/user-repository.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const insertUser = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "architecture-review:file-repository:after",
+            fileId: "file-repository",
+            filePath: "src/infrastructure/user-repository.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const insertUser = (_status:string) => true;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const byFileId = new Map(result.semanticChanges.map((change) => [change.fileId, change]));
+
+    expect(byFileId.get("file-controller")?.architecture?.outgoingNodeIds).toEqual(
+      expect.arrayContaining(["file:src/domain/user-service.ts", "layer:domain"]),
+    );
+    expect(byFileId.get("file-service")?.architecture?.incomingNodeIds).toEqual(
+      expect.arrayContaining(["file:src/application/user-controller.ts", "layer:application"]),
+    );
+    expect(byFileId.get("file-service")?.architecture?.outgoingNodeIds).toEqual(
+      expect.arrayContaining(["file:src/infrastructure/user-repository.ts", "layer:infrastructure"]),
+    );
+    expect(byFileId.get("file-repository")?.architecture?.incomingNodeIds).toEqual(
+      expect.arrayContaining(["file:src/domain/user-service.ts", "layer:domain"]),
+    );
   });
 });
