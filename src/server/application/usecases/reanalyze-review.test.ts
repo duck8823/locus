@@ -426,6 +426,63 @@ describe("ReanalyzeReviewUseCase", () => {
     expect(record?.lastReanalyzeError).toBeNull();
   });
 
+  it("does not treat stale non-reanalysis saves as newer runs", async () => {
+    const repository = new InMemoryReviewSessionRepository();
+    const initialSession = ReviewSession.create({
+      reviewId: "github-octocat-locus-pr-12",
+      title: "PR #12: Improve updateProfile validation",
+      repositoryName: "octocat/locus",
+      branchLabel: "feature/update-profile → main",
+      viewerName: "Demo reviewer",
+      source: {
+        provider: "github",
+        owner: "octocat",
+        repository: "locus",
+        pullRequestNumber: 12,
+      },
+      lastOpenedAt: "2026-03-07T00:00:00.000Z",
+      groups: [
+        {
+          groupId: "legacy-group",
+          title: "Legacy group",
+          summary: "Legacy summary",
+          filePath: "src/user-service.ts",
+          status: "unread",
+          upstream: [],
+          downstream: [],
+        },
+      ],
+    });
+    repository.seed(initialSession);
+    const staleRecord = initialSession.toRecord();
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    snapshotProvider.onFetch = async () => {
+      const staleSession = ReviewSession.fromRecord(staleRecord);
+      staleSession.setGroupStatus("legacy-group", "reviewed");
+      await repository.save(staleSession);
+    };
+    const useCase = new ReanalyzeReviewUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+    });
+
+    const result = await useCase.execute({
+      reviewId: "github-octocat-locus-pr-12",
+      requestedAt: "2026-03-08T03:10:00.000Z",
+    });
+    const persisted = await repository.findByReviewId("github-octocat-locus-pr-12");
+    const record = persisted?.toRecord();
+
+    expect(result.reanalysisStatus).toBe("succeeded");
+    expect(record?.lastReanalyzeRequestedAt).toBe("2026-03-08T03:10:00.000Z");
+    expect(record?.lastReanalyzeCompletedAt).toBeTruthy();
+    expect(record?.reanalysisStatus).toBe("succeeded");
+    expect(
+      record?.groups.find((group) => group.filePath === "src/user-service.ts")?.status,
+    ).toBe("reviewed");
+  });
+
   it("rebuilds seed fixture sessions without calling the GitHub provider", async () => {
     const repository = new InMemoryReviewSessionRepository();
     repository.seed(

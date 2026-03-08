@@ -80,7 +80,20 @@ function toReanalysisErrorMessage(error: unknown): string {
 }
 
 function isSupersededRun(record: ReviewSessionRecord, startedAt: string): boolean {
-  return record.lastReanalyzeRequestedAt !== startedAt;
+  const latestRequestedAt = record.lastReanalyzeRequestedAt;
+
+  if (!latestRequestedAt || latestRequestedAt === startedAt) {
+    return false;
+  }
+
+  const latestRequestedAtEpochMs = Date.parse(latestRequestedAt);
+  const startedAtEpochMs = Date.parse(startedAt);
+
+  if (Number.isNaN(latestRequestedAtEpochMs) || Number.isNaN(startedAtEpochMs)) {
+    return false;
+  }
+
+  return latestRequestedAtEpochMs > startedAtEpochMs;
 }
 
 function createGroupStatusLookups(
