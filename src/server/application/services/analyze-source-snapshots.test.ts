@@ -273,6 +273,111 @@ class OverloadDiscriminatorAdapter implements ParserAdapter {
   }
 }
 
+class BasicArchitectureParserAdapter implements ParserAdapter {
+  readonly language = "typescript";
+  readonly adapterName = "basic-architecture-adapter";
+
+  supports(file: SourceSnapshot): boolean {
+    return file.language === "typescript";
+  }
+
+  async parse(snapshot: SourceSnapshot): Promise<ParsedSnapshot> {
+    return {
+      snapshotId: snapshot.snapshotId,
+      adapterName: this.adapterName,
+      language: this.language,
+      raw: snapshot,
+    };
+  }
+
+  async diff(input: { before: ParsedSnapshot | null; after: ParsedSnapshot | null }): Promise<ParserDiffResult> {
+    const beforeSnapshot = input.before?.raw as SourceSnapshot | undefined;
+    const afterSnapshot = input.after?.raw as SourceSnapshot | undefined;
+    const filePath = afterSnapshot?.filePath ?? beforeSnapshot?.filePath ?? "src/unknown.ts";
+
+    if (!beforeSnapshot && afterSnapshot) {
+      return {
+        adapterName: this.adapterName,
+        language: this.language,
+        items: [
+          {
+            symbolKey: `function::<root>::added::${filePath}`,
+            displayName: "addedSymbol",
+            kind: "function",
+            changeType: "added",
+            afterRegion: {
+              filePath,
+              startLine: 1,
+              endLine: 1,
+            },
+          },
+        ],
+      };
+    }
+
+    if (beforeSnapshot && !afterSnapshot) {
+      return {
+        adapterName: this.adapterName,
+        language: this.language,
+        items: [
+          {
+            symbolKey: `function::<root>::removed::${filePath}`,
+            displayName: "removedSymbol",
+            kind: "function",
+            changeType: "removed",
+            beforeRegion: {
+              filePath,
+              startLine: 1,
+              endLine: 1,
+            },
+          },
+        ],
+      };
+    }
+
+    if (!beforeSnapshot || !afterSnapshot || beforeSnapshot.content === afterSnapshot.content) {
+      return {
+        adapterName: this.adapterName,
+        language: this.language,
+        items: [],
+      };
+    }
+
+    return {
+      adapterName: this.adapterName,
+      language: this.language,
+      items: [
+        {
+          symbolKey: `function::<root>::modified::${filePath}`,
+          displayName: "modifiedSymbol",
+          kind: "function",
+          changeType: "modified",
+          beforeRegion: {
+            filePath,
+            startLine: 1,
+            endLine: 1,
+          },
+          afterRegion: {
+            filePath,
+            startLine: 1,
+            endLine: 1,
+          },
+        },
+      ],
+    };
+  }
+
+  capabilities(): ParserCapabilities {
+    return {
+      callableDiff: true,
+      importGraph: false,
+      renameDetection: false,
+      moveDetection: false,
+      typeAwareSummary: false,
+    };
+  }
+}
+
 describe("analyzeSourceSnapshots", () => {
   it("creates semantic changes, groups, and unsupported file records", async () => {
     const result = await analyzeSourceSnapshots({
@@ -532,5 +637,735 @@ describe("analyzeSourceSnapshots", () => {
     expect(new Set(semanticChangeIds).size).toBe(2);
     expect(result.groups).toHaveLength(1);
     expect(new Set(result.groups[0]?.semanticChangeIds ?? []).size).toBe(2);
+  });
+
+  it("attaches immediate file/layer neighbors from relative imports", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "architecture-review",
+      snapshotPairs: [
+        {
+          fileId: "file-controller",
+          filePath: "src/application/user-controller.ts",
+          before: {
+            snapshotId: "architecture-review:file-controller:before",
+            fileId: "file-controller",
+            filePath: "src/application/user-controller.ts",
+            language: "typescript",
+            revision: "before",
+            content: "import { createUser } from '../domain/user-service';\nexport const run = () => createUser();",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "architecture-review:file-controller:after",
+            fileId: "file-controller",
+            filePath: "src/application/user-controller.ts",
+            language: "typescript",
+            revision: "after",
+            content:
+              "import { createUser } from '../domain/user-service';\nexport const run = () => createUser('active');",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-service",
+          filePath: "src/domain/user-service.ts",
+          before: {
+            snapshotId: "architecture-review:file-service:before",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "import { insertUser } from '../infrastructure/user-repository';\nexport const createUser = () => insertUser();",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "architecture-review:file-service:after",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "after",
+            content:
+              "import { insertUser } from '../infrastructure/user-repository';\nexport const createUser = (status:string) => insertUser(status);",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-repository",
+          filePath: "src/infrastructure/user-repository.ts",
+          before: {
+            snapshotId: "architecture-review:file-repository:before",
+            fileId: "file-repository",
+            filePath: "src/infrastructure/user-repository.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const insertUser = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "architecture-review:file-repository:after",
+            fileId: "file-repository",
+            filePath: "src/infrastructure/user-repository.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const insertUser = (_status:string) => true;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const byFileId = new Map(result.semanticChanges.map((change) => [change.fileId, change]));
+
+    expect(byFileId.get("file-controller")?.architecture?.outgoingNodeIds).toEqual(
+      expect.arrayContaining(["file:src/domain/user-service.ts", "layer:domain"]),
+    );
+    expect(byFileId.get("file-service")?.architecture?.incomingNodeIds).toEqual(
+      expect.arrayContaining(["file:src/application/user-controller.ts", "layer:application"]),
+    );
+    expect(byFileId.get("file-service")?.architecture?.outgoingNodeIds).toEqual(
+      expect.arrayContaining(["file:src/infrastructure/user-repository.ts", "layer:infrastructure"]),
+    );
+    expect(byFileId.get("file-repository")?.architecture?.incomingNodeIds).toEqual(
+      expect.arrayContaining(["file:src/domain/user-service.ts", "layer:domain"]),
+    );
+    expect(byFileId.get("file-controller")?.architecture?.incomingNodeIds ?? []).toEqual([]);
+    expect(byFileId.get("file-repository")?.architecture?.outgoingNodeIds ?? []).toEqual([]);
+  });
+
+  it("does not attach removed-file dependents as incoming neighbors", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "removed-dependent-review",
+      snapshotPairs: [
+        {
+          fileId: "file-consumer",
+          filePath: "src/application/consumer.ts",
+          before: {
+            snapshotId: "removed-dependent-review:file-consumer:before",
+            fileId: "file-consumer",
+            filePath: "src/application/consumer.ts",
+            language: "typescript",
+            revision: "before",
+            content:
+              "import { createUser } from '../domain/user-service';\nexport const run = () => createUser();",
+            metadata: { codeHost: "github" },
+          },
+          after: null,
+        },
+        {
+          fileId: "file-service",
+          filePath: "src/domain/user-service.ts",
+          before: {
+            snapshotId: "removed-dependent-review:file-service:before",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const createUser = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "removed-dependent-review:file-service:after",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const createUser = () => 2;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const serviceChange = result.semanticChanges.find((change) => change.fileId === "file-service");
+    expect(serviceChange?.architecture?.incomingNodeIds ?? []).not.toContain(
+      "file:src/application/consumer.ts",
+    );
+  });
+
+  it("ignores import-like text in comments and string literals", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "import-sanitization-review",
+      snapshotPairs: [
+        {
+          fileId: "file-main",
+          filePath: "src/application/main.ts",
+          before: {
+            snapshotId: "import-sanitization-review:file-main:before",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const run = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "import-sanitization-review:file-main:after",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "after",
+            content: `
+// import { fakeOne } from '../domain/fake-one';
+const message = "import { fakeTwo } from '../domain/fake-two'";
+const dep = require('../domain/real-dep');
+export const run = async () => import('../domain/real-dynamic');
+`.trim(),
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-real-dep",
+          filePath: "src/domain/real-dep.ts",
+          before: {
+            snapshotId: "import-sanitization-review:file-real-dep:before",
+            fileId: "file-real-dep",
+            filePath: "src/domain/real-dep.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const value = 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "import-sanitization-review:file-real-dep:after",
+            fileId: "file-real-dep",
+            filePath: "src/domain/real-dep.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const value = 1;",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-real-dynamic",
+          filePath: "src/domain/real-dynamic.ts",
+          before: {
+            snapshotId: "import-sanitization-review:file-real-dynamic:before",
+            fileId: "file-real-dynamic",
+            filePath: "src/domain/real-dynamic.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const dynamicValue = 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "import-sanitization-review:file-real-dynamic:after",
+            fileId: "file-real-dynamic",
+            filePath: "src/domain/real-dynamic.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const dynamicValue = 1;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const mainChange = result.semanticChanges.find((change) => change.fileId === "file-main");
+    const outgoing = mainChange?.architecture?.outgoingNodeIds ?? [];
+
+    expect(outgoing).toEqual(
+      expect.arrayContaining([
+        "file:src/domain/real-dep.ts",
+        "file:src/domain/real-dynamic.ts",
+      ]),
+    );
+    expect(outgoing).not.toEqual(
+      expect.arrayContaining([
+        "file:src/domain/fake-one.ts",
+        "file:src/domain/fake-two.ts",
+      ]),
+    );
+  });
+
+  it("resolves .js import specifiers to TypeScript file paths", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "esm-resolution-review",
+      snapshotPairs: [
+        {
+          fileId: "file-main",
+          filePath: "src/application/main.ts",
+          before: {
+            snapshotId: "esm-resolution-review:file-main:before",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const run = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "esm-resolution-review:file-main:after",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "after",
+            content: "import { service } from '../domain/user-service.js';\nexport const run = () => service();",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-service",
+          filePath: "src/domain/user-service.ts",
+          before: {
+            snapshotId: "esm-resolution-review:file-service:before",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const service = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "esm-resolution-review:file-service:after",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const service = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const mainChange = result.semanticChanges.find((change) => change.fileId === "file-main");
+    expect(mainChange?.architecture?.outgoingNodeIds ?? []).toContain(
+      "file:src/domain/user-service.ts",
+    );
+  });
+
+  it("keeps outgoing architecture context for removed files", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "removed-file-outgoing-review",
+      snapshotPairs: [
+        {
+          fileId: "file-removed-consumer",
+          filePath: "src/application/removed-consumer.ts",
+          before: {
+            snapshotId: "removed-file-outgoing-review:file-removed-consumer:before",
+            fileId: "file-removed-consumer",
+            filePath: "src/application/removed-consumer.ts",
+            language: "typescript",
+            revision: "before",
+            content:
+              "import { createUser } from '../domain/user-service';\nexport const run = () => createUser();",
+            metadata: { codeHost: "github" },
+          },
+          after: null,
+        },
+        {
+          fileId: "file-service",
+          filePath: "src/domain/user-service.ts",
+          before: {
+            snapshotId: "removed-file-outgoing-review:file-service:before",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const createUser = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "removed-file-outgoing-review:file-service:after",
+            fileId: "file-service",
+            filePath: "src/domain/user-service.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const createUser = () => 2;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const removedChange = result.semanticChanges.find(
+      (change) => change.fileId === "file-removed-consumer",
+    );
+    expect(removedChange?.architecture?.outgoingNodeIds ?? []).toEqual(
+      expect.arrayContaining(["file:src/domain/user-service.ts", "layer:domain"]),
+    );
+    expect(removedChange?.architecture?.incomingNodeIds ?? []).toEqual([]);
+  });
+
+  it("does not add layer hints when import stays within the same layer", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "same-layer-review",
+      snapshotPairs: [
+        {
+          fileId: "file-a",
+          filePath: "src/domain/a.ts",
+          before: {
+            snapshotId: "same-layer-review:file-a:before",
+            fileId: "file-a",
+            filePath: "src/domain/a.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const a = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "same-layer-review:file-a:after",
+            fileId: "file-a",
+            filePath: "src/domain/a.ts",
+            language: "typescript",
+            revision: "after",
+            content: "import { b } from './b';\nexport const a = () => b();",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-b",
+          filePath: "src/domain/b.ts",
+          before: {
+            snapshotId: "same-layer-review:file-b:before",
+            fileId: "file-b",
+            filePath: "src/domain/b.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const b = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "same-layer-review:file-b:after",
+            fileId: "file-b",
+            filePath: "src/domain/b.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const b = () => true;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const change = result.semanticChanges.find((semanticChange) => semanticChange.fileId === "file-a");
+    const outgoing = change?.architecture?.outgoingNodeIds ?? [];
+    expect(outgoing).toContain("file:src/domain/b.ts");
+    expect(outgoing).not.toContain("layer:domain");
+  });
+
+  it("parses imports that contain a symbol literally named from", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "from-symbol-review",
+      snapshotPairs: [
+        {
+          fileId: "file-main",
+          filePath: "src/application/main.ts",
+          before: {
+            snapshotId: "from-symbol-review:file-main:before",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const run = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "from-symbol-review:file-main:after",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "after",
+            content:
+              "import from from '../domain/keyword-target';\nimport { from as fromSymbol } from '../domain/keyword-target';\nexport const run = () => from() + fromSymbol();",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-target",
+          filePath: "src/domain/keyword-target.ts",
+          before: {
+            snapshotId: "from-symbol-review:file-target:before",
+            fileId: "file-target",
+            filePath: "src/domain/keyword-target.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const from = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "from-symbol-review:file-target:after",
+            fileId: "file-target",
+            filePath: "src/domain/keyword-target.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const from = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const mainChange = result.semanticChanges.find((change) => change.fileId === "file-main");
+    expect(mainChange?.architecture?.outgoingNodeIds ?? []).toContain(
+      "file:src/domain/keyword-target.ts",
+    );
+  });
+
+  it("parses re-export statements for architecture context", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "re-export-review",
+      snapshotPairs: [
+        {
+          fileId: "file-barrel",
+          filePath: "src/application/barrel.ts",
+          before: {
+            snapshotId: "re-export-review:file-barrel:before",
+            fileId: "file-barrel",
+            filePath: "src/application/barrel.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const noop = true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "re-export-review:file-barrel:after",
+            fileId: "file-barrel",
+            filePath: "src/application/barrel.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export { helper } from '../domain/helper';\nexport * from '../domain/shared';",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-helper",
+          filePath: "src/domain/helper.ts",
+          before: {
+            snapshotId: "re-export-review:file-helper:before",
+            fileId: "file-helper",
+            filePath: "src/domain/helper.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const helper = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "re-export-review:file-helper:after",
+            fileId: "file-helper",
+            filePath: "src/domain/helper.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const helper = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-shared",
+          filePath: "src/domain/shared.ts",
+          before: {
+            snapshotId: "re-export-review:file-shared:before",
+            fileId: "file-shared",
+            filePath: "src/domain/shared.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const shared = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "re-export-review:file-shared:after",
+            fileId: "file-shared",
+            filePath: "src/domain/shared.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const shared = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const barrelChange = result.semanticChanges.find((change) => change.fileId === "file-barrel");
+    expect(barrelChange?.architecture?.outgoingNodeIds ?? []).toEqual(
+      expect.arrayContaining([
+        "file:src/domain/helper.ts",
+        "file:src/domain/shared.ts",
+      ]),
+    );
+  });
+
+  it("does not treat import.meta as a module import", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "import-meta-review",
+      snapshotPairs: [
+        {
+          fileId: "file-main",
+          filePath: "src/application/main.ts",
+          before: {
+            snapshotId: "import-meta-review:file-main:before",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const run = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "import-meta-review:file-main:after",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "after",
+            content: `
+const url = import.meta.url;
+const config = { from: '../domain/not-a-dependency' };
+export const run = () => url.length > 0;
+`.trim(),
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-not-a-dependency",
+          filePath: "src/domain/not-a-dependency.ts",
+          before: {
+            snapshotId: "import-meta-review:file-not-a-dependency:before",
+            fileId: "file-not-a-dependency",
+            filePath: "src/domain/not-a-dependency.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const untouched = true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "import-meta-review:file-not-a-dependency:after",
+            fileId: "file-not-a-dependency",
+            filePath: "src/domain/not-a-dependency.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const untouched = true;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const mainChange = result.semanticChanges.find((change) => change.fileId === "file-main");
+    expect(mainChange?.architecture?.outgoingNodeIds ?? []).not.toContain(
+      "file:src/domain/not-a-dependency.ts",
+    );
+  });
+
+  it("skips template literal interpolation bodies while parsing imports", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "template-literal-review",
+      snapshotPairs: [
+        {
+          fileId: "file-main",
+          filePath: "src/application/main.ts",
+          before: {
+            snapshotId: "template-literal-review:file-main:before",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const run = () => true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "template-literal-review:file-main:after",
+            fileId: "file-main",
+            filePath: "src/application/main.ts",
+            language: "typescript",
+            revision: "after",
+            content: `
+const message = \`template \${(() => "from '../domain/ignored'")()}\`;
+export const run = () => message.length;
+`.trim(),
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-ignored",
+          filePath: "src/domain/ignored.ts",
+          before: {
+            snapshotId: "template-literal-review:file-ignored:before",
+            fileId: "file-ignored",
+            filePath: "src/domain/ignored.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const ignored = true;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "template-literal-review:file-ignored:after",
+            fileId: "file-ignored",
+            filePath: "src/domain/ignored.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const ignored = true;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const mainChange = result.semanticChanges.find((change) => change.fileId === "file-main");
+    expect(mainChange?.architecture?.outgoingNodeIds ?? []).not.toContain("file:src/domain/ignored.ts");
+  });
+
+  it("skips dependency extraction for non JS/TS source languages", async () => {
+    const result = await analyzeSourceSnapshots({
+      reviewId: "non-js-source-review",
+      snapshotPairs: [
+        {
+          fileId: "file-doc",
+          filePath: "docs/guide.md",
+          before: {
+            snapshotId: "non-js-source-review:file-doc:before",
+            fileId: "file-doc",
+            filePath: "docs/guide.md",
+            language: "markdown",
+            revision: "before",
+            content: "# Guide",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "non-js-source-review:file-doc:after",
+            fileId: "file-doc",
+            filePath: "docs/guide.md",
+            language: "markdown",
+            revision: "after",
+            content: "import { service } from '../src/domain/service';",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-service",
+          filePath: "src/domain/service.ts",
+          before: {
+            snapshotId: "non-js-source-review:file-service:before",
+            fileId: "file-service",
+            filePath: "src/domain/service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const service = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "non-js-source-review:file-service:after",
+            fileId: "file-service",
+            filePath: "src/domain/service.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const service = () => 2;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+    });
+
+    const serviceChange = result.semanticChanges.find((change) => change.fileId === "file-service");
+    expect(serviceChange?.architecture?.incomingNodeIds ?? []).not.toContain("file:docs/guide.md");
   });
 });
