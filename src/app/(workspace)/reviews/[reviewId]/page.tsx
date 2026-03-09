@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import styles from "./page.module.css";
+import { AnalysisStatusPoller } from "./analysis-status-poller";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import { LocalizedDateTime } from "@/app/components/localized-date-time";
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
@@ -68,6 +69,10 @@ export default async function ReviewWorkspacePage({
   const workspace = await loadReviewWorkspaceDto({ reviewId });
   const selectedGroup =
     workspace.groups.find((group) => group.isSelected) ?? workspace.groups[0];
+  const isInitialAnalysisRunning =
+    workspace.analysisStatus === "queued" ||
+    workspace.analysisStatus === "fetching" ||
+    workspace.analysisStatus === "parsing";
   const architectureColumns: ArchitectureColumn[] = selectedGroup
     ? [
         { label: "Upstream", nodes: selectedGroup.upstream },
@@ -77,6 +82,7 @@ export default async function ReviewWorkspacePage({
 
   return (
     <main className={styles.page}>
+      <AnalysisStatusPoller active={isInitialAnalysisRunning} />
       <div className={styles.header}>
         <div>
           <Link href="/" className={styles.muted}>
@@ -132,6 +138,10 @@ export default async function ReviewWorkspacePage({
                 </li>
               ))}
             </ul>
+          ) : isInitialAnalysisRunning ? (
+            <p className={styles.muted}>
+              Initial analysis is in progress. Change groups will appear automatically.
+            </p>
           ) : (
             <p className={styles.muted}>No change groups are available yet.</p>
           )}
@@ -221,6 +231,64 @@ export default async function ReviewWorkspacePage({
               the initial shell can be reopened without losing progress or the
               currently selected change group.
             </p>
+          </div>
+          <div className={styles.detailBlock}>
+            <span className={styles.muted}>Initial analysis</span>
+            {workspace.analysisStatus === "queued" ? (
+              <p>Queued. Starting review analysis…</p>
+            ) : null}
+            {workspace.analysisStatus === "fetching" ? (
+              <p>Fetching pull request snapshots…</p>
+            ) : null}
+            {workspace.analysisStatus === "parsing" ? (
+              <>
+                <p>
+                  Parsing and grouping semantic changes
+                  {workspace.analysisTotalFiles !== null ? (
+                    <>
+                      {" "}
+                      ({Math.min(
+                        workspace.analysisProcessedFiles ?? 0,
+                        workspace.analysisTotalFiles,
+                      )}
+                      /{workspace.analysisTotalFiles} files)
+                    </>
+                  ) : workspace.analysisProcessedFiles !== null ? (
+                    <> ({workspace.analysisProcessedFiles} files processed)</>
+                  ) : null}
+                  .
+                </p>
+                {workspace.analysisRequestedAt ? (
+                  <p className={styles.muted}>
+                    Requested at{" "}
+                    <LocalizedDateTime isoTimestamp={workspace.analysisRequestedAt} />
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            {workspace.analysisStatus === "ready" ? (
+              workspace.analysisCompletedAt ? (
+                <p>
+                  Ready at <LocalizedDateTime isoTimestamp={workspace.analysisCompletedAt} />
+                </p>
+              ) : (
+                <p>Ready</p>
+              )
+            ) : null}
+            {workspace.analysisStatus === "failed" ? (
+              <>
+                <p>Initial analysis failed.</p>
+                {workspace.analysisError ? (
+                  <p className={styles.reanalysisError}>{workspace.analysisError}</p>
+                ) : null}
+              </>
+            ) : null}
+            {isInitialAnalysisRunning && workspace.groups.length === 0 ? (
+              <p className={styles.muted}>
+                First run can take longer because no local cache is available yet. You can keep
+                this tab open and the page will refresh automatically.
+              </p>
+            ) : null}
           </div>
           <div className={styles.detailBlock}>
             <span className={styles.muted}>Reanalysis status</span>

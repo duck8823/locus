@@ -4,7 +4,9 @@ import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { IngestGitHubPullRequestUseCase } from "@/server/application/usecases/ingest-github-pull-request";
+import { after } from "next/server";
+import { PrepareGitHubReviewWorkspaceUseCase } from "@/server/application/usecases/prepare-github-review-workspace";
+import { RunGitHubIngestionJobUseCase } from "@/server/application/usecases/run-github-ingestion-job";
 import { getDependencies } from "@/server/composition/dependencies";
 
 const demoViewerCookieName = "locus-demo-viewer";
@@ -84,11 +86,10 @@ function createDemoErrorMessage(error: unknown): string {
     return "GitHub demo を開始できませんでした。";
   }
 
-  if (error.message.includes("GitHub API request failed") || error.message.includes("timed out")) {
-    return "GitHub PR の取得に失敗しました。owner/repository/PR number、レート制限、認証設定を確認してください。";
-  }
-
-  if (error.message.endsWith(" is required.") || error.message === "GitHub pull request number must be a positive integer.") {
+  if (
+    error.message.endsWith(" is required.") ||
+    error.message === "GitHub pull request number must be a positive integer."
+  ) {
     return error.message;
   }
 
@@ -120,21 +121,40 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
     });
     const pullRequestNumber = parsePullRequestNumber(pullRequestNumberRaw);
     const reviewId = createReviewId(owner, repository, pullRequestNumber);
-
-    const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } = getDependencies();
-    const useCase = new IngestGitHubPullRequestUseCase({
+    const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } =
+      getDependencies();
+    const prepareUseCase = new PrepareGitHubReviewWorkspaceUseCase({
       reviewSessionRepository,
-      parserAdapters,
-      pullRequestSnapshotProvider,
     });
-
-    await useCase.execute({
+    const prepared = await prepareUseCase.execute({
       reviewId,
       viewerName,
       owner,
       repository,
       pullRequestNumber,
     });
+
+    if (prepared.shouldStartIngestion) {
+      const runUseCase = new RunGitHubIngestionJobUseCase({
+        reviewSessionRepository,
+        parserAdapters,
+        pullRequestSnapshotProvider,
+      });
+
+      after(() => {
+        void runUseCase
+          .execute({
+            reviewId,
+            viewerName,
+            owner,
+            repository,
+            pullRequestNumber,
+          })
+          .catch((error) => {
+            console.error("Failed to run GitHub ingestion job", error);
+          });
+      });
+    }
 
     const cookieStore = await cookies();
     cookieStore.set(demoViewerCookieName, viewerName, {
