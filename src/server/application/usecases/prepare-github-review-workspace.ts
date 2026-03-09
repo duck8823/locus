@@ -24,8 +24,45 @@ export interface PrepareGitHubReviewWorkspaceResult {
   source: GitHubPullRequestRef;
 }
 
-function shouldRestartAnalysis(status: ReviewAnalysisStatus): boolean {
-  return status === "failed";
+const STALE_IN_PROGRESS_TIMEOUT_MS = 10 * 60 * 1000;
+
+function isStaleInProgressAnalysis(params: {
+  status: ReviewAnalysisStatus;
+  analysisRequestedAt: string | null | undefined;
+  now: string;
+}): boolean {
+  if (
+    params.status !== "queued" &&
+    params.status !== "fetching" &&
+    params.status !== "parsing"
+  ) {
+    return false;
+  }
+
+  if (!params.analysisRequestedAt) {
+    return true;
+  }
+
+  const nowEpochMs = Date.parse(params.now);
+  const requestedAtEpochMs = Date.parse(params.analysisRequestedAt);
+
+  if (Number.isNaN(nowEpochMs) || Number.isNaN(requestedAtEpochMs)) {
+    return true;
+  }
+
+  return nowEpochMs - requestedAtEpochMs >= STALE_IN_PROGRESS_TIMEOUT_MS;
+}
+
+function shouldRestartAnalysis(params: {
+  status: ReviewAnalysisStatus;
+  analysisRequestedAt: string | null | undefined;
+  now: string;
+}): boolean {
+  if (params.status === "failed") {
+    return true;
+  }
+
+  return isStaleInProgressAnalysis(params);
 }
 
 export class PrepareGitHubReviewWorkspaceUseCase {
@@ -87,7 +124,11 @@ export class PrepareGitHubReviewWorkspaceUseCase {
       viewerName,
     });
     const status = existingRecord.analysisStatus ?? "ready";
-    const shouldStartIngestion = shouldRestartAnalysis(status);
+    const shouldStartIngestion = shouldRestartAnalysis({
+      status,
+      analysisRequestedAt: existingRecord.analysisRequestedAt,
+      now: timestamp,
+    });
 
     if (shouldStartIngestion) {
       existing.markAnalysisQueued(timestamp);

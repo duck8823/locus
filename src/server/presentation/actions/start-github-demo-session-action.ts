@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { PrepareGitHubReviewWorkspaceUseCase } from "@/server/application/usecases/prepare-github-review-workspace";
 import { RunGitHubIngestionJobUseCase } from "@/server/application/usecases/run-github-ingestion-job";
 import { getDependencies } from "@/server/composition/dependencies";
@@ -140,7 +141,7 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
         pullRequestSnapshotProvider,
       });
 
-      queueMicrotask(() => {
+      after(() => {
         void runUseCase
           .execute({
             reviewId,
