@@ -71,6 +71,7 @@ describe("toReviewWorkspaceDto", () => {
       analysisCompletedAt: null,
       analysisTotalFiles: 12,
       analysisProcessedFiles: 4,
+      analysisAttemptCount: 2,
       analysisError: null,
       lastReanalyzeRequestedAt: "2026-03-08T01:00:00.000Z",
       reanalysisStatus: "failed",
@@ -132,6 +133,8 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.analysisCompletedAt).toBeNull();
     expect(dto.analysisTotalFiles).toBe(12);
     expect(dto.analysisProcessedFiles).toBe(4);
+    expect(dto.analysisAttemptCount).toBe(2);
+    expect(dto.analysisDurationMs).toBeNull();
     expect(dto.analysisError).toBeNull();
     expect(dto.reanalysisStatus).toBe("failed");
     expect(dto.lastReanalyzeRequestedAt).toBe("2026-03-08T01:00:00.000Z");
@@ -212,6 +215,8 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.analysisCompletedAt).toBeNull();
     expect(dto.analysisTotalFiles).toBeNull();
     expect(dto.analysisProcessedFiles).toBeNull();
+    expect(dto.analysisAttemptCount).toBe(0);
+    expect(dto.analysisDurationMs).toBeNull();
     expect(dto.analysisError).toBeNull();
     expect(dto.reanalysisStatus).toBe("idle");
     expect(dto.lastReanalyzeRequestedAt).toBeNull();
@@ -224,5 +229,36 @@ describe("toReviewWorkspaceDto", () => {
       sampleFilePaths: [],
     });
     expect(dto.groups[0]?.semanticChanges).toEqual([]);
+  });
+
+  it("calculates analysis duration from requested/completed timestamps", () => {
+    const reviewSession = ReviewSession.create({
+      reviewId: "review-3",
+      title: "Duration demo",
+      repositoryName: "duck8823/locus",
+      branchLabel: "main",
+      viewerName: "Duck",
+      lastOpenedAt: "2026-03-08T00:00:00.000Z",
+      analysisStatus: "ready",
+      analysisRequestedAt: "2026-03-08T00:00:00.000Z",
+      analysisCompletedAt: "2026-03-08T00:00:02.500Z",
+      analysisAttemptCount: 1,
+      groups: [
+        {
+          groupId: "group-1",
+          title: "Group 1",
+          summary: "Primary",
+          filePath: "src/a.ts",
+          status: "unread",
+          upstream: [],
+          downstream: [],
+        },
+      ],
+    });
+
+    const dto = toReviewWorkspaceDto(reviewSession);
+
+    expect(dto.analysisAttemptCount).toBe(1);
+    expect(dto.analysisDurationMs).toBe(2500);
   });
 });

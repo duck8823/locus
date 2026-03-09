@@ -38,6 +38,7 @@ export interface ReviewSessionRecord {
   analysisCompletedAt?: string | null;
   analysisTotalFiles?: number | null;
   analysisProcessedFiles?: number | null;
+  analysisAttemptCount?: number | null;
   analysisError?: string | null;
   lastReanalyzeRequestedAt: string | null;
   reanalysisStatus?: ReviewReanalysisStatus;
@@ -62,6 +63,7 @@ export interface CreateReviewSessionParams {
   analysisCompletedAt?: string | null;
   analysisTotalFiles?: number | null;
   analysisProcessedFiles?: number | null;
+  analysisAttemptCount?: number | null;
   analysisError?: string | null;
   lastReanalyzeRequestedAt?: string | null;
   reanalysisStatus?: ReviewReanalysisStatus;
@@ -181,6 +183,11 @@ function normalizeAnalysisCount(value: number | null | undefined): number | null
   return Math.floor(value);
 }
 
+function normalizeAnalysisAttemptCount(value: number | null | undefined): number {
+  const normalized = normalizeAnalysisCount(value);
+  return normalized ?? 0;
+}
+
 export class ReviewSession {
   private constructor(private readonly record: ReviewSessionRecord) {}
 
@@ -206,6 +213,7 @@ export class ReviewSession {
       analysisCompletedAt: params.analysisCompletedAt ?? null,
       analysisTotalFiles: normalizeAnalysisCount(params.analysisTotalFiles),
       analysisProcessedFiles: normalizeAnalysisCount(params.analysisProcessedFiles),
+      analysisAttemptCount: normalizeAnalysisAttemptCount(params.analysisAttemptCount),
       analysisError: params.analysisError ?? null,
       lastReanalyzeRequestedAt: params.lastReanalyzeRequestedAt ?? null,
       reanalysisStatus: normalizeReanalysisStatus(
@@ -227,6 +235,7 @@ export class ReviewSession {
       analysisCompletedAt: record.analysisCompletedAt ?? null,
       analysisTotalFiles: normalizeAnalysisCount(record.analysisTotalFiles),
       analysisProcessedFiles: normalizeAnalysisCount(record.analysisProcessedFiles),
+      analysisAttemptCount: normalizeAnalysisAttemptCount(record.analysisAttemptCount),
       analysisError: record.analysisError ?? null,
       reanalysisStatus: normalizeReanalysisStatus(
         record.reanalysisStatus,
@@ -307,6 +316,7 @@ export class ReviewSession {
     this.record.analysisCompletedAt = null;
     this.record.analysisTotalFiles = null;
     this.record.analysisProcessedFiles = 0;
+    this.record.analysisAttemptCount = 0;
     this.record.analysisError = null;
   }
 
@@ -316,6 +326,7 @@ export class ReviewSession {
     }
 
     this.record.analysisStatus = "fetching";
+    this.record.analysisAttemptCount = (this.record.analysisAttemptCount ?? 0) + 1;
     this.record.analysisCompletedAt = null;
     this.record.analysisError = null;
 
