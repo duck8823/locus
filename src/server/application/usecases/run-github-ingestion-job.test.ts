@@ -359,4 +359,65 @@ describe("RunGitHubIngestionJobUseCase", () => {
     expect(persisted?.toRecord().analysisStatus).toBe("queued");
     expect(persisted?.toRecord().analysisError).toBeNull();
   });
+
+  it("preserves concurrent reanalysis state when saving ready ingestion result", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    await reviewSessionRepository.save(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-44",
+        title: "PR #44: Existing run",
+        repositoryName: "octocat/locus",
+        branchLabel: "feature/existing → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 44,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-09T00:00:00.000Z",
+        analysisStatus: "fetching",
+        analysisRequestedAt: "2026-03-09T00:00:00.000Z",
+      }),
+    );
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    snapshotProvider.onFetch = async () => {
+      const latest = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-44");
+
+      if (!latest) {
+        throw new Error("expected seeded session");
+      }
+
+      latest.markReanalysisFailed(
+        "2026-03-09T00:02:00.000Z",
+        "GitHub API request failed",
+        "2026-03-09T00:01:00.000Z",
+      );
+      await reviewSessionRepository.save(latest);
+    };
+
+    const useCase = new RunGitHubIngestionJobUseCase({
+      reviewSessionRepository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+    });
+
+    const result = await useCase.execute({
+      reviewId: "github-octocat-locus-pr-44",
+      viewerName: "Demo reviewer",
+      owner: "octocat",
+      repository: "locus",
+      pullRequestNumber: 44,
+      requestedAt: "2026-03-09T00:00:00.000Z",
+    });
+    const persisted = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-44");
+
+    expect(result.reviewSession.toRecord().analysisStatus).toBe("ready");
+    expect(result.reviewSession.toRecord().reanalysisStatus).toBe("failed");
+    expect(result.reviewSession.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-09T00:01:00.000Z");
+    expect(result.reviewSession.toRecord().lastReanalyzeError).toBe("GitHub API request failed");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("failed");
+    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-09T00:01:00.000Z");
+  });
 });

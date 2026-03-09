@@ -62,6 +62,22 @@ function createResultFromLatest(params: {
   };
 }
 
+function mergeLatestReanalysisState(params: {
+  next: ReviewSession;
+  latest: ReviewSession;
+}): ReviewSession {
+  const nextRecord = params.next.toRecord();
+  const latestRecord = params.latest.toRecord();
+
+  return ReviewSession.fromRecord({
+    ...nextRecord,
+    lastReanalyzeRequestedAt: latestRecord.lastReanalyzeRequestedAt,
+    reanalysisStatus: latestRecord.reanalysisStatus,
+    lastReanalyzeCompletedAt: latestRecord.lastReanalyzeCompletedAt ?? null,
+    lastReanalyzeError: latestRecord.lastReanalyzeError ?? null,
+  });
+}
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -214,6 +230,7 @@ export class RunGitHubIngestionJobUseCase {
       });
 
       const latestBeforeReady = await reviewSessionRepository.findByReviewId(reviewId);
+      let reviewSessionToSave = reviewSession;
 
       if (latestBeforeReady) {
         const latestBeforeReadyRecord = latestBeforeReady.toRecord();
@@ -225,14 +242,19 @@ export class RunGitHubIngestionJobUseCase {
             fallbackSource: source,
           });
         }
+
+        reviewSessionToSave = mergeLatestReanalysisState({
+          next: reviewSession,
+          latest: latestBeforeReady,
+        });
       }
 
       const completedAt = new Date().toISOString();
-      reviewSession.markAnalysisReady(completedAt, bundle.snapshotPairs.length);
-      await reviewSessionRepository.save(reviewSession);
+      reviewSessionToSave.markAnalysisReady(completedAt, bundle.snapshotPairs.length);
+      await reviewSessionRepository.save(reviewSessionToSave);
 
       return {
-        reviewSession,
+        reviewSession: reviewSessionToSave,
         snapshotPairCount,
         source: bundle.source,
       };
