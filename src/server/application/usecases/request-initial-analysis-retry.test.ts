@@ -55,6 +55,7 @@ describe("RequestInitialAnalysisRetryUseCase", () => {
         groups: [],
         lastOpenedAt: "2026-03-10T00:00:00.000Z",
         analysisStatus: "failed",
+        analysisAttemptCount: 1,
         analysisError: "GitHub API request failed",
       }),
     );
@@ -79,6 +80,7 @@ describe("RequestInitialAnalysisRetryUseCase", () => {
     ]);
     expect(persisted?.toRecord().analysisStatus).toBe("queued");
     expect(persisted?.toRecord().analysisRequestedAt).toBe("2026-03-10T00:05:00.000Z");
+    expect(persisted?.toRecord().analysisAttemptCount).toBe(1);
     expect(persisted?.toRecord().analysisError).toBeNull();
   });
 

@@ -316,7 +316,6 @@ export class ReviewSession {
     this.record.analysisCompletedAt = null;
     this.record.analysisTotalFiles = null;
     this.record.analysisProcessedFiles = 0;
-    this.record.analysisAttemptCount = 0;
     this.record.analysisError = null;
   }
 
