@@ -6,6 +6,7 @@ import type {
 } from "@/server/domain/value-objects/semantic-change";
 import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
 import type { ReviewReanalysisStatus } from "@/server/domain/value-objects/reanalysis-status";
+import type { ReviewAnalysisStatus } from "@/server/domain/value-objects/analysis-status";
 
 export interface ReviewGroupRecord {
   groupId: string;
@@ -32,6 +33,12 @@ export interface ReviewSessionRecord {
   semanticChanges?: SemanticChange[];
   unsupportedFileAnalyses?: UnsupportedFileAnalysis[];
   lastOpenedAt: string;
+  analysisStatus?: ReviewAnalysisStatus;
+  analysisRequestedAt?: string | null;
+  analysisCompletedAt?: string | null;
+  analysisTotalFiles?: number | null;
+  analysisProcessedFiles?: number | null;
+  analysisError?: string | null;
   lastReanalyzeRequestedAt: string | null;
   reanalysisStatus?: ReviewReanalysisStatus;
   lastReanalyzeCompletedAt?: string | null;
@@ -50,6 +57,12 @@ export interface CreateReviewSessionParams {
   unsupportedFileAnalyses?: UnsupportedFileAnalysis[];
   selectedGroupId?: string | null;
   lastOpenedAt: string;
+  analysisStatus?: ReviewAnalysisStatus;
+  analysisRequestedAt?: string | null;
+  analysisCompletedAt?: string | null;
+  analysisTotalFiles?: number | null;
+  analysisProcessedFiles?: number | null;
+  analysisError?: string | null;
   lastReanalyzeRequestedAt?: string | null;
   reanalysisStatus?: ReviewReanalysisStatus;
   lastReanalyzeCompletedAt?: string | null;
@@ -156,6 +169,18 @@ function normalizeReanalysisStatus(
   return lastReanalyzeRequestedAt ? "succeeded" : "idle";
 }
 
+function normalizeAnalysisStatus(status: ReviewAnalysisStatus | undefined): ReviewAnalysisStatus {
+  return status ?? "ready";
+}
+
+function normalizeAnalysisCount(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  return Math.floor(value);
+}
+
 export class ReviewSession {
   private constructor(private readonly record: ReviewSessionRecord) {}
 
@@ -176,6 +201,12 @@ export class ReviewSession {
       semanticChanges: (params.semanticChanges ?? []).map(cloneSemanticChange),
       unsupportedFileAnalyses: (params.unsupportedFileAnalyses ?? []).map(cloneUnsupportedFileAnalysis),
       lastOpenedAt: params.lastOpenedAt,
+      analysisStatus: normalizeAnalysisStatus(params.analysisStatus),
+      analysisRequestedAt: params.analysisRequestedAt ?? null,
+      analysisCompletedAt: params.analysisCompletedAt ?? null,
+      analysisTotalFiles: normalizeAnalysisCount(params.analysisTotalFiles),
+      analysisProcessedFiles: normalizeAnalysisCount(params.analysisProcessedFiles),
+      analysisError: params.analysisError ?? null,
       lastReanalyzeRequestedAt: params.lastReanalyzeRequestedAt ?? null,
       reanalysisStatus: normalizeReanalysisStatus(
         params.reanalysisStatus,
@@ -191,6 +222,12 @@ export class ReviewSession {
       ...record,
       semanticChanges: record.semanticChanges ?? [],
       unsupportedFileAnalyses: record.unsupportedFileAnalyses ?? [],
+      analysisStatus: normalizeAnalysisStatus(record.analysisStatus),
+      analysisRequestedAt: record.analysisRequestedAt ?? null,
+      analysisCompletedAt: record.analysisCompletedAt ?? null,
+      analysisTotalFiles: normalizeAnalysisCount(record.analysisTotalFiles),
+      analysisProcessedFiles: normalizeAnalysisCount(record.analysisProcessedFiles),
+      analysisError: record.analysisError ?? null,
       reanalysisStatus: normalizeReanalysisStatus(
         record.reanalysisStatus,
         record.lastReanalyzeRequestedAt ?? null,
@@ -248,6 +285,92 @@ export class ReviewSession {
     if (!this.record.selectedGroupId) {
       this.record.selectedGroupId = groupId;
     }
+  }
+
+  updateSummary(params: {
+    title: string;
+    repositoryName: string;
+    branchLabel: string;
+    source?: ReviewSessionSource;
+    viewerName?: string;
+  }): void {
+    this.record.title = params.title;
+    this.record.repositoryName = params.repositoryName;
+    this.record.branchLabel = params.branchLabel;
+    this.record.source = cloneSource(params.source) ?? this.record.source;
+    this.record.viewerName = params.viewerName ?? this.record.viewerName;
+  }
+
+  markAnalysisQueued(at: string): void {
+    this.record.analysisStatus = "queued";
+    this.record.analysisRequestedAt = at;
+    this.record.analysisCompletedAt = null;
+    this.record.analysisTotalFiles = null;
+    this.record.analysisProcessedFiles = 0;
+    this.record.analysisError = null;
+  }
+
+  markAnalysisFetching(at?: string): void {
+    if (at) {
+      this.record.analysisRequestedAt = at;
+    }
+
+    this.record.analysisStatus = "fetching";
+    this.record.analysisCompletedAt = null;
+    this.record.analysisError = null;
+
+    if (this.record.analysisProcessedFiles === null || this.record.analysisProcessedFiles === undefined) {
+      this.record.analysisProcessedFiles = 0;
+    }
+  }
+
+  markAnalysisParsing(totalFiles: number, at?: string): void {
+    if (at) {
+      this.record.analysisRequestedAt = at;
+    }
+
+    this.record.analysisStatus = "parsing";
+    this.record.analysisTotalFiles = normalizeAnalysisCount(totalFiles) ?? 0;
+    this.record.analysisProcessedFiles = 0;
+    this.record.analysisCompletedAt = null;
+    this.record.analysisError = null;
+  }
+
+  updateAnalysisProgress(processedFiles: number, totalFiles?: number): void {
+    this.record.analysisStatus = "parsing";
+    const normalizedTotal = normalizeAnalysisCount(totalFiles);
+    const normalizedProcessed = normalizeAnalysisCount(processedFiles) ?? 0;
+
+    if (normalizedTotal !== null) {
+      this.record.analysisTotalFiles = normalizedTotal;
+      this.record.analysisProcessedFiles = Math.min(normalizedProcessed, normalizedTotal);
+      return;
+    }
+
+    this.record.analysisProcessedFiles = normalizedProcessed;
+  }
+
+  markAnalysisReady(at: string, totalFiles?: number): void {
+    this.record.analysisStatus = "ready";
+    this.record.analysisCompletedAt = at;
+    this.record.analysisError = null;
+    const normalizedTotal = normalizeAnalysisCount(totalFiles);
+
+    if (normalizedTotal !== null) {
+      this.record.analysisTotalFiles = normalizedTotal;
+      this.record.analysisProcessedFiles = normalizedTotal;
+      return;
+    }
+
+    if (this.record.analysisTotalFiles !== null && this.record.analysisTotalFiles !== undefined) {
+      this.record.analysisProcessedFiles = this.record.analysisTotalFiles;
+    }
+  }
+
+  markAnalysisFailed(at: string, errorMessage: string): void {
+    this.record.analysisStatus = "failed";
+    this.record.analysisCompletedAt = at;
+    this.record.analysisError = errorMessage;
   }
 
   requestReanalysis(at: string): void {

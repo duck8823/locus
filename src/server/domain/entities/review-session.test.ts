@@ -81,6 +81,37 @@ describe("ReviewSession", () => {
     expect(session.toRecord().lastReanalyzeError).toBe("GitHub API request failed");
   });
 
+  it("tracks queued/fetching/parsing/ready/failed analysis metadata", () => {
+    const session = createSession();
+
+    session.markAnalysisQueued("2026-03-08T00:00:00.000Z");
+    expect(session.toRecord().analysisStatus).toBe("queued");
+    expect(session.toRecord().analysisRequestedAt).toBe("2026-03-08T00:00:00.000Z");
+    expect(session.toRecord().analysisProcessedFiles).toBe(0);
+
+    session.markAnalysisFetching();
+    expect(session.toRecord().analysisStatus).toBe("fetching");
+
+    session.markAnalysisParsing(8);
+    expect(session.toRecord().analysisStatus).toBe("parsing");
+    expect(session.toRecord().analysisTotalFiles).toBe(8);
+    expect(session.toRecord().analysisProcessedFiles).toBe(0);
+
+    session.updateAnalysisProgress(3, 8);
+    expect(session.toRecord().analysisProcessedFiles).toBe(3);
+
+    session.markAnalysisReady("2026-03-08T00:01:00.000Z", 8);
+    expect(session.toRecord().analysisStatus).toBe("ready");
+    expect(session.toRecord().analysisCompletedAt).toBe("2026-03-08T00:01:00.000Z");
+    expect(session.toRecord().analysisProcessedFiles).toBe(8);
+    expect(session.toRecord().analysisError).toBeNull();
+
+    session.markAnalysisFailed("2026-03-08T00:02:00.000Z", "GitHub API request failed");
+    expect(session.toRecord().analysisStatus).toBe("failed");
+    expect(session.toRecord().analysisCompletedAt).toBe("2026-03-08T00:02:00.000Z");
+    expect(session.toRecord().analysisError).toBe("GitHub API request failed");
+  });
+
   it("normalizes legacy reanalysis fields", () => {
     const legacyRecord = {
       ...createSession().toRecord(),
@@ -91,6 +122,7 @@ describe("ReviewSession", () => {
     };
     const session = ReviewSession.fromRecord(legacyRecord);
 
+    expect(session.toRecord().analysisStatus).toBe("ready");
     expect(session.toRecord().reanalysisStatus).toBe("succeeded");
     expect(session.toRecord().lastReanalyzeCompletedAt).toBeNull();
     expect(session.toRecord().lastReanalyzeError).toBeNull();

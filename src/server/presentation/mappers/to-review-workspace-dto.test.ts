@@ -66,6 +66,12 @@ describe("toReviewWorkspaceDto", () => {
       branchLabel: "feat/semantic-analysis-spike",
       viewerName: "Duck",
       lastOpenedAt: "2026-03-08T00:00:00.000Z",
+      analysisStatus: "parsing",
+      analysisRequestedAt: "2026-03-08T00:30:00.000Z",
+      analysisCompletedAt: null,
+      analysisTotalFiles: 12,
+      analysisProcessedFiles: 4,
+      analysisError: null,
       lastReanalyzeRequestedAt: "2026-03-08T01:00:00.000Z",
       reanalysisStatus: "failed",
       lastReanalyzeCompletedAt: "2026-03-08T01:00:09.000Z",
@@ -121,6 +127,12 @@ describe("toReviewWorkspaceDto", () => {
 
     const dto = toReviewWorkspaceDto(reviewSession);
 
+    expect(dto.analysisStatus).toBe("parsing");
+    expect(dto.analysisRequestedAt).toBe("2026-03-08T00:30:00.000Z");
+    expect(dto.analysisCompletedAt).toBeNull();
+    expect(dto.analysisTotalFiles).toBe(12);
+    expect(dto.analysisProcessedFiles).toBe(4);
+    expect(dto.analysisError).toBeNull();
     expect(dto.reanalysisStatus).toBe("failed");
     expect(dto.lastReanalyzeRequestedAt).toBe("2026-03-08T01:00:00.000Z");
     expect(dto.lastReanalyzeCompletedAt).toBe("2026-03-08T01:00:09.000Z");
@@ -195,6 +207,12 @@ describe("toReviewWorkspaceDto", () => {
 
     const dto = toReviewWorkspaceDto(reviewSession);
 
+    expect(dto.analysisStatus).toBe("ready");
+    expect(dto.analysisRequestedAt).toBeNull();
+    expect(dto.analysisCompletedAt).toBeNull();
+    expect(dto.analysisTotalFiles).toBeNull();
+    expect(dto.analysisProcessedFiles).toBeNull();
+    expect(dto.analysisError).toBeNull();
     expect(dto.reanalysisStatus).toBe("idle");
     expect(dto.lastReanalyzeRequestedAt).toBeNull();
     expect(dto.lastReanalyzeCompletedAt).toBeNull();
