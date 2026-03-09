@@ -13,7 +13,66 @@ async function readJobsFile(filePath: string): Promise<unknown> {
   return JSON.parse(raw);
 }
 
+async function waitFor(condition: () => boolean, timeoutMs = 500): Promise<void> {
+  const startedAt = Date.now();
+
+  while (!condition()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out while waiting for condition.");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 describe("FileAnalysisJobScheduler", () => {
+  it("drains persisted queued jobs on startup when autoRun is enabled", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const executedJobIds: string[] = [];
+    await writeFile(
+      filePath,
+      JSON.stringify(
+        {
+          jobs: [
+            {
+              jobId: "job-queued",
+              reviewId: "review-startup",
+              requestedAt: "2026-03-10T00:00:00.000Z",
+              reason: "initial_ingestion",
+              status: "queued",
+              queuedAt: "2026-03-10T00:00:00.000Z",
+              startedAt: null,
+              completedAt: null,
+              durationMs: null,
+              attempts: 0,
+              lastError: null,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: true,
+      onJob: async (job) => {
+        executedJobIds.push(job.jobId);
+      },
+    });
+
+    await waitFor(() => executedJobIds.length === 1);
+    expect(executedJobIds).toEqual(["job-queued"]);
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ status: string; attempts: number }>;
+    };
+    expect(persisted.jobs[0]?.status).toBe("succeeded");
+    expect(persisted.jobs[0]?.attempts).toBe(1);
+  });
+
   it("persists and executes queued jobs", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");

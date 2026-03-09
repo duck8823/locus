@@ -74,6 +74,10 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
     this.staleRunningMs = options.staleRunningMs ?? DEFAULT_STALE_RUNNING_MS;
     this.autoRun = options.autoRun ?? true;
     this.onJob = options.onJob;
+
+    if (this.autoRun) {
+      this.scheduleDrain();
+    }
   }
 
   async scheduleReviewAnalysis(input: ScheduleAnalysisJobInput): Promise<ScheduledAnalysisJob> {
