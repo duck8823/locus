@@ -84,6 +84,7 @@ export default async function MarketingPage({
             {githubDemoError ? <p className={styles.errorBanner}>{githubDemoError}</p> : null}
             <p className={styles.demoHint}>
               Public repositories work without <code>GITHUB_TOKEN</code>, but rate limits are lower.
+              The workspace opens immediately, then initial analysis runs in the background.
               Environment variables are optional defaults.
             </p>
           </div>

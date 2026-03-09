@@ -1368,4 +1368,64 @@ export const run = () => message.length;
     const serviceChange = result.semanticChanges.find((change) => change.fileId === "file-service");
     expect(serviceChange?.architecture?.incomingNodeIds ?? []).not.toContain("file:docs/guide.md");
   });
+
+  it("reports per-file progress in order", async () => {
+    const progressLog: string[] = [];
+
+    await analyzeSourceSnapshots({
+      reviewId: "progress-review",
+      snapshotPairs: [
+        {
+          fileId: "file-1",
+          filePath: "src/a.ts",
+          before: {
+            snapshotId: "progress-review:file-1:before",
+            fileId: "file-1",
+            filePath: "src/a.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const a = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "progress-review:file-1:after",
+            fileId: "file-1",
+            filePath: "src/a.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const a = () => 2;",
+            metadata: { codeHost: "github" },
+          },
+        },
+        {
+          fileId: "file-2",
+          filePath: "src/b.ts",
+          before: {
+            snapshotId: "progress-review:file-2:before",
+            fileId: "file-2",
+            filePath: "src/b.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const b = () => 1;",
+            metadata: { codeHost: "github" },
+          },
+          after: {
+            snapshotId: "progress-review:file-2:after",
+            fileId: "file-2",
+            filePath: "src/b.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const b = () => 2;",
+            metadata: { codeHost: "github" },
+          },
+        },
+      ],
+      parserAdapters: [new BasicArchitectureParserAdapter()],
+      onProgress: (progress) => {
+        progressLog.push(`${progress.fileId}:${progress.processedCount}/${progress.totalCount}`);
+      },
+    });
+
+    expect(progressLog).toEqual(["file-1:1/2", "file-2:2/2"]);
+  });
 });

@@ -1,4 +1,7 @@
-import { analyzeSourceSnapshots } from "@/server/application/services/analyze-source-snapshots";
+import {
+  analyzeSourceSnapshots,
+  type AnalyzeSourceSnapshotsProgress,
+} from "@/server/application/services/analyze-source-snapshots";
 import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 import { ReviewSession, type ReviewGroupRecord } from "@/server/domain/entities/review-session";
 import type {
@@ -18,6 +21,7 @@ export interface CreateAnalyzedReviewSessionInput {
   createdAt: string;
   snapshotPairs: SourceSnapshotPair[];
   parserAdapters: ParserAdapter[];
+  onAnalysisProgress?: (progress: AnalyzeSourceSnapshotsProgress) => Promise<void> | void;
 }
 
 function summarizeSemanticChanges(changes: SemanticChange[]): string {
@@ -83,11 +87,13 @@ export async function createAnalyzedReviewSession({
   createdAt,
   snapshotPairs,
   parserAdapters,
+  onAnalysisProgress,
 }: CreateAnalyzedReviewSessionInput): Promise<ReviewSession> {
   const analysisResult = await analyzeSourceSnapshots({
     reviewId,
     snapshotPairs,
     parserAdapters,
+    onProgress: onAnalysisProgress,
   });
   const groups = analysisResult.groups.map((group) =>
     toReviewGroupRecord(group, analysisResult.semanticChanges),
@@ -105,6 +111,12 @@ export async function createAnalyzedReviewSession({
     unsupportedFileAnalyses: analysisResult.unsupportedFiles,
     selectedGroupId: groups[0]?.groupId ?? null,
     lastOpenedAt: createdAt,
+    analysisStatus: "ready",
+    analysisRequestedAt: createdAt,
+    analysisCompletedAt: createdAt,
+    analysisTotalFiles: snapshotPairs.length,
+    analysisProcessedFiles: snapshotPairs.length,
+    analysisError: null,
     lastReanalyzeRequestedAt: null,
   });
 }
