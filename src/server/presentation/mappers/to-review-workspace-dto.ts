@@ -54,6 +54,24 @@ function toUnsupportedSummary(
   };
 }
 
+function calculateAnalysisDurationMs(params: {
+  analysisRequestedAt: string | null | undefined;
+  analysisCompletedAt: string | null | undefined;
+}): number | null {
+  if (!params.analysisRequestedAt || !params.analysisCompletedAt) {
+    return null;
+  }
+
+  const requestedAtEpochMs = Date.parse(params.analysisRequestedAt);
+  const completedAtEpochMs = Date.parse(params.analysisCompletedAt);
+
+  if (Number.isNaN(requestedAtEpochMs) || Number.isNaN(completedAtEpochMs)) {
+    return null;
+  }
+
+  return Math.max(0, completedAtEpochMs - requestedAtEpochMs);
+}
+
 export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorkspaceDto {
   const record = reviewSession.toRecord();
   const semanticChangeMap = new Map(
@@ -71,6 +89,11 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     analysisCompletedAt: record.analysisCompletedAt ?? null,
     analysisTotalFiles: record.analysisTotalFiles ?? null,
     analysisProcessedFiles: record.analysisProcessedFiles ?? null,
+    analysisAttemptCount: record.analysisAttemptCount ?? 0,
+    analysisDurationMs: calculateAnalysisDurationMs({
+      analysisRequestedAt: record.analysisRequestedAt ?? null,
+      analysisCompletedAt: record.analysisCompletedAt ?? null,
+    }),
     analysisError: record.analysisError ?? null,
     reanalysisStatus: record.reanalysisStatus ?? "idle",
     lastOpenedAt: record.lastOpenedAt,

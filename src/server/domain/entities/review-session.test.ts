@@ -88,9 +88,11 @@ describe("ReviewSession", () => {
     expect(session.toRecord().analysisStatus).toBe("queued");
     expect(session.toRecord().analysisRequestedAt).toBe("2026-03-08T00:00:00.000Z");
     expect(session.toRecord().analysisProcessedFiles).toBe(0);
+    expect(session.toRecord().analysisAttemptCount).toBe(0);
 
     session.markAnalysisFetching();
     expect(session.toRecord().analysisStatus).toBe("fetching");
+    expect(session.toRecord().analysisAttemptCount).toBe(1);
 
     session.markAnalysisParsing(8);
     expect(session.toRecord().analysisStatus).toBe("parsing");
@@ -110,6 +112,16 @@ describe("ReviewSession", () => {
     expect(session.toRecord().analysisStatus).toBe("failed");
     expect(session.toRecord().analysisCompletedAt).toBe("2026-03-08T00:02:00.000Z");
     expect(session.toRecord().analysisError).toBe("GitHub API request failed");
+  });
+
+  it("keeps analysis attempt count when re-queuing an existing review", () => {
+    const session = createSession();
+
+    session.markAnalysisFetching("2026-03-08T00:00:00.000Z");
+    expect(session.toRecord().analysisAttemptCount).toBe(1);
+
+    session.markAnalysisQueued("2026-03-08T00:01:00.000Z");
+    expect(session.toRecord().analysisAttemptCount).toBe(1);
   });
 
   it("normalizes legacy reanalysis fields", () => {

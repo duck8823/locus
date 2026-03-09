@@ -3,9 +3,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import styles from "./page.module.css";
 import { AnalysisStatusPoller } from "./analysis-status-poller";
+import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submit-button";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import { LocalizedDateTime } from "@/app/components/localized-date-time";
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
+import { requestInitialAnalysisRetryAction } from "@/server/presentation/actions/request-initial-analysis-retry-action";
 import { requestReanalysisAction } from "@/server/presentation/actions/request-reanalysis-action";
 import { selectReviewGroupAction } from "@/server/presentation/actions/select-review-group-action";
 import { setReviewGroupStatusAction } from "@/server/presentation/actions/set-review-group-status-action";
@@ -30,6 +32,14 @@ function formatCodeRegion(
   }
 
   return `${region.filePath}:${region.startLine}-${region.endLine}`;
+}
+
+function formatAnalysisDuration(durationMs: number): string {
+  if (durationMs < 1000) {
+    return `${durationMs} ms`;
+  }
+
+  return `${(durationMs / 1000).toFixed(1)} s`;
 }
 
 const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
@@ -234,6 +244,14 @@ export default async function ReviewWorkspacePage({
           </div>
           <div className={styles.detailBlock}>
             <span className={styles.muted}>Initial analysis</span>
+            {workspace.analysisAttemptCount > 0 ? (
+              <p className={styles.muted}>Attempts: {workspace.analysisAttemptCount}</p>
+            ) : null}
+            {workspace.analysisDurationMs !== null ? (
+              <p className={styles.muted}>
+                Last duration: {formatAnalysisDuration(workspace.analysisDurationMs)}
+              </p>
+            ) : null}
             {workspace.analysisStatus === "queued" ? (
               <p>Queued. Starting review analysis…</p>
             ) : null}
@@ -281,6 +299,10 @@ export default async function ReviewWorkspacePage({
                 {workspace.analysisError ? (
                   <p className={styles.reanalysisError}>{workspace.analysisError}</p>
                 ) : null}
+                <form action={requestInitialAnalysisRetryAction}>
+                  <input name="reviewId" type="hidden" value={workspace.reviewId} />
+                  <InitialAnalysisRetrySubmitButton />
+                </form>
               </>
             ) : null}
             {isInitialAnalysisRunning && workspace.groups.length === 0 ? (

@@ -1,7 +1,7 @@
 export interface ScheduleAnalysisJobInput {
   reviewId: string;
   requestedAt: string;
-  reason: "manual_reanalysis" | "code_host_webhook";
+  reason: "initial_ingestion" | "manual_reanalysis" | "code_host_webhook";
 }
 
 export interface ScheduledAnalysisJob {

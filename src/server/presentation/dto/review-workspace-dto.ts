@@ -53,6 +53,8 @@ export interface ReviewWorkspaceDto {
   analysisCompletedAt: string | null;
   analysisTotalFiles: number | null;
   analysisProcessedFiles: number | null;
+  analysisAttemptCount: number;
+  analysisDurationMs: number | null;
   analysisError: string | null;
   reanalysisStatus: ReviewReanalysisStatus;
   lastOpenedAt: string;
