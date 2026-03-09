@@ -32,10 +32,16 @@ class InMemoryReviewSessionRepository implements ReviewSessionRepository {
 }
 
 class StubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
+  onFetch: (() => Promise<void>) | null = null;
+
   async fetchPullRequestSnapshots(input: {
     reviewId: string;
     source: GitHubPullRequestRef;
   }): Promise<PullRequestSnapshotBundle> {
+    if (this.onFetch) {
+      await this.onFetch();
+    }
+
     return {
       title: "PR #12: Improve updateProfile validation",
       repositoryName: `${input.source.owner}/${input.source.repository}`,
@@ -112,7 +118,13 @@ class StubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
 }
 
 class FailingPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
+  onFetch: (() => Promise<void>) | null = null;
+
   async fetchPullRequestSnapshots(): Promise<PullRequestSnapshotBundle> {
+    if (this.onFetch) {
+      await this.onFetch();
+    }
+
     throw new Error("GitHub API request failed (500): upstream");
   }
 }
@@ -234,5 +246,117 @@ describe("RunGitHubIngestionJobUseCase", () => {
     const persisted = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-99");
     expect(persisted?.toRecord().analysisStatus).toBe("failed");
     expect(persisted?.toRecord().analysisError).toContain("GitHub API request failed");
+  });
+
+  it("does not overwrite a newer ingestion run that started later", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    await reviewSessionRepository.save(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-42",
+        title: "PR #42: Existing run",
+        repositoryName: "octocat/locus",
+        branchLabel: "feature/existing → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 42,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-09T00:00:00.000Z",
+        analysisStatus: "fetching",
+        analysisRequestedAt: "2026-03-09T00:00:00.000Z",
+      }),
+    );
+
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    snapshotProvider.onFetch = async () => {
+      const latest = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-42");
+
+      if (!latest) {
+        throw new Error("expected seeded session");
+      }
+
+      latest.markAnalysisQueued("2026-03-09T00:10:00.000Z");
+      await reviewSessionRepository.save(latest);
+    };
+
+    const useCase = new RunGitHubIngestionJobUseCase({
+      reviewSessionRepository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+    });
+
+    const result = await useCase.execute({
+      reviewId: "github-octocat-locus-pr-42",
+      viewerName: "Demo reviewer",
+      owner: "octocat",
+      repository: "locus",
+      pullRequestNumber: 42,
+      requestedAt: "2026-03-09T00:00:00.000Z",
+    });
+    const persisted = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-42");
+
+    expect(result.reviewSession.toRecord().analysisStatus).toBe("queued");
+    expect(result.reviewSession.toRecord().analysisRequestedAt).toBe("2026-03-09T00:10:00.000Z");
+    expect(persisted?.toRecord().analysisStatus).toBe("queued");
+    expect(persisted?.toRecord().analysisRequestedAt).toBe("2026-03-09T00:10:00.000Z");
+  });
+
+  it("ignores stale failure when a newer ingestion run has started", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    await reviewSessionRepository.save(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-43",
+        title: "PR #43: Existing run",
+        repositoryName: "octocat/locus",
+        branchLabel: "feature/existing → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 43,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-09T00:00:00.000Z",
+        analysisStatus: "fetching",
+        analysisRequestedAt: "2026-03-09T00:00:00.000Z",
+      }),
+    );
+
+    const snapshotProvider = new FailingPullRequestSnapshotProvider();
+    snapshotProvider.onFetch = async () => {
+      const latest = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-43");
+
+      if (!latest) {
+        throw new Error("expected seeded session");
+      }
+
+      latest.markAnalysisQueued("2026-03-09T00:10:00.000Z");
+      await reviewSessionRepository.save(latest);
+    };
+
+    const useCase = new RunGitHubIngestionJobUseCase({
+      reviewSessionRepository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+    });
+
+    const result = await useCase.execute({
+      reviewId: "github-octocat-locus-pr-43",
+      viewerName: "Demo reviewer",
+      owner: "octocat",
+      repository: "locus",
+      pullRequestNumber: 43,
+      requestedAt: "2026-03-09T00:00:00.000Z",
+    });
+    const persisted = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-43");
+
+    expect(result.reviewSession.toRecord().analysisStatus).toBe("queued");
+    expect(result.reviewSession.toRecord().analysisRequestedAt).toBe("2026-03-09T00:10:00.000Z");
+    expect(persisted?.toRecord().analysisStatus).toBe("queued");
+    expect(persisted?.toRecord().analysisError).toBeNull();
   });
 });

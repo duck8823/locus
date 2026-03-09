@@ -28,6 +28,40 @@ export interface RunGitHubIngestionJobResult {
   source: GitHubPullRequestRef;
 }
 
+function isSupersededAnalysisRun(record: ReviewSessionRecord, startedAt: string): boolean {
+  const latestRequestedAt = record.analysisRequestedAt;
+
+  if (!latestRequestedAt || latestRequestedAt === startedAt) {
+    return false;
+  }
+
+  const latestRequestedAtEpochMs = Date.parse(latestRequestedAt);
+  const startedAtEpochMs = Date.parse(startedAt);
+
+  if (Number.isNaN(latestRequestedAtEpochMs) || Number.isNaN(startedAtEpochMs)) {
+    return false;
+  }
+
+  return latestRequestedAtEpochMs > startedAtEpochMs;
+}
+
+function createResultFromLatest(params: {
+  reviewSession: ReviewSession;
+  snapshotPairCount: number;
+  fallbackSource: GitHubPullRequestRef;
+}): RunGitHubIngestionJobResult {
+  const record = params.reviewSession.toRecord();
+
+  return {
+    reviewSession: params.reviewSession,
+    snapshotPairCount: params.snapshotPairCount,
+    source:
+      record.source && record.source.provider === "github"
+        ? record.source
+        : params.fallbackSource,
+  };
+}
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -86,6 +120,7 @@ export class RunGitHubIngestionJobUseCase {
     requestedAt,
   }: RunGitHubIngestionJobInput): Promise<RunGitHubIngestionJobResult> {
     const timestamp = requestedAt ?? new Date().toISOString();
+    let snapshotPairCount = 0;
     const source: GitHubPullRequestRef = {
       provider: "github",
       owner,
@@ -122,7 +157,22 @@ export class RunGitHubIngestionJobUseCase {
         reviewId,
         source,
       });
+      snapshotPairCount = bundle.snapshotPairs.length;
       const latestBeforeParsing = await reviewSessionRepository.findByReviewId(reviewId);
+      const latestBeforeParsingRecord = latestBeforeParsing?.toRecord();
+
+      if (
+        latestBeforeParsing &&
+        latestBeforeParsingRecord &&
+        isSupersededAnalysisRun(latestBeforeParsingRecord, timestamp)
+      ) {
+        return createResultFromLatest({
+          reviewSession: latestBeforeParsing,
+          snapshotPairCount,
+          fallbackSource: source,
+        });
+      }
+
       const parsingSession = latestBeforeParsing ?? runningSession;
 
       parsingSession.updateSummary({
@@ -152,10 +202,30 @@ export class RunGitHubIngestionJobUseCase {
             return;
           }
 
+          const latestRecord = latest.toRecord();
+
+          if (isSupersededAnalysisRun(latestRecord, timestamp)) {
+            return;
+          }
+
           latest.updateAnalysisProgress(progress.processedCount, progress.totalCount);
           await reviewSessionRepository.save(latest);
         },
       });
+
+      const latestBeforeReady = await reviewSessionRepository.findByReviewId(reviewId);
+
+      if (latestBeforeReady) {
+        const latestBeforeReadyRecord = latestBeforeReady.toRecord();
+
+        if (isSupersededAnalysisRun(latestBeforeReadyRecord, timestamp)) {
+          return createResultFromLatest({
+            reviewSession: latestBeforeReady,
+            snapshotPairCount,
+            fallbackSource: source,
+          });
+        }
+      }
 
       const completedAt = new Date().toISOString();
       reviewSession.markAnalysisReady(completedAt, bundle.snapshotPairs.length);
@@ -163,11 +233,21 @@ export class RunGitHubIngestionJobUseCase {
 
       return {
         reviewSession,
-        snapshotPairCount: bundle.snapshotPairs.length,
+        snapshotPairCount,
         source: bundle.source,
       };
     } catch (error) {
       const latest = await reviewSessionRepository.findByReviewId(reviewId);
+      const latestRecord = latest?.toRecord();
+
+      if (latest && latestRecord && isSupersededAnalysisRun(latestRecord, timestamp)) {
+        return createResultFromLatest({
+          reviewSession: latest,
+          snapshotPairCount,
+          fallbackSource: source,
+        });
+      }
+
       const failedSession = latest ?? runningSession;
       const failedAt = new Date().toISOString();
 
