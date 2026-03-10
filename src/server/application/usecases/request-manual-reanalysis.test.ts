@@ -5,6 +5,10 @@ import type {
 } from "@/server/application/ports/analysis-job-scheduler";
 import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
 import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
+import {
+  defaultSeedFixtureId,
+  defaultSeedReviewId,
+} from "@/server/application/services/review-session-seed";
 import { RequestManualReanalysisUseCase } from "@/server/application/usecases/request-manual-reanalysis";
 import { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
@@ -85,6 +89,45 @@ describe("RequestManualReanalysisUseCase", () => {
     expect(persisted?.toRecord().lastReanalyzeError).toBeNull();
   });
 
+  it("accepts seed fixture sessions", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    reviewSessionRepository.seed(
+      ReviewSession.create({
+        reviewId: defaultSeedReviewId,
+        title: "Fixture review",
+        repositoryName: "duck8823/locus",
+        branchLabel: "seed",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "seed_fixture",
+          fixtureId: defaultSeedFixtureId,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-10T00:00:00.000Z",
+      }),
+    );
+    const analysisJobScheduler = new SpyAnalysisJobScheduler();
+    const useCase = new RequestManualReanalysisUseCase({
+      reviewSessionRepository,
+      analysisJobScheduler,
+    });
+
+    await useCase.execute({
+      reviewId: defaultSeedReviewId,
+      requestedAt: "2026-03-10T00:05:00.000Z",
+    });
+    const persisted = await reviewSessionRepository.findByReviewId(defaultSeedReviewId);
+
+    expect(analysisJobScheduler.calls).toEqual([
+      {
+        reviewId: defaultSeedReviewId,
+        requestedAt: "2026-03-10T00:05:00.000Z",
+        reason: "manual_reanalysis",
+      },
+    ]);
+    expect(persisted?.toRecord().reanalysisStatus).toBe("running");
+  });
+
   it("raises when review is missing", async () => {
     const useCase = new RequestManualReanalysisUseCase({
       reviewSessionRepository: new InMemoryReviewSessionRepository(),
@@ -96,7 +139,7 @@ describe("RequestManualReanalysisUseCase", () => {
     );
   });
 
-  it("raises when source is not github", async () => {
+  it("raises when source cannot be resolved", async () => {
     const reviewSessionRepository = new InMemoryReviewSessionRepository();
     reviewSessionRepository.seed(
       ReviewSession.create({

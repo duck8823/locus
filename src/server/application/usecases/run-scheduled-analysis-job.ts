@@ -29,13 +29,13 @@ export class RunScheduledAnalysisJobUseCase {
       throw new ReviewSessionNotFoundError(input.reviewId);
     }
 
-    const source = reviewSession.toRecord().source;
-
-    if (!source || source.provider !== "github") {
-      throw new ReanalyzeSourceUnavailableError(input.reviewId);
-    }
-
     if (input.reason === "initial_ingestion") {
+      const source = reviewSession.toRecord().source;
+
+      if (!source || source.provider !== "github") {
+        throw new ReanalyzeSourceUnavailableError(input.reviewId);
+      }
+
       const useCase = new RunGitHubIngestionJobUseCase({
         reviewSessionRepository: this.dependencies.reviewSessionRepository,
         parserAdapters: this.dependencies.parserAdapters,

@@ -15,6 +15,10 @@ import { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
 import type { SourceSnapshot } from "@/server/domain/value-objects/source-snapshot";
 import { RunScheduledAnalysisJobUseCase } from "@/server/application/usecases/run-scheduled-analysis-job";
+import {
+  defaultSeedFixtureId,
+  defaultSeedReviewId,
+} from "@/server/application/services/review-session-seed";
 
 class InMemoryReviewSessionRepository implements ReviewSessionRepository {
   private readonly store = new Map<string, ReturnType<ReviewSession["toRecord"]>>();
@@ -223,6 +227,43 @@ describe("RunScheduledAnalysisJobUseCase", () => {
     const persisted = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-13");
     expect(persisted?.toRecord().reanalysisStatus).toBe("succeeded");
     expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-10T00:01:00.000Z");
+  });
+
+  it("runs reanalysis for seed sessions", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    reviewSessionRepository.seed(
+      ReviewSession.create({
+        reviewId: defaultSeedReviewId,
+        title: "Fixture review",
+        repositoryName: "duck8823/locus",
+        branchLabel: "seed",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "seed_fixture",
+          fixtureId: defaultSeedFixtureId,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-10T00:00:00.000Z",
+      }),
+    );
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    const useCase = new RunScheduledAnalysisJobUseCase({
+      reviewSessionRepository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+    });
+
+    await useCase.execute({
+      jobId: "job-seed",
+      reviewId: defaultSeedReviewId,
+      requestedAt: "2026-03-10T00:03:00.000Z",
+      reason: "manual_reanalysis",
+    });
+
+    const persisted = await reviewSessionRepository.findByReviewId(defaultSeedReviewId);
+    expect(snapshotProvider.calls).toBe(0);
+    expect(persisted?.toRecord().reanalysisStatus).toBe("succeeded");
+    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-10T00:03:00.000Z");
   });
 
   it("raises when source is unavailable", async () => {
