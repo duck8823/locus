@@ -30,6 +30,13 @@ export interface ReviewWorkspaceUnsupportedSummaryDto {
   sampleFilePaths: string[];
 }
 
+export interface ReviewWorkspaceUnsupportedFileDto {
+  filePath: string;
+  language: string | null;
+  reason: UnsupportedFileReason;
+  detail: string | null;
+}
+
 export interface ReviewWorkspaceGroupDto {
   groupId: string;
   title: string;
@@ -83,5 +90,6 @@ export interface ReviewWorkspaceDto {
   lastReanalyzeError: string | null;
   availableStatuses: ReviewGroupStatus[];
   unsupportedSummary: ReviewWorkspaceUnsupportedSummaryDto;
+  unsupportedFiles: ReviewWorkspaceUnsupportedFileDto[];
   groups: ReviewWorkspaceGroupDto[];
 }

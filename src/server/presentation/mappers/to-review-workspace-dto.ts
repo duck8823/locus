@@ -7,6 +7,7 @@ import type {
 } from "@/server/domain/value-objects/semantic-change";
 import { toArchitectureNodeView } from "@/server/presentation/formatters/architecture-node";
 import type {
+  ReviewWorkspaceUnsupportedFileDto,
   ReviewWorkspaceArchitectureGraphDto,
   ReviewWorkspaceDto,
   ReviewWorkspaceSemanticChangeDto,
@@ -14,6 +15,7 @@ import type {
 } from "@/server/presentation/dto/review-workspace-dto";
 
 const UNSUPPORTED_SAMPLE_LIMIT = 5;
+const UNSUPPORTED_DETAILS_LIMIT = 100;
 const FILE_NODE_PREFIX = "file:";
 
 function toSemanticChangeDto(change: SemanticChange): ReviewWorkspaceSemanticChangeDto {
@@ -55,6 +57,27 @@ function toUnsupportedSummary(
     byReason,
     sampleFilePaths,
   };
+}
+
+function toUnsupportedFiles(
+  unsupportedFileAnalyses: UnsupportedFileAnalysis[],
+): ReviewWorkspaceUnsupportedFileDto[] {
+  const rows: ReviewWorkspaceUnsupportedFileDto[] = [];
+
+  for (const entry of unsupportedFileAnalyses) {
+    rows.push({
+      filePath: entry.filePath,
+      language: entry.language ?? null,
+      reason: entry.reason,
+      detail: entry.detail ?? null,
+    });
+
+    if (rows.length >= UNSUPPORTED_DETAILS_LIMIT) {
+      break;
+    }
+  }
+
+  return rows;
 }
 
 function calculateAnalysisDurationMs(params: {
@@ -222,6 +245,7 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     lastReanalyzeError: record.lastReanalyzeError ?? null,
     availableStatuses: [...reviewGroupStatuses],
     unsupportedSummary: toUnsupportedSummary(record.unsupportedFileAnalyses ?? []),
+    unsupportedFiles: toUnsupportedFiles(record.unsupportedFileAnalyses ?? []),
     groups: record.groups.map((group) => ({
       groupId: group.groupId,
       title: group.title,

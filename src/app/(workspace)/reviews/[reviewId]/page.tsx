@@ -93,6 +93,8 @@ export default async function ReviewWorkspacePage({
     workspace.analysisStatus === "queued" ||
     workspace.analysisStatus === "fetching" ||
     workspace.analysisStatus === "parsing";
+  const hiddenUnsupportedFileCount =
+    workspace.unsupportedSummary.totalCount - workspace.unsupportedFiles.length;
   const architectureColumns: ArchitectureColumn[] = selectedGroup
     ? (() => {
         const nodeById = new Map(
@@ -440,10 +442,26 @@ export default async function ReviewWorkspacePage({
                     </li>
                   ))}
                 </ul>
-                {workspace.unsupportedSummary.sampleFilePaths.length > 0 ? (
+                {workspace.unsupportedFiles.length > 0 ? (
+                  <ul className={styles.unsupportedFileList}>
+                    {workspace.unsupportedFiles.map((entry) => (
+                      <li key={`${entry.reason}:${entry.filePath}`} className={styles.unsupportedFileItem}>
+                        <div className={styles.unsupportedFileHeader}>
+                          <span>{entry.filePath}</span>
+                          <span className={styles.unsupportedFileReason}>{entry.reason}</span>
+                        </div>
+                        <p className={styles.muted}>
+                          language: {entry.language ?? "unknown"}
+                          {entry.detail ? ` · detail: ${entry.detail}` : ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {hiddenUnsupportedFileCount > 0 ? (
                   <p className={styles.muted}>
-                    Sample files (up to 5):{" "}
-                    {workspace.unsupportedSummary.sampleFilePaths.join(", ")}
+                    Showing first {workspace.unsupportedFiles.length} entries.{" "}
+                    {hiddenUnsupportedFileCount} additional file(s) were omitted.
                   </p>
                 ) : null}
               </>
