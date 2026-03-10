@@ -156,6 +156,7 @@ npm run demo:data:reseed   # recreate baseline directories + empty job queue
 - [`docs/adr/0004-semantic-change-ir.md`](docs/adr/0004-semantic-change-ir.md) / [`docs/adr/0004-semantic-change-ir.ja.md`](docs/adr/0004-semantic-change-ir.ja.md)
 - [`docs/architecture/web-application-blueprint.md`](docs/architecture/web-application-blueprint.md) / [`docs/architecture/web-application-blueprint.ja.md`](docs/architecture/web-application-blueprint.ja.md)
 - [`docs/architecture/semantic-analysis-pipeline.md`](docs/architecture/semantic-analysis-pipeline.md) / [`docs/architecture/semantic-analysis-pipeline.ja.md`](docs/architecture/semantic-analysis-pipeline.ja.md)
+- [`docs/testing/exploratory-test-playbook.md`](docs/testing/exploratory-test-playbook.md) / [`docs/testing/exploratory-test-playbook.ja.md`](docs/testing/exploratory-test-playbook.ja.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) / [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md)
 
 ## Roadmap
