@@ -1,4 +1,10 @@
-import type { AnalysisJobScheduler, ScheduleAnalysisJobInput, ScheduledAnalysisJob } from "@/server/application/ports/analysis-job-scheduler";
+import type {
+  AnalysisJobScheduler,
+  FindQueuedAnalysisJobInput,
+  QueuedAnalysisJobSnapshot,
+  ScheduleAnalysisJobInput,
+  ScheduledAnalysisJob,
+} from "@/server/application/ports/analysis-job-scheduler";
 
 export class NoopAnalysisJobScheduler implements AnalysisJobScheduler {
   async scheduleReviewAnalysis(input: ScheduleAnalysisJobInput): Promise<ScheduledAnalysisJob> {
@@ -7,5 +13,12 @@ export class NoopAnalysisJobScheduler implements AnalysisJobScheduler {
       acceptedAt: input.requestedAt,
       reason: input.reason,
     };
+  }
+
+  async findQueuedJob(
+    input: FindQueuedAnalysisJobInput,
+  ): Promise<QueuedAnalysisJobSnapshot | null> {
+    void input;
+    return null;
   }
 }

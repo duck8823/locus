@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import type {
   AnalysisJobScheduler,
+  FindQueuedAnalysisJobInput,
+  QueuedAnalysisJobSnapshot,
   ScheduleAnalysisJobInput,
   ScheduledAnalysisJob,
 } from "@/server/application/ports/analysis-job-scheduler";
@@ -179,6 +181,32 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
     }
 
     return scheduledJob;
+  }
+
+  async findQueuedJob(
+    input: FindQueuedAnalysisJobInput,
+  ): Promise<QueuedAnalysisJobSnapshot | null> {
+    const store = await this.loadStore();
+    const queuedJob = [...store.jobs]
+      .filter(
+        (job) =>
+          job.reviewId === input.reviewId &&
+          job.reason === input.reason &&
+          job.status === "queued",
+      )
+      .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))[0];
+
+    if (!queuedJob) {
+      return null;
+    }
+
+    return {
+      jobId: queuedJob.jobId,
+      reviewId: queuedJob.reviewId,
+      requestedAt: queuedJob.requestedAt,
+      reason: queuedJob.reason,
+      queuedAt: queuedJob.queuedAt,
+    };
   }
 
   async drainNow(): Promise<void> {

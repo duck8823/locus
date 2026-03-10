@@ -164,6 +164,64 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persisted.jobs[0]?.requestedAt).toBe("2026-03-10T00:05:00.000Z");
   });
 
+  it("finds the next queued job for a review and reason", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-queued-lookup",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "manual_reanalysis",
+    });
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-queued-lookup",
+      requestedAt: "2026-03-10T00:00:30.000Z",
+      reason: "code_host_webhook",
+    });
+
+    const queuedManual = await scheduler.findQueuedJob({
+      reviewId: "review-queued-lookup",
+      reason: "manual_reanalysis",
+    });
+
+    expect(queuedManual).toMatchObject({
+      reviewId: "review-queued-lookup",
+      reason: "manual_reanalysis",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+    });
+    expect(typeof queuedManual?.jobId).toBe("string");
+    expect(typeof queuedManual?.queuedAt).toBe("string");
+  });
+
+  it("returns null from queued lookup when no matching queued job exists", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-no-queued-lookup",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "manual_reanalysis",
+    });
+    await scheduler.drainNow();
+
+    const queuedManual = await scheduler.findQueuedJob({
+      reviewId: "review-no-queued-lookup",
+      reason: "manual_reanalysis",
+    });
+
+    expect(queuedManual).toBeNull();
+  });
+
   it("queues a follow-up job when the same review/reason is already running", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");

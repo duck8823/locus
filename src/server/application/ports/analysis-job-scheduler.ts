@@ -10,6 +10,22 @@ export interface ScheduledAnalysisJob {
   reason: ScheduleAnalysisJobInput["reason"];
 }
 
+export interface FindQueuedAnalysisJobInput {
+  reviewId: string;
+  reason: ScheduleAnalysisJobInput["reason"];
+}
+
+export interface QueuedAnalysisJobSnapshot {
+  jobId: string;
+  reviewId: string;
+  requestedAt: string;
+  reason: ScheduleAnalysisJobInput["reason"];
+  queuedAt: string;
+}
+
 export interface AnalysisJobScheduler {
   scheduleReviewAnalysis(input: ScheduleAnalysisJobInput): Promise<ScheduledAnalysisJob>;
+  findQueuedJob?(
+    input: FindQueuedAnalysisJobInput,
+  ): Promise<QueuedAnalysisJobSnapshot | null>;
 }
