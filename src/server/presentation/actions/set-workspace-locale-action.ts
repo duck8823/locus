@@ -15,8 +15,18 @@ function assertWorkspaceLocale(value: string): "ja" | "en" {
   return value as "ja" | "en";
 }
 
+function assertRelativeRedirectPath(value: string): string {
+  if (!value.startsWith("/") || value.startsWith("//")) {
+    throw new Error(`Invalid redirectPath: ${value}`);
+  }
+
+  return value;
+}
+
 export async function setWorkspaceLocaleAction(formData: FormData): Promise<void> {
-  const reviewId = readRequiredString(formData, "reviewId");
+  const redirectPath = assertRelativeRedirectPath(
+    readRequiredString(formData, "redirectPath"),
+  );
   const locale = assertWorkspaceLocale(readRequiredString(formData, "locale"));
   const cookieStore = await cookies();
 
@@ -26,6 +36,6 @@ export async function setWorkspaceLocaleAction(formData: FormData): Promise<void
     maxAge: 60 * 60 * 24 * 365,
   });
 
-  revalidatePath(`/reviews/${reviewId}`);
-  redirect(`/reviews/${reviewId}`);
+  revalidatePath(redirectPath);
+  redirect(redirectPath);
 }
