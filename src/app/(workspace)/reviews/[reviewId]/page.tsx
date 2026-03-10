@@ -243,6 +243,7 @@ export default async function ReviewWorkspacePage({
                 className={styles.localeButton}
                 data-active={workspaceLocale === "ja"}
                 type="submit"
+                data-testid="workspace-locale-ja"
               >
                 {copy.actions.switchToJapanese}
               </button>
@@ -258,6 +259,7 @@ export default async function ReviewWorkspacePage({
                 className={styles.localeButton}
                 data-active={workspaceLocale === "en"}
                 type="submit"
+                data-testid="workspace-locale-en"
               >
                 {copy.actions.switchToEnglish}
               </button>
@@ -290,6 +292,7 @@ export default async function ReviewWorkspacePage({
                       className={styles.groupButton}
                       data-selected={group.isSelected}
                       type="submit"
+                      data-testid={`group-button-${group.groupId}`}
                     >
                       <span className={styles.groupTitle}>
                         <span className={styles.groupTitleText}>{group.title}</span>
@@ -336,6 +339,7 @@ export default async function ReviewWorkspacePage({
                     name="status"
                     type="submit"
                     value={status}
+                    data-testid={`status-button-${status}`}
                   >
                     {formatMarkStatusAction(status, workspaceLocale)}
                   </button>

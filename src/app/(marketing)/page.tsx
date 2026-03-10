@@ -181,6 +181,7 @@ export default async function MarketingPage({
                 className={styles.localeButton}
                 data-active={workspaceLocale === "ja"}
                 type="submit"
+                data-testid="marketing-locale-ja"
               >
                 {copy.switchToJapanese}
               </button>
@@ -192,6 +193,7 @@ export default async function MarketingPage({
                 className={styles.localeButton}
                 data-active={workspaceLocale === "en"}
                 type="submit"
+                data-testid="marketing-locale-en"
               >
                 {copy.switchToEnglish}
               </button>
@@ -207,7 +209,11 @@ export default async function MarketingPage({
 
             <div className={styles.ctas}>
               <form action={startDemoSessionAction}>
-                <button className={styles.primaryButton} type="submit">
+                <button
+                  className={styles.primaryButton}
+                  type="submit"
+                  data-testid="open-seed-demo"
+                >
                   {copy.openSeedDemo}
                 </button>
               </form>
@@ -251,7 +257,11 @@ export default async function MarketingPage({
                   type="number"
                 />
               </label>
-              <button className={styles.secondaryButton} type="submit">
+              <button
+                className={styles.secondaryButton}
+                type="submit"
+                data-testid="open-github-demo"
+              >
                 {copy.openGitHubDemo}
               </button>
             </form>

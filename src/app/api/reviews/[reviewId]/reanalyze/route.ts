@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ReanalyzeReviewUseCase } from "@/server/application/usecases/reanalyze-review";
 import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
 import { getDependencies } from "@/server/composition/dependencies";
+import { createApiErrorResponse } from "@/server/presentation/api/api-error-response";
 import { parseReanalyzeRequest } from "@/server/presentation/api/parse-reanalyze-request";
 
 export async function POST(
@@ -34,12 +35,25 @@ export async function POST(
     );
   } catch (error) {
     if (error instanceof ReviewSessionNotFoundError) {
-      return NextResponse.json({ error: error.message }, { status: 404 });
+      return createApiErrorResponse({
+        status: 404,
+        code: "REVIEW_SESSION_NOT_FOUND",
+        message: error.message,
+      });
     }
 
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 400 },
-    );
+    if (error instanceof Error) {
+      return createApiErrorResponse({
+        status: 400,
+        code: "INVALID_REANALYZE_REQUEST",
+        message: error.message,
+      });
+    }
+
+    return createApiErrorResponse({
+      status: 500,
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Unknown error",
+    });
   }
 }

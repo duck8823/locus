@@ -98,7 +98,10 @@ describe("POST /api/reviews/[reviewId]/progress", () => {
     let payload = await response.json();
 
     expect(response.status).toBe(404);
-    expect(payload.error).toContain("Review session not found");
+    expect(payload).toMatchObject({
+      code: "REVIEW_SESSION_NOT_FOUND",
+      message: expect.stringContaining("Review session not found"),
+    });
 
     executeMock.mockRejectedValueOnce(new ReviewGroupNotFoundError("group-2"));
     response = await POST(
@@ -117,7 +120,10 @@ describe("POST /api/reviews/[reviewId]/progress", () => {
     payload = await response.json();
 
     expect(response.status).toBe(404);
-    expect(payload.error).toContain("Review group not found");
+    expect(payload).toMatchObject({
+      code: "REVIEW_GROUP_NOT_FOUND",
+      message: expect.stringContaining("Review group not found"),
+    });
   });
 
   it("returns 400 on invalid payload", async () => {
@@ -138,6 +144,9 @@ describe("POST /api/reviews/[reviewId]/progress", () => {
 
     expect(response.status).toBe(400);
     expect(executeMock).not.toHaveBeenCalled();
-    expect(payload.error).toContain("groupId must be a non-empty string");
+    expect(payload).toMatchObject({
+      code: "INVALID_PROGRESS_REQUEST",
+      message: expect.stringContaining("groupId must be a non-empty string"),
+    });
   });
 });

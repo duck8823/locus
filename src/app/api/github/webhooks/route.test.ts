@@ -113,7 +113,10 @@ describe("POST /api/github/webhooks", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(401);
-    expect(payload.error).toContain("signature verification failed");
+    expect(payload).toMatchObject({
+      code: "GITHUB_WEBHOOK_REQUEST_INVALID",
+      message: expect.stringContaining("signature verification failed"),
+    });
   });
 
   it("returns 400 for unexpected failures", async () => {
@@ -133,6 +136,9 @@ describe("POST /api/github/webhooks", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(400);
-    expect(payload.error).toContain("unexpected failure");
+    expect(payload).toMatchObject({
+      code: "INVALID_WEBHOOK_REQUEST",
+      message: expect.stringContaining("unexpected failure"),
+    });
   });
 });

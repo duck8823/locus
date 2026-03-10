@@ -89,7 +89,10 @@ describe("POST /api/reviews/[reviewId]/reanalyze", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(404);
-    expect(payload.error).toContain("Review session not found");
+    expect(payload).toMatchObject({
+      code: "REVIEW_SESSION_NOT_FOUND",
+      message: expect.stringContaining("Review session not found"),
+    });
   });
 
   it("returns 400 when payload is invalid", async () => {
@@ -107,6 +110,9 @@ describe("POST /api/reviews/[reviewId]/reanalyze", () => {
 
     expect(response.status).toBe(400);
     expect(executeMock).not.toHaveBeenCalled();
-    expect(payload.error).toContain("Reanalyze request body must be an object or null.");
+    expect(payload).toMatchObject({
+      code: "INVALID_REANALYZE_REQUEST",
+      message: expect.stringContaining("Reanalyze request body must be an object or null."),
+    });
   });
 });
