@@ -141,6 +141,7 @@ export LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS=600000
 npm run lint
 npm run typecheck
 npm test
+npm run test:e2e
 npm run build
 ```
 
@@ -162,6 +163,7 @@ npm run demo:data:reseed   # 基本ディレクトリと空のジョブキュー
 - [`docs/architecture/web-application-blueprint.ja.md`](docs/architecture/web-application-blueprint.ja.md) / [`docs/architecture/web-application-blueprint.md`](docs/architecture/web-application-blueprint.md)
 - [`docs/architecture/semantic-analysis-pipeline.ja.md`](docs/architecture/semantic-analysis-pipeline.ja.md) / [`docs/architecture/semantic-analysis-pipeline.md`](docs/architecture/semantic-analysis-pipeline.md)
 - [`docs/testing/exploratory-test-playbook.ja.md`](docs/testing/exploratory-test-playbook.ja.md) / [`docs/testing/exploratory-test-playbook.md`](docs/testing/exploratory-test-playbook.md)
+- [`docs/testing/exploratory-test-session-2026-03-11.ja.md`](docs/testing/exploratory-test-session-2026-03-11.ja.md) / [`docs/testing/exploratory-test-session-2026-03-11.md`](docs/testing/exploratory-test-session-2026-03-11.md)
 - [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md) / [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## ロードマップ
