@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "demo:data:status": "node scripts/manage-demo-data.mjs status",
+    "demo:data:reset": "node scripts/manage-demo-data.mjs reset",
+    "demo:data:reseed": "node scripts/manage-demo-data.mjs reseed"
   },
   "dependencies": {
     "next": "16.1.6",

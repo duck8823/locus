@@ -139,6 +139,14 @@ npm test
 npm run build
 ```
 
+Demo data helper commands (local-only, no external dependency):
+
+```bash
+npm run demo:data:status   # inspect .locus-data summary
+npm run demo:data:reset    # remove .locus-data
+npm run demo:data:reseed   # recreate baseline directories + empty job queue
+```
+
 ### Recommended reading
 
 - [`docs/mvp.md`](docs/mvp.md) / [`docs/mvp.ja.md`](docs/mvp.ja.md)
