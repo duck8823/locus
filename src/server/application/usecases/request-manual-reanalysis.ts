@@ -115,7 +115,18 @@ export class RequestManualReanalysisUseCase {
       return;
     }
 
-    latestSession.markReanalysisQueued(timestamp);
-    await this.dependencies.reviewSessionRepository.save(latestSession);
+    const confirmedLatestSession = await this.dependencies.reviewSessionRepository.findByReviewId(
+      reviewId,
+    );
+
+    if (
+      !confirmedLatestSession ||
+      shouldSkipQueuedTransition(confirmedLatestSession, timestamp)
+    ) {
+      return;
+    }
+
+    confirmedLatestSession.markReanalysisQueued(timestamp);
+    await this.dependencies.reviewSessionRepository.save(confirmedLatestSession);
   }
 }
