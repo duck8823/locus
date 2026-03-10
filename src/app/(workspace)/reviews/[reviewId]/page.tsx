@@ -5,6 +5,7 @@ import styles from "./page.module.css";
 import { AnalysisManualRefreshButton } from "./analysis-manual-refresh-button";
 import { AnalysisStatusPoller } from "./analysis-status-poller";
 import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submit-button";
+import { PersistentDetails } from "./persistent-details";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import {
   formatArchitectureCategoryLabel,
@@ -389,16 +390,18 @@ export default async function ReviewWorkspacePage({
             </div>
           )}
 
-          <details className={styles.collapsibleDetail}>
-            <summary className={styles.collapsibleSummary}>
+          <PersistentDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            summary={
               <span className={styles.muted}>{copy.section.whyThisExists}</span>
-            </summary>
-            <div className={styles.collapsibleContent}>
-              <p>
-                {copy.text.whyThisExistsDescription}
-              </p>
-            </div>
-          </details>
+            }
+          >
+            <p>
+              {copy.text.whyThisExistsDescription}
+            </p>
+          </PersistentDetails>
           <div className={styles.detailBlock}>
             <span className={styles.muted}>{copy.section.initialAnalysis}</span>
             {workspace.analysisAttemptCount > 0 ? (
@@ -497,130 +500,130 @@ export default async function ReviewWorkspacePage({
               <p className={styles.muted}>{copy.text.autoRefreshHint}</p>
             </div>
           </div>
-          <details
+          <PersistentDetails
             className={styles.collapsibleDetail}
-            open={workspace.reanalysisStatus !== "idle"}
-          >
-            <summary className={styles.collapsibleSummary}>
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            defaultOpen={workspace.reanalysisStatus !== "idle"}
+            summary={
               <span className={styles.muted}>{copy.section.reanalysisStatus}</span>
-            </summary>
-            <div className={styles.collapsibleContent}>
-              {workspace.reanalysisStatus === "idle" ? (
-                <p>{copy.text.notRequestedYet}</p>
-              ) : null}
-              {workspace.reanalysisStatus === "queued" && workspace.lastReanalyzeRequestedAt ? (
-                <p>
-                  {copy.text.queuedSince}{" "}
-                  <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
-                </p>
-              ) : null}
-              {workspace.reanalysisStatus === "queued" && !workspace.lastReanalyzeRequestedAt ? (
-                <p>{copy.text.queuedOnly}</p>
-              ) : null}
-              {workspace.reanalysisStatus === "running" && workspace.lastReanalyzeRequestedAt ? (
-                <p>
-                  {copy.text.runningSince}{" "}
-                  <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
-                </p>
-              ) : null}
-              {workspace.reanalysisStatus === "running" && !workspace.lastReanalyzeRequestedAt ? (
-                <p>{copy.text.runningOnly}</p>
-              ) : null}
-              {workspace.reanalysisStatus === "succeeded" ? (
-                <>
-                  {workspace.lastReanalyzeCompletedAt ? (
-                    <p>
-                      {copy.text.succeededAt}{" "}
-                      <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
-                    </p>
-                  ) : (
-                    <p>{copy.text.succeededOnly}</p>
-                  )}
-                  {workspace.lastReanalyzeRequestedAt ? (
-                    <p className={styles.muted}>
-                      {copy.text.requestedAt}{" "}
-                      <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
-                    </p>
-                  ) : null}
-                </>
-              ) : null}
-              {workspace.reanalysisStatus === "failed" ? (
-                <>
-                  {workspace.lastReanalyzeCompletedAt ? (
-                    <p>
-                      {copy.text.failedAt}{" "}
-                      <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
-                    </p>
-                  ) : (
-                    <p>{copy.text.failedOnly}</p>
-                  )}
-                  {workspace.lastReanalyzeError ? (
-                    <p className={styles.reanalysisError}>{workspace.lastReanalyzeError}</p>
-                  ) : null}
-                </>
-              ) : null}
-            </div>
-          </details>
-
-          <details
-            className={styles.collapsibleDetail}
-            open={workspace.unsupportedSummary.totalCount > 0}
+            }
           >
-            <summary className={styles.collapsibleSummary}>
-              <span className={styles.muted}>{copy.section.analysisCoverage}</span>
-            </summary>
-            <div className={styles.collapsibleContent}>
-              {workspace.analysisTotalFiles !== null &&
-              workspace.analysisSupportedFiles !== null &&
-              workspace.analysisCoveragePercent !== null ? (
-                <p className={styles.muted}>
-                  {copy.text.coverage}: {workspace.analysisSupportedFiles}/{workspace.analysisTotalFiles} (
-                  {formatCoveragePercent(workspace.analysisCoveragePercent)})
-                </p>
-              ) : null}
-              {workspace.unsupportedSummary.totalCount === 0 ? (
-                <p>{copy.text.allFilesCovered}</p>
-              ) : (
-                <>
+            {workspace.reanalysisStatus === "idle" ? (
+              <p>{copy.text.notRequestedYet}</p>
+            ) : null}
+            {workspace.reanalysisStatus === "queued" && workspace.lastReanalyzeRequestedAt ? (
+              <p>
+                {copy.text.queuedSince}{" "}
+                <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+              </p>
+            ) : null}
+            {workspace.reanalysisStatus === "queued" && !workspace.lastReanalyzeRequestedAt ? (
+              <p>{copy.text.queuedOnly}</p>
+            ) : null}
+            {workspace.reanalysisStatus === "running" && workspace.lastReanalyzeRequestedAt ? (
+              <p>
+                {copy.text.runningSince}{" "}
+                <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+              </p>
+            ) : null}
+            {workspace.reanalysisStatus === "running" && !workspace.lastReanalyzeRequestedAt ? (
+              <p>{copy.text.runningOnly}</p>
+            ) : null}
+            {workspace.reanalysisStatus === "succeeded" ? (
+              <>
+                {workspace.lastReanalyzeCompletedAt ? (
                   <p>
-                    {workspace.unsupportedSummary.totalCount} {copy.text.excludedFiles}
+                    {copy.text.succeededAt}{" "}
+                    <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
                   </p>
-                  <ul className={styles.unsupportedList}>
-                    {workspace.unsupportedSummary.byReason.map((entry) => (
-                      <li key={entry.reason}>
-                        {formatUnsupportedReason(entry.reason, workspaceLocale)}: {entry.count}
+                ) : (
+                  <p>{copy.text.succeededOnly}</p>
+                )}
+                {workspace.lastReanalyzeRequestedAt ? (
+                  <p className={styles.muted}>
+                    {copy.text.requestedAt}{" "}
+                    <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            {workspace.reanalysisStatus === "failed" ? (
+              <>
+                {workspace.lastReanalyzeCompletedAt ? (
+                  <p>
+                    {copy.text.failedAt}{" "}
+                    <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
+                  </p>
+                ) : (
+                  <p>{copy.text.failedOnly}</p>
+                )}
+                {workspace.lastReanalyzeError ? (
+                  <p className={styles.reanalysisError}>{workspace.lastReanalyzeError}</p>
+                ) : null}
+              </>
+            ) : null}
+          </PersistentDetails>
+
+          <PersistentDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            defaultOpen={workspace.unsupportedSummary.totalCount > 0}
+            summary={
+              <span className={styles.muted}>{copy.section.analysisCoverage}</span>
+            }
+          >
+            {workspace.analysisTotalFiles !== null &&
+            workspace.analysisSupportedFiles !== null &&
+            workspace.analysisCoveragePercent !== null ? (
+              <p className={styles.muted}>
+                {copy.text.coverage}: {workspace.analysisSupportedFiles}/{workspace.analysisTotalFiles} (
+                {formatCoveragePercent(workspace.analysisCoveragePercent)})
+              </p>
+            ) : null}
+            {workspace.unsupportedSummary.totalCount === 0 ? (
+              <p>{copy.text.allFilesCovered}</p>
+            ) : (
+              <>
+                <p>
+                  {workspace.unsupportedSummary.totalCount} {copy.text.excludedFiles}
+                </p>
+                <ul className={styles.unsupportedList}>
+                  {workspace.unsupportedSummary.byReason.map((entry) => (
+                    <li key={entry.reason}>
+                      {formatUnsupportedReason(entry.reason, workspaceLocale)}: {entry.count}
+                    </li>
+                  ))}
+                </ul>
+                {workspace.unsupportedFiles.length > 0 ? (
+                  <ul className={styles.unsupportedFileList}>
+                    {workspace.unsupportedFiles.map((entry) => (
+                      <li key={`${entry.reason}:${entry.filePath}`} className={styles.unsupportedFileItem}>
+                        <div className={styles.unsupportedFileHeader}>
+                          <span className={styles.unsupportedFilePath}>{entry.filePath}</span>
+                          <span className={styles.unsupportedFileReason}>
+                            {formatUnsupportedReason(entry.reason, workspaceLocale)}
+                          </span>
+                        </div>
+                        <p className={styles.muted}>
+                          {copy.text.language}: {entry.language ?? copy.text.unknownLanguage}
+                          {entry.detail ? ` · ${copy.text.detail}: ${entry.detail}` : ""}
+                        </p>
                       </li>
                     ))}
                   </ul>
-                  {workspace.unsupportedFiles.length > 0 ? (
-                    <ul className={styles.unsupportedFileList}>
-                      {workspace.unsupportedFiles.map((entry) => (
-                        <li key={`${entry.reason}:${entry.filePath}`} className={styles.unsupportedFileItem}>
-                          <div className={styles.unsupportedFileHeader}>
-                            <span className={styles.unsupportedFilePath}>{entry.filePath}</span>
-                            <span className={styles.unsupportedFileReason}>
-                              {formatUnsupportedReason(entry.reason, workspaceLocale)}
-                            </span>
-                          </div>
-                          <p className={styles.muted}>
-                            {copy.text.language}: {entry.language ?? copy.text.unknownLanguage}
-                            {entry.detail ? ` · ${copy.text.detail}: ${entry.detail}` : ""}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
-                  {hiddenUnsupportedFileCount > 0 ? (
-                    <p className={styles.muted}>
-                      {copy.text.showingFirstEntriesPrefix} {workspace.unsupportedFiles.length}{" "}
-                      {copy.text.showingFirstEntriesSuffix} {hiddenUnsupportedFileCount}{" "}
-                      {copy.text.hiddenEntriesSuffix}
-                    </p>
-                  ) : null}
-                </>
-              )}
-            </div>
-          </details>
+                ) : null}
+                {hiddenUnsupportedFileCount > 0 ? (
+                  <p className={styles.muted}>
+                    {copy.text.showingFirstEntriesPrefix} {workspace.unsupportedFiles.length}{" "}
+                    {copy.text.showingFirstEntriesSuffix} {hiddenUnsupportedFileCount}{" "}
+                    {copy.text.hiddenEntriesSuffix}
+                  </p>
+                ) : null}
+              </>
+            )}
+          </PersistentDetails>
         </section>
 
         <aside className={styles.panel}>
