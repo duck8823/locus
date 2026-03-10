@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import styles from "./page.module.css";
@@ -6,6 +6,18 @@ import { AnalysisManualRefreshButton } from "./analysis-manual-refresh-button";
 import { AnalysisStatusPoller } from "./analysis-status-poller";
 import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submit-button";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
+import {
+  formatArchitectureCategoryLabel,
+  formatArchitectureColumnLabel,
+  formatArchitectureRelation,
+  formatMarkStatusAction,
+  formatReviewGroupStatus,
+  formatSemanticChangeType,
+  formatSemanticSymbolKind,
+  formatUnsupportedReason,
+  resolveWorkspaceLocale,
+  workspaceCopyByLocale,
+} from "./workspace-copy";
 import { LocalizedDateTime } from "@/app/components/localized-date-time";
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
 import {
@@ -20,14 +32,6 @@ import {
   groupArchitectureNodes,
   type ArchitectureNodeGroups,
 } from "@/server/presentation/formatters/architecture-node";
-
-function formatReviewGroupStatus(status: string) {
-  return status.replaceAll("_", " ");
-}
-
-function formatSemanticChangeType(changeType: string) {
-  return changeType.replaceAll("_", " ");
-}
 
 function formatCodeRegion(
   region: { filePath: string; startLine: number; endLine: number } | null,
@@ -47,11 +51,6 @@ function formatAnalysisDuration(durationMs: number): string {
   return `${(durationMs / 1000).toFixed(1)} s`;
 }
 
-function formatArchitectureRelation(
-  relation: "imports" | "calls" | "implements" | "uses",
-): string {
-  return relation;
-}
 
 function formatCoveragePercent(coveragePercent: number): string {
   const formatted = coveragePercent.toFixed(1);
@@ -91,15 +90,8 @@ const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = 
 const ARCHITECTURE_CATEGORY_ORDER = Object.keys(
   ARCHITECTURE_CATEGORY_FLAGS,
 ) as Array<keyof ArchitectureNodeGroups>;
-const ARCHITECTURE_CATEGORY_LABELS: Record<keyof ArchitectureNodeGroups, string> = {
-  layer: "Layers",
-  file: "Files",
-  symbol: "Symbols",
-  unknown: "Others",
-};
-
 interface ArchitectureColumn {
-  label: "Upstream" | "Downstream";
+  label: "upstream" | "downstream";
   nodes: Array<{
     nodeId: string;
     linkedGroupId: string | null;
@@ -113,8 +105,14 @@ export default async function ReviewWorkspacePage({
   params: Promise<{ reviewId: string }>;
 }) {
   const { reviewId } = await params;
+  const headerStore = await headers();
   const cookieStore = await cookies();
   const viewerName = cookieStore.get("locus-demo-viewer")?.value;
+  const workspaceLocale = resolveWorkspaceLocale({
+    preferredLocale: cookieStore.get("locus-ui-locale")?.value ?? null,
+    acceptLanguage: headerStore.get("accept-language"),
+  });
+  const copy = workspaceCopyByLocale[workspaceLocale];
 
   if (!viewerName) {
     redirect("/");
@@ -183,7 +181,7 @@ export default async function ReviewWorkspacePage({
 
         return [
           {
-            label: "Upstream" as const,
+            label: "upstream" as const,
             nodes: upstreamNodes.map((node) => ({
               nodeId: node.nodeId,
               linkedGroupId: node.linkedGroupId,
@@ -191,7 +189,7 @@ export default async function ReviewWorkspacePage({
             relationByNodeId: upstreamRelations,
           },
           {
-            label: "Downstream" as const,
+            label: "downstream" as const,
             nodes: downstreamNodes.map((node) => ({
               nodeId: node.nodeId,
               linkedGroupId: node.linkedGroupId,
@@ -216,34 +214,37 @@ export default async function ReviewWorkspacePage({
       <div className={styles.header}>
         <div>
           <Link href="/" className={styles.muted}>
-            ← Back to marketing page
+            {copy.links.backToHome}
           </Link>
-          <h1 style={{ marginTop: "12px", marginBottom: "10px", fontSize: "40px" }}>
+          <h1 className={styles.workspaceTitle}>
             {workspace.title}
           </h1>
           <div className={styles.meta}>
-            <span>Reviewer: {workspace.viewerName}</span>
-            <span>Repository: {workspace.repositoryName}</span>
-            <span>Branch: {workspace.branchLabel}</span>
+            <span>{copy.meta.reviewer}: {workspace.viewerName}</span>
+            <span>{copy.meta.repository}: {workspace.repositoryName}</span>
+            <span>{copy.meta.branch}: {workspace.branchLabel}</span>
             <span>
-              Last opened: <LocalizedDateTime isoTimestamp={workspace.lastOpenedAt} />
+              {copy.meta.lastOpened}: <LocalizedDateTime isoTimestamp={workspace.lastOpenedAt} />
             </span>
           </div>
         </div>
         <div className={styles.actions}>
           <Link className={styles.actionButton} href="/settings/connections">
-            Connections
+            {copy.links.connections}
           </Link>
           <form action={requestReanalysisAction}>
             <input name="reviewId" type="hidden" value={workspace.reviewId} />
-            <ReanalyzeSubmitButton />
+            <ReanalyzeSubmitButton
+              idleLabel={copy.actions.queueReanalysis}
+              pendingLabel={copy.actions.queueingReanalysis}
+            />
           </form>
         </div>
       </div>
 
       <div className={styles.layout}>
         <section className={styles.panel}>
-          <h2>Change groups</h2>
+          <h2>{copy.section.changeGroups}</h2>
           {workspace.groups.length > 0 ? (
             <ul className={styles.groupList}>
               {workspace.groups.map((group) => (
@@ -257,9 +258,9 @@ export default async function ReviewWorkspacePage({
                       type="submit"
                     >
                       <span className={styles.groupTitle}>
-                        <span>{group.title}</span>
+                        <span className={styles.groupTitleText}>{group.title}</span>
                         <span className={styles.badge} data-status={group.status}>
-                          {formatReviewGroupStatus(group.status)}
+                          {formatReviewGroupStatus(group.status, workspaceLocale)}
                         </span>
                       </span>
                       <p className={styles.groupSummary}>{group.summary}</p>
@@ -270,20 +271,20 @@ export default async function ReviewWorkspacePage({
             </ul>
           ) : isInitialAnalysisRunning ? (
             <p className={styles.muted}>
-              Initial analysis is in progress. Change groups will appear automatically.
+              {copy.text.changeGroupsWillAppear}
             </p>
           ) : (
-            <p className={styles.muted}>No change groups are available yet.</p>
+            <p className={styles.muted}>{copy.text.noChangeGroupsYet}</p>
           )}
         </section>
 
         <section className={styles.panel}>
-          <h2>Detail pane</h2>
+          <h2>{copy.section.detailPane}</h2>
           {selectedGroup ? (
             <>
               <div className={styles.detailBlock}>
                 <span className={styles.badge} data-status={selectedGroup.status}>
-                  {formatReviewGroupStatus(selectedGroup.status)}
+                  {formatReviewGroupStatus(selectedGroup.status, workspaceLocale)}
                 </span>
                 <h3 style={{ fontSize: "26px" }}>{selectedGroup.title}</h3>
                 <p className={styles.groupSummary}>{selectedGroup.summary}</p>
@@ -302,14 +303,14 @@ export default async function ReviewWorkspacePage({
                     type="submit"
                     value={status}
                   >
-                    Mark {formatReviewGroupStatus(status)}
+                    {formatMarkStatusAction(status, workspaceLocale)}
                   </button>
                 ))}
               </form>
 
               <div className={styles.detailBlock}>
                 <span className={styles.muted}>
-                  Semantic changes ({selectedGroup.semanticChanges.length})
+                  {copy.section.semanticChanges} ({selectedGroup.semanticChanges.length})
                 </span>
                 {selectedGroup.semanticChanges.length > 0 ? (
                   <ul className={styles.semanticChangeList}>
@@ -321,26 +322,28 @@ export default async function ReviewWorkspacePage({
                             className={styles.changeBadge}
                             data-change-type={change.changeType}
                           >
-                            {formatSemanticChangeType(change.changeType)}
+                            {formatSemanticChangeType(change.changeType, workspaceLocale)}
                           </span>
                         </div>
                         <p className={styles.semanticChangeMeta}>
-                          kind: {change.symbolKind}
-                          {change.signatureSummary ? ` · signature: ${change.signatureSummary}` : ""}
-                          {change.bodySummary ? ` · body: ${change.bodySummary}` : ""}
+                          {copy.text.semanticKind}: {formatSemanticSymbolKind(change.symbolKind, workspaceLocale)}
+                          {change.signatureSummary
+                            ? ` · ${copy.text.semanticSignature}: ${change.signatureSummary}`
+                            : ""}
+                          {change.bodySummary ? ` · ${copy.text.semanticBody}: ${change.bodySummary}` : ""}
                         </p>
                         <p className={styles.semanticChangeMeta}>
-                          before: {formatCodeRegion(change.before)}
+                          {copy.text.semanticBefore}: {formatCodeRegion(change.before)}
                         </p>
                         <p className={styles.semanticChangeMeta}>
-                          after: {formatCodeRegion(change.after)}
+                          {copy.text.semanticAfter}: {formatCodeRegion(change.after)}
                         </p>
                       </li>
                     ))}
                   </ul>
                 ) : (
                   <p className={styles.groupSummary}>
-                    No semantic change details were recorded for this group.
+                    {copy.text.noSemanticChangeDetails}
                   </p>
                 )}
               </div>
@@ -348,40 +351,37 @@ export default async function ReviewWorkspacePage({
           ) : (
             <div className={styles.detailBlock}>
               <p className={styles.groupSummary}>
-                Change group details will appear after semantic analysis produces the first
-                review group.
+                {copy.text.changeGroupDetailsWillAppear}
               </p>
             </div>
           )}
 
           <div className={styles.detailBlock}>
-            <span className={styles.muted}>Why this exists</span>
+            <span className={styles.muted}>{copy.section.whyThisExists}</span>
             <p>
-              This workspace is server-rendered from a persisted review session so
-              the initial shell can be reopened without losing progress or the
-              currently selected change group.
+              {copy.text.whyThisExistsDescription}
             </p>
           </div>
           <div className={styles.detailBlock}>
-            <span className={styles.muted}>Initial analysis</span>
+            <span className={styles.muted}>{copy.section.initialAnalysis}</span>
             {workspace.analysisAttemptCount > 0 ? (
-              <p className={styles.muted}>Attempts: {workspace.analysisAttemptCount}</p>
+              <p className={styles.muted}>{copy.text.attempts}: {workspace.analysisAttemptCount}</p>
             ) : null}
             {workspace.analysisDurationMs !== null ? (
               <p className={styles.muted}>
-                Last duration: {formatAnalysisDuration(workspace.analysisDurationMs)}
+                {copy.text.lastDuration}: {formatAnalysisDuration(workspace.analysisDurationMs)}
               </p>
             ) : null}
             {workspace.analysisStatus === "queued" ? (
-              <p>Queued. Starting review analysis…</p>
+              <p>{copy.text.analysisQueued}</p>
             ) : null}
             {workspace.analysisStatus === "fetching" ? (
-              <p>Fetching pull request snapshots…</p>
+              <p>{copy.text.analysisFetching}</p>
             ) : null}
             {workspace.analysisStatus === "parsing" ? (
               <>
                 <p>
-                  Parsing and grouping semantic changes
+                  {copy.text.analysisParsing}
                   {workspace.analysisTotalFiles !== null ? (
                     <>
                       {" "}
@@ -389,16 +389,16 @@ export default async function ReviewWorkspacePage({
                         workspace.analysisProcessedFiles ?? 0,
                         workspace.analysisTotalFiles,
                       )}
-                      /{workspace.analysisTotalFiles} files)
+                      /{workspace.analysisTotalFiles} {copy.text.filesSuffix})
                     </>
                   ) : workspace.analysisProcessedFiles !== null ? (
-                    <> ({workspace.analysisProcessedFiles} files processed)</>
+                    <> ({workspace.analysisProcessedFiles} {copy.text.filesProcessedSuffix})</>
                   ) : null}
                   .
                 </p>
                 {workspace.analysisRequestedAt ? (
                   <p className={styles.muted}>
-                    Requested at{" "}
+                    {copy.text.requestedAt}{" "}
                     <LocalizedDateTime isoTimestamp={workspace.analysisRequestedAt} />
                   </p>
                 ) : null}
@@ -412,87 +412,90 @@ export default async function ReviewWorkspacePage({
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={analysisProgressPercent}
-                  aria-label="Analysis progress"
+                  aria-label={copy.text.analysisProgressAriaLabel}
                 >
                   <div
                     className={styles.analysisProgressFill}
                     style={{ width: `${analysisProgressPercent}%` }}
                   />
                 </div>
-                <p className={styles.muted}>Progress: {analysisProgressPercent.toFixed(1)}%</p>
+                <p className={styles.muted}>
+                  {copy.text.progress}: {analysisProgressPercent.toFixed(1)}%
+                </p>
               </>
             ) : null}
             {workspace.analysisStatus === "ready" ? (
               workspace.analysisCompletedAt ? (
                 <p>
-                  Ready at <LocalizedDateTime isoTimestamp={workspace.analysisCompletedAt} />
+                  {copy.text.readyAt}{" "}
+                  <LocalizedDateTime isoTimestamp={workspace.analysisCompletedAt} />
                 </p>
               ) : (
-                <p>Ready</p>
+                <p>{copy.text.analysisReady}</p>
               )
             ) : null}
             {workspace.analysisStatus === "failed" ? (
               <>
-                <p>Initial analysis failed.</p>
+                <p>{copy.text.initialAnalysisFailed}</p>
                 {workspace.analysisError ? (
                   <p className={styles.reanalysisError}>{workspace.analysisError}</p>
                 ) : null}
                 <form action={requestInitialAnalysisRetryAction}>
                   <input name="reviewId" type="hidden" value={workspace.reviewId} />
-                  <InitialAnalysisRetrySubmitButton />
+                  <InitialAnalysisRetrySubmitButton
+                    idleLabel={copy.actions.retryInitialAnalysis}
+                    pendingLabel={copy.actions.retryingInitialAnalysis}
+                  />
                 </form>
               </>
             ) : null}
             {isInitialAnalysisRunning && workspace.groups.length === 0 ? (
-              <p className={styles.muted}>
-                First run can take longer because no local cache is available yet. You can keep
-                this tab open and the page will refresh automatically.
-              </p>
+              <p className={styles.muted}>{copy.text.firstRunMayTakeLonger}</p>
             ) : null}
             <div className={styles.analysisControls}>
-              <AnalysisManualRefreshButton />
-              <p className={styles.muted}>
-                Auto-refresh runs while initial analysis or reanalysis is active, and pauses while
-                this tab is in the background.
-              </p>
+              <AnalysisManualRefreshButton
+                idleLabel={copy.actions.reloadNow}
+                pendingLabel={copy.actions.refreshing}
+              />
+              <p className={styles.muted}>{copy.text.autoRefreshHint}</p>
             </div>
           </div>
           <div className={styles.detailBlock}>
-            <span className={styles.muted}>Reanalysis status</span>
+            <span className={styles.muted}>{copy.section.reanalysisStatus}</span>
             {workspace.reanalysisStatus === "idle" ? (
-              <p>Not requested yet</p>
+              <p>{copy.text.notRequestedYet}</p>
             ) : null}
             {workspace.reanalysisStatus === "queued" && workspace.lastReanalyzeRequestedAt ? (
               <p>
-                Queued since{" "}
+                {copy.text.queuedSince}{" "}
                 <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
               </p>
             ) : null}
             {workspace.reanalysisStatus === "queued" && !workspace.lastReanalyzeRequestedAt ? (
-              <p>Queued…</p>
+              <p>{copy.text.queuedOnly}</p>
             ) : null}
             {workspace.reanalysisStatus === "running" && workspace.lastReanalyzeRequestedAt ? (
               <p>
-                Running since{" "}
+                {copy.text.runningSince}{" "}
                 <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
               </p>
             ) : null}
             {workspace.reanalysisStatus === "running" && !workspace.lastReanalyzeRequestedAt ? (
-              <p>Running…</p>
+              <p>{copy.text.runningOnly}</p>
             ) : null}
             {workspace.reanalysisStatus === "succeeded" ? (
               <>
                 {workspace.lastReanalyzeCompletedAt ? (
                   <p>
-                    Succeeded at{" "}
+                    {copy.text.succeededAt}{" "}
                     <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
                   </p>
                 ) : (
-                  <p>Succeeded</p>
+                  <p>{copy.text.succeededOnly}</p>
                 )}
                 {workspace.lastReanalyzeRequestedAt ? (
                   <p className={styles.muted}>
-                    Requested at{" "}
+                    {copy.text.requestedAt}{" "}
                     <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
                   </p>
                 ) : null}
@@ -502,11 +505,11 @@ export default async function ReviewWorkspacePage({
               <>
                 {workspace.lastReanalyzeCompletedAt ? (
                   <p>
-                    Failed at{" "}
+                    {copy.text.failedAt}{" "}
                     <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
                   </p>
                 ) : (
-                  <p>Failed</p>
+                  <p>{copy.text.failedOnly}</p>
                 )}
                 {workspace.lastReanalyzeError ? (
                   <p className={styles.reanalysisError}>{workspace.lastReanalyzeError}</p>
@@ -516,27 +519,26 @@ export default async function ReviewWorkspacePage({
           </div>
 
           <div className={styles.detailBlock}>
-            <span className={styles.muted}>Analysis coverage</span>
+            <span className={styles.muted}>{copy.section.analysisCoverage}</span>
             {workspace.analysisTotalFiles !== null &&
             workspace.analysisSupportedFiles !== null &&
             workspace.analysisCoveragePercent !== null ? (
               <p className={styles.muted}>
-                Coverage: {workspace.analysisSupportedFiles}/{workspace.analysisTotalFiles} (
+                {copy.text.coverage}: {workspace.analysisSupportedFiles}/{workspace.analysisTotalFiles} (
                 {formatCoveragePercent(workspace.analysisCoveragePercent)})
               </p>
             ) : null}
             {workspace.unsupportedSummary.totalCount === 0 ? (
-              <p>All changed files were covered by active parser adapters.</p>
+              <p>{copy.text.allFilesCovered}</p>
             ) : (
               <>
                 <p>
-                  {workspace.unsupportedSummary.totalCount} file(s) were excluded from semantic
-                  analysis.
+                  {workspace.unsupportedSummary.totalCount} {copy.text.excludedFiles}
                 </p>
                 <ul className={styles.unsupportedList}>
                   {workspace.unsupportedSummary.byReason.map((entry) => (
                     <li key={entry.reason}>
-                      {entry.reason}: {entry.count}
+                      {formatUnsupportedReason(entry.reason, workspaceLocale)}: {entry.count}
                     </li>
                   ))}
                 </ul>
@@ -545,12 +547,14 @@ export default async function ReviewWorkspacePage({
                     {workspace.unsupportedFiles.map((entry) => (
                       <li key={`${entry.reason}:${entry.filePath}`} className={styles.unsupportedFileItem}>
                         <div className={styles.unsupportedFileHeader}>
-                          <span>{entry.filePath}</span>
-                          <span className={styles.unsupportedFileReason}>{entry.reason}</span>
+                          <span className={styles.unsupportedFilePath}>{entry.filePath}</span>
+                          <span className={styles.unsupportedFileReason}>
+                            {formatUnsupportedReason(entry.reason, workspaceLocale)}
+                          </span>
                         </div>
                         <p className={styles.muted}>
-                          language: {entry.language ?? "unknown"}
-                          {entry.detail ? ` · detail: ${entry.detail}` : ""}
+                          {copy.text.language}: {entry.language ?? copy.text.unknownLanguage}
+                          {entry.detail ? ` · ${copy.text.detail}: ${entry.detail}` : ""}
                         </p>
                       </li>
                     ))}
@@ -558,8 +562,9 @@ export default async function ReviewWorkspacePage({
                 ) : null}
                 {hiddenUnsupportedFileCount > 0 ? (
                   <p className={styles.muted}>
-                    Showing first {workspace.unsupportedFiles.length} entries.{" "}
-                    {hiddenUnsupportedFileCount} additional file(s) were omitted.
+                    {copy.text.showingFirstEntriesPrefix} {workspace.unsupportedFiles.length}{" "}
+                    {copy.text.showingFirstEntriesSuffix} {hiddenUnsupportedFileCount}{" "}
+                    {copy.text.hiddenEntriesSuffix}
                   </p>
                 ) : null}
               </>
@@ -568,9 +573,9 @@ export default async function ReviewWorkspacePage({
         </section>
 
         <aside className={styles.panel}>
-          <h2>Architecture pane</h2>
+          <h2>{copy.section.architecturePane}</h2>
           <p className={styles.muted} style={{ marginBottom: "14px" }}>
-            MVP v0 keeps this focused on immediate neighbors only.
+            {copy.text.architectureScopeHint}
           </p>
           {selectedGroup ? (
             <div className={styles.archColumns}>
@@ -588,22 +593,24 @@ export default async function ReviewWorkspacePage({
 
                 return (
                   <div key={column.label} className={styles.archColumn}>
-                    <h3 className={styles.archColumnHeading}>{column.label}</h3>
+                    <h3 className={styles.archColumnHeading}>
+                      {formatArchitectureColumnLabel(column.label, workspaceLocale)}
+                    </h3>
                     {categories.length === 0 ? (
-                      <p className={styles.muted}>No related nodes.</p>
+                      <p className={styles.muted}>{copy.text.noRelatedNodes}</p>
                     ) : (
                       <div className={styles.archSections}>
                         {categories.map(([category, nodes]) => (
                           <section
                             key={`${column.label}-${category}`}
-                            aria-labelledby={`arch-${column.label.toLowerCase()}-${category}`}
+                            aria-labelledby={`arch-${column.label}-${category}`}
                             className={styles.archSection}
                           >
                             <h4
-                              id={`arch-${column.label.toLowerCase()}-${category}`}
+                              id={`arch-${column.label}-${category}`}
                               className={styles.archSectionHeading}
                             >
-                              {ARCHITECTURE_CATEGORY_LABELS[category]}
+                              {formatArchitectureCategoryLabel(category, workspaceLocale)}
                             </h4>
                             <ul className={styles.archNodeList}>
                               {nodes.map((node) => (
@@ -622,7 +629,7 @@ export default async function ReviewWorkspacePage({
                                           <span className={styles.archNodeLabel}>{node.label}</span>
                                           {relation ? (
                                             <span className={styles.archNodeMeta}>
-                                              {formatArchitectureRelation(relation)}
+                                              {formatArchitectureRelation(relation, workspaceLocale)}
                                             </span>
                                           ) : null}
                                         </div>
@@ -643,12 +650,12 @@ export default async function ReviewWorkspacePage({
                                         />
                                         <button className={styles.archNodeButton} type="submit">
                                           <span className={styles.srOnly}>
-                                            Switch to related change group
+                                            {copy.text.switchToRelatedGroup}
                                           </span>
                                           <span className={styles.archNodeLabel}>{node.label}</span>
                                           {relation ? (
                                             <span className={styles.archNodeMeta}>
-                                              {formatArchitectureRelation(relation)}
+                                              {formatArchitectureRelation(relation, workspaceLocale)}
                                             </span>
                                           ) : null}
                                         </button>
@@ -667,9 +674,7 @@ export default async function ReviewWorkspacePage({
               })}
             </div>
           ) : (
-            <p className={styles.muted}>
-              Architecture context will appear after the first change group is available.
-            </p>
+            <p className={styles.muted}>{copy.text.architectureContextWillAppear}</p>
           )}
         </aside>
       </div>
