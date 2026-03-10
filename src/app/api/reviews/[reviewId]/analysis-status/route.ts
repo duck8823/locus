@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDependencies } from "@/server/composition/dependencies";
+import { createApiErrorResponse } from "@/server/presentation/api/api-error-response";
 import { loadActiveManualReanalysisJob } from "@/server/presentation/api/load-active-manual-reanalysis-job";
 import {
   createAnalysisStatusToken,
@@ -16,10 +17,11 @@ export async function GET(
   const reviewSession = await reviewSessionRepository.findByReviewId(reviewId);
 
   if (!reviewSession) {
-    return NextResponse.json(
-      { error: `Review session not found: ${reviewId}` },
-      { status: 404 },
-    );
+    return createApiErrorResponse({
+      status: 404,
+      code: "REVIEW_SESSION_NOT_FOUND",
+      message: `Review session not found: ${reviewId}`,
+    });
   }
 
   const record = reviewSession.toRecord();

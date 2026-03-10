@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AcceptGitHubWebhookUseCase } from "@/server/application/usecases/accept-github-webhook";
 import { getDependencies } from "@/server/composition/dependencies";
+import { createApiErrorResponse } from "@/server/presentation/api/api-error-response";
 import {
   GitHubWebhookRequestError,
   parseGitHubWebhookRequest,
@@ -29,12 +30,25 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     if (error instanceof GitHubWebhookRequestError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+      return createApiErrorResponse({
+        status: error.statusCode,
+        code: "GITHUB_WEBHOOK_REQUEST_INVALID",
+        message: error.message,
+      });
     }
 
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
-      { status: 400 },
-    );
+    if (error instanceof Error) {
+      return createApiErrorResponse({
+        status: 400,
+        code: "INVALID_WEBHOOK_REQUEST",
+        message: error.message,
+      });
+    }
+
+    return createApiErrorResponse({
+      status: 500,
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Unknown error",
+    });
   }
 }

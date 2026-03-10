@@ -149,6 +149,9 @@ describe("GET /api/reviews/[reviewId]/analysis-status", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(404);
-    expect(payload.error).toContain("Review session not found");
+    expect(payload).toMatchObject({
+      code: "REVIEW_SESSION_NOT_FOUND",
+      message: expect.stringContaining("Review session not found"),
+    });
   });
 });
