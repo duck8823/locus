@@ -23,9 +23,22 @@ export interface QueuedAnalysisJobSnapshot {
   queuedAt: string;
 }
 
+export interface ActiveAnalysisJobSnapshot {
+  jobId: string;
+  reviewId: string;
+  requestedAt: string;
+  reason: ScheduleAnalysisJobInput["reason"];
+  status: "queued" | "running";
+  queuedAt: string;
+  startedAt: string | null;
+}
+
 export interface AnalysisJobScheduler {
   scheduleReviewAnalysis(input: ScheduleAnalysisJobInput): Promise<ScheduledAnalysisJob>;
   findQueuedJob?(
     input: FindQueuedAnalysisJobInput,
   ): Promise<QueuedAnalysisJobSnapshot | null>;
+  findActiveJob?(
+    input: FindQueuedAnalysisJobInput,
+  ): Promise<ActiveAnalysisJobSnapshot | null>;
 }

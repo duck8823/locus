@@ -1,10 +1,10 @@
-import type { QueuedAnalysisJobSnapshot } from "@/server/application/ports/analysis-job-scheduler";
+import type { ActiveAnalysisJobSnapshot } from "@/server/application/ports/analysis-job-scheduler";
 import type { ReviewReanalysisStatus } from "@/server/domain/value-objects/reanalysis-status";
 
 interface ResolveEffectiveReanalysisStateInput {
   persistedStatus: ReviewReanalysisStatus | null | undefined;
   persistedLastReanalyzeRequestedAt: string | null | undefined;
-  queuedManualReanalysisJob?: QueuedAnalysisJobSnapshot | null;
+  activeManualReanalysisJob?: ActiveAnalysisJobSnapshot | null;
 }
 
 export interface EffectiveReanalysisState {
@@ -39,7 +39,8 @@ export function resolveEffectiveReanalysisState(
 ): EffectiveReanalysisState {
   const persistedStatus = input.persistedStatus ?? "idle";
   const persistedRequestedAt = input.persistedLastReanalyzeRequestedAt ?? null;
-  const queuedRequestedAt = input.queuedManualReanalysisJob?.requestedAt ?? null;
+  const activeJob = input.activeManualReanalysisJob ?? null;
+  const activeRequestedAt = activeJob?.requestedAt ?? null;
 
   if (persistedStatus === "running") {
     return {
@@ -48,17 +49,27 @@ export function resolveEffectiveReanalysisState(
     };
   }
 
+  if (activeJob?.status === "running") {
+    return {
+      reanalysisStatus: "running",
+      lastReanalyzeRequestedAt: selectMostRecentTimestamp(
+        persistedRequestedAt,
+        activeRequestedAt,
+      ),
+    };
+  }
+
   if (persistedStatus === "queued") {
     return {
       reanalysisStatus: "queued",
       lastReanalyzeRequestedAt: selectMostRecentTimestamp(
         persistedRequestedAt,
-        queuedRequestedAt,
+        activeRequestedAt,
       ),
     };
   }
 
-  if (!queuedRequestedAt) {
+  if (!activeRequestedAt || activeJob?.status !== "queued") {
     return {
       reanalysisStatus: persistedStatus,
       lastReanalyzeRequestedAt: persistedRequestedAt,
@@ -69,7 +80,7 @@ export function resolveEffectiveReanalysisState(
     reanalysisStatus: "queued",
     lastReanalyzeRequestedAt: selectMostRecentTimestamp(
       persistedRequestedAt,
-      queuedRequestedAt,
+      activeRequestedAt,
     ),
   };
 }

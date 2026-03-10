@@ -6,12 +6,14 @@ describe("resolveEffectiveReanalysisState", () => {
     const result = resolveEffectiveReanalysisState({
       persistedStatus: "running",
       persistedLastReanalyzeRequestedAt: "2026-03-10T00:05:00.000Z",
-      queuedManualReanalysisJob: {
+      activeManualReanalysisJob: {
         jobId: "job-1",
         reviewId: "review-1",
         requestedAt: "2026-03-10T00:06:00.000Z",
         reason: "manual_reanalysis",
+        status: "queued",
         queuedAt: "2026-03-10T00:06:00.000Z",
+        startedAt: null,
       },
     });
 
@@ -25,12 +27,14 @@ describe("resolveEffectiveReanalysisState", () => {
     const result = resolveEffectiveReanalysisState({
       persistedStatus: "succeeded",
       persistedLastReanalyzeRequestedAt: "2026-03-10T00:04:00.000Z",
-      queuedManualReanalysisJob: {
+      activeManualReanalysisJob: {
         jobId: "job-2",
         reviewId: "review-1",
         requestedAt: "2026-03-10T00:07:00.000Z",
         reason: "manual_reanalysis",
+        status: "queued",
         queuedAt: "2026-03-10T00:07:01.000Z",
+        startedAt: null,
       },
     });
 
@@ -40,11 +44,11 @@ describe("resolveEffectiveReanalysisState", () => {
     });
   });
 
-  it("keeps persisted state when no queued manual job exists", () => {
+  it("keeps persisted state when no active manual job exists", () => {
     const result = resolveEffectiveReanalysisState({
       persistedStatus: "failed",
       persistedLastReanalyzeRequestedAt: "2026-03-10T00:03:00.000Z",
-      queuedManualReanalysisJob: null,
+      activeManualReanalysisJob: null,
     });
 
     expect(result).toEqual({
@@ -62,6 +66,27 @@ describe("resolveEffectiveReanalysisState", () => {
     expect(result).toEqual({
       reanalysisStatus: "queued",
       lastReanalyzeRequestedAt: "2026-03-10T00:08:00.000Z",
+    });
+  });
+
+  it("keeps active state while manual job is claimed but persisted state is stale", () => {
+    const result = resolveEffectiveReanalysisState({
+      persistedStatus: "succeeded",
+      persistedLastReanalyzeRequestedAt: "2026-03-10T00:09:00.000Z",
+      activeManualReanalysisJob: {
+        jobId: "job-3",
+        reviewId: "review-1",
+        requestedAt: "2026-03-10T00:10:00.000Z",
+        reason: "manual_reanalysis",
+        status: "running",
+        queuedAt: "2026-03-10T00:10:00.000Z",
+        startedAt: "2026-03-10T00:10:01.000Z",
+      },
+    });
+
+    expect(result).toEqual({
+      reanalysisStatus: "running",
+      lastReanalyzeRequestedAt: "2026-03-10T00:10:00.000Z",
     });
   });
 });

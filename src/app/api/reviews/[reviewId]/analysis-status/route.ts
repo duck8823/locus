@@ -22,15 +22,28 @@ export async function GET(
   }
 
   const record = reviewSession.toRecord();
-  const queuedManualReanalysisJob =
+  const activeManualReanalysisJob =
+    (await analysisJobScheduler.findActiveJob?.({
+      reviewId,
+      reason: "manual_reanalysis",
+    })) ??
     (await analysisJobScheduler.findQueuedJob?.({
       reviewId,
       reason: "manual_reanalysis",
-    })) ?? null;
+    }).then((job) =>
+      job
+        ? {
+            ...job,
+            status: "queued" as const,
+            startedAt: null,
+          }
+        : null,
+    )) ??
+    null;
   const effectiveReanalysisState = resolveEffectiveReanalysisState({
     persistedStatus: record.reanalysisStatus ?? "idle",
     persistedLastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt ?? null,
-    queuedManualReanalysisJob,
+    activeManualReanalysisJob,
   });
   const analysisStatus = record.analysisStatus ?? "ready";
   const reanalysisStatus = effectiveReanalysisState.reanalysisStatus;

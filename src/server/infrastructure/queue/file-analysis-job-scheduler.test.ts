@@ -222,6 +222,97 @@ describe("FileAnalysisJobScheduler", () => {
     expect(queuedManual).toBeNull();
   });
 
+  it("returns running job from active lookup when manual reanalysis is already claimed", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    await writeFile(
+      filePath,
+      JSON.stringify(
+        {
+          jobs: [
+            {
+              jobId: "job-running-manual",
+              reviewId: "review-active-lookup",
+              requestedAt: "2026-03-10T00:01:00.000Z",
+              reason: "manual_reanalysis",
+              status: "running",
+              queuedAt: "2026-03-10T00:01:00.000Z",
+              startedAt: "2026-03-10T00:01:05.000Z",
+              completedAt: null,
+              durationMs: null,
+              attempts: 1,
+              lastError: null,
+            },
+            {
+              jobId: "job-queued-manual",
+              reviewId: "review-active-lookup",
+              requestedAt: "2026-03-10T00:02:00.000Z",
+              reason: "manual_reanalysis",
+              status: "queued",
+              queuedAt: "2026-03-10T00:02:00.000Z",
+              startedAt: null,
+              completedAt: null,
+              durationMs: null,
+              attempts: 0,
+              lastError: null,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    const activeJob = await scheduler.findActiveJob({
+      reviewId: "review-active-lookup",
+      reason: "manual_reanalysis",
+    });
+
+    expect(activeJob).toMatchObject({
+      jobId: "job-running-manual",
+      reviewId: "review-active-lookup",
+      requestedAt: "2026-03-10T00:01:00.000Z",
+      reason: "manual_reanalysis",
+      status: "running",
+      startedAt: "2026-03-10T00:01:05.000Z",
+    });
+  });
+
+  it("returns queued job from active lookup when no running job exists", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-active-queued-only",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "manual_reanalysis",
+    });
+
+    const activeJob = await scheduler.findActiveJob({
+      reviewId: "review-active-queued-only",
+      reason: "manual_reanalysis",
+    });
+
+    expect(activeJob).toMatchObject({
+      reviewId: "review-active-queued-only",
+      reason: "manual_reanalysis",
+      status: "queued",
+      startedAt: null,
+    });
+  });
+
   it("queues a follow-up job when the same review/reason is already running", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");

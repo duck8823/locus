@@ -2,6 +2,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import type {
+  ActiveAnalysisJobSnapshot,
   AnalysisJobScheduler,
   FindQueuedAnalysisJobInput,
   QueuedAnalysisJobSnapshot,
@@ -206,6 +207,51 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
       requestedAt: queuedJob.requestedAt,
       reason: queuedJob.reason,
       queuedAt: queuedJob.queuedAt,
+    };
+  }
+
+  async findActiveJob(
+    input: FindQueuedAnalysisJobInput,
+  ): Promise<ActiveAnalysisJobSnapshot | null> {
+    const store = await this.loadStore();
+    const activeJobs = store.jobs.filter(
+      (job) =>
+        job.reviewId === input.reviewId &&
+        job.reason === input.reason &&
+        (job.status === "queued" || job.status === "running"),
+    );
+    const runningJob = [...activeJobs]
+      .filter((job) => job.status === "running")
+      .sort((left, right) => (right.startedAt ?? right.queuedAt).localeCompare(left.startedAt ?? left.queuedAt))[0];
+
+    if (runningJob) {
+      return {
+        jobId: runningJob.jobId,
+        reviewId: runningJob.reviewId,
+        requestedAt: runningJob.requestedAt,
+        reason: runningJob.reason,
+        status: "running",
+        queuedAt: runningJob.queuedAt,
+        startedAt: runningJob.startedAt,
+      };
+    }
+
+    const queuedJob = [...activeJobs]
+      .filter((job) => job.status === "queued")
+      .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))[0];
+
+    if (!queuedJob) {
+      return null;
+    }
+
+    return {
+      jobId: queuedJob.jobId,
+      reviewId: queuedJob.reviewId,
+      requestedAt: queuedJob.requestedAt,
+      reason: queuedJob.reason,
+      status: "queued",
+      queuedAt: queuedJob.queuedAt,
+      startedAt: queuedJob.startedAt,
     };
   }
 

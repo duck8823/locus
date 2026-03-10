@@ -12,16 +12,29 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
   const { reviewSessionRepository, analysisJobScheduler } = getDependencies();
   const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository });
   const reviewSession = await useCase.execute({ reviewId });
-  const queuedManualReanalysisJob =
+  const activeManualReanalysisJob =
+    (await analysisJobScheduler.findActiveJob?.({
+      reviewId,
+      reason: "manual_reanalysis",
+    })) ??
     (await analysisJobScheduler.findQueuedJob?.({
       reviewId,
       reason: "manual_reanalysis",
-    })) ?? null;
+    }).then((job) =>
+      job
+        ? {
+            ...job,
+            status: "queued" as const,
+            startedAt: null,
+          }
+        : null,
+    )) ??
+    null;
   const workspace = toReviewWorkspaceDto(reviewSession);
   const effectiveReanalysisState = resolveEffectiveReanalysisState({
     persistedStatus: workspace.reanalysisStatus,
     persistedLastReanalyzeRequestedAt: workspace.lastReanalyzeRequestedAt,
-    queuedManualReanalysisJob,
+    activeManualReanalysisJob,
   });
 
   return {

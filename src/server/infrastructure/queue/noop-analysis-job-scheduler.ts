@@ -1,4 +1,5 @@
 import type {
+  ActiveAnalysisJobSnapshot,
   AnalysisJobScheduler,
   FindQueuedAnalysisJobInput,
   QueuedAnalysisJobSnapshot,
@@ -18,6 +19,13 @@ export class NoopAnalysisJobScheduler implements AnalysisJobScheduler {
   async findQueuedJob(
     input: FindQueuedAnalysisJobInput,
   ): Promise<QueuedAnalysisJobSnapshot | null> {
+    void input;
+    return null;
+  }
+
+  async findActiveJob(
+    input: FindQueuedAnalysisJobInput,
+  ): Promise<ActiveAnalysisJobSnapshot | null> {
     void input;
     return null;
   }
