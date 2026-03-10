@@ -1,11 +1,149 @@
+import { cookies, headers } from "next/headers";
 import Link from "next/link";
 import styles from "./page.module.css";
+import { resolveWorkspaceLocale, type WorkspaceLocale } from "@/app/(workspace)/workspace-locale";
+import { parseGitHubDemoErrorCode, type GitHubDemoErrorCode } from "@/server/presentation/actions/github-demo-error-code";
 import { startDemoSessionAction } from "@/server/presentation/actions/start-demo-session-action";
 import { startGitHubDemoSessionAction } from "@/server/presentation/actions/start-github-demo-session-action";
+import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 
 interface MarketingPageSearchParams {
   githubDemoError?: string | string[];
+  githubDemoErrorCode?: string | string[];
 }
+
+function resolveSearchParamValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
+const githubDemoErrorCopyByLocale: Record<WorkspaceLocale, Record<GitHubDemoErrorCode, string>> = {
+  en: {
+    owner_required: "GitHub owner is required.",
+    repository_required: "GitHub repository is required.",
+    pull_request_number_required: "GitHub PR number is required.",
+    pull_request_number_invalid: "GitHub PR number must be a positive integer.",
+    start_failed: "Failed to open GitHub demo. Check your inputs and try again.",
+  },
+  ja: {
+    owner_required: "GitHub オーナーを入力してください。",
+    repository_required: "GitHub リポジトリを入力してください。",
+    pull_request_number_required: "GitHub PR 番号を入力してください。",
+    pull_request_number_invalid: "GitHub PR 番号は 1 以上の整数で入力してください。",
+    start_failed: "GitHub デモを開始できませんでした。入力内容を確認して再試行してください。",
+  },
+};
+
+const marketingCopyByLocale = {
+  en: {
+    languageLabel: "Language",
+    switchToJapanese: "日本語",
+    switchToEnglish: "English",
+    kicker: "Slice 1 · Workspace demo",
+    title: "Open a PR review workspace in seconds.",
+    lead:
+      "Start with the seed demo or any public GitHub pull request. Initial analysis runs asynchronously so the UI stays responsive.",
+    openSeedDemo: "Open seed demo",
+    openConnections: "Connection settings",
+    githubOwnerLabel: "GitHub owner",
+    githubOwnerPlaceholder: "octocat",
+    repositoryLabel: "Repository",
+    repositoryPlaceholder: "Hello-World",
+    pullRequestNumberLabel: "PR number",
+    pullRequestNumberPlaceholder: "123",
+    openGitHubDemo: "Open GitHub demo",
+    hints: [
+      "Public repositories work without GITHUB_TOKEN (with stricter rate limits).",
+      "The workspace opens first, then initial analysis continues in the background.",
+      "Environment variables can be used as optional form defaults.",
+    ],
+    sidePanelTitle: "What works today",
+    sidePanelItems: [
+      {
+        label: "Auth stub",
+        description: "Reviewer identity is stored in a cookie for reopenable demo access.",
+      },
+      {
+        label: "Workspace state",
+        description: "Selected group and review status are persisted in a file-backed repository.",
+      },
+      {
+        label: "BFF boundary",
+        description: "App Router handlers stay thin and delegate to use cases.",
+      },
+    ],
+    cards: [
+      {
+        title: "Layered server",
+        description: "Domain/application/presentation/infrastructure boundaries are runnable in this prototype.",
+      },
+      {
+        title: "Async analysis UX",
+        description: "Opening a workspace is immediate while ingestion and analysis continue in the queue.",
+      },
+      {
+        title: "Next step",
+        description:
+          "Expand parser coverage and semantic grouping depth while keeping review progress persistent.",
+      },
+    ],
+  },
+  ja: {
+    languageLabel: "表示言語",
+    switchToJapanese: "日本語",
+    switchToEnglish: "English",
+    kicker: "Slice 1 · ワークスペースデモ",
+    title: "PR レビュー画面をすぐに開けます。",
+    lead:
+      "シードデモまたは public GitHub PR から開始できます。初回解析は非同期で進むため、画面操作は止まりません。",
+    openSeedDemo: "シードデモを開く",
+    openConnections: "接続設定",
+    githubOwnerLabel: "GitHub オーナー",
+    githubOwnerPlaceholder: "octocat",
+    repositoryLabel: "リポジトリ",
+    repositoryPlaceholder: "Hello-World",
+    pullRequestNumberLabel: "PR 番号",
+    pullRequestNumberPlaceholder: "123",
+    openGitHubDemo: "GitHub デモを開く",
+    hints: [
+      "public リポジトリは GITHUB_TOKEN なしでも利用できます（レート制限は厳しくなります）。",
+      "ワークスペースは先に開き、初回解析はバックグラウンドで続行します。",
+      "環境変数はフォーム初期値として任意で利用できます。",
+    ],
+    sidePanelTitle: "現時点で使える機能",
+    sidePanelItems: [
+      {
+        label: "認証スタブ",
+        description: "レビュアーIDを cookie に保存し、デモ画面を再表示できます。",
+      },
+      {
+        label: "ワークスペース状態",
+        description: "選択中グループとレビュー状態はファイル保存で保持されます。",
+      },
+      {
+        label: "BFF 境界",
+        description: "App Router は薄く保ち、ユースケースへ委譲しています。",
+      },
+    ],
+    cards: [
+      {
+        title: "レイヤードサーバー",
+        description: "Domain/Application/Presentation/Infrastructure の境界を実動構成で確認できます。",
+      },
+      {
+        title: "非同期解析 UX",
+        description: "画面を即表示し、取り込み・解析はキューで継続します。",
+      },
+      {
+        title: "次のステップ",
+        description: "レビュー進捗の保持を維持したまま、パーサー対応と差分解析の深さを拡張します。",
+      },
+    ],
+  },
+} as const;
 
 export default async function MarketingPage({
   searchParams,
@@ -13,134 +151,142 @@ export default async function MarketingPage({
   searchParams: Promise<MarketingPageSearchParams>;
 }) {
   const resolvedSearchParams = await searchParams;
+  const headerStore = await headers();
+  const cookieStore = await cookies();
   const defaultGitHubOwner = process.env.LOCUS_GITHUB_DEMO_OWNER ?? "";
   const defaultGitHubRepository = process.env.LOCUS_GITHUB_DEMO_REPO ?? "";
   const defaultGitHubPullRequestNumber = process.env.LOCUS_GITHUB_DEMO_PR_NUMBER ?? "";
-  const githubDemoError = Array.isArray(resolvedSearchParams.githubDemoError)
-    ? resolvedSearchParams.githubDemoError[0]
-    : resolvedSearchParams.githubDemoError;
+  const workspaceLocale = resolveWorkspaceLocale({
+    preferredLocale: cookieStore.get("locus-ui-locale")?.value ?? null,
+    acceptLanguage: headerStore.get("accept-language"),
+  });
+  const copy = marketingCopyByLocale[workspaceLocale];
+  const githubDemoErrorCode = parseGitHubDemoErrorCode(
+    resolveSearchParamValue(resolvedSearchParams.githubDemoErrorCode),
+  );
+  const legacyGithubDemoError = resolveSearchParamValue(resolvedSearchParams.githubDemoError);
+  const githubDemoError = githubDemoErrorCode
+    ? githubDemoErrorCopyByLocale[workspaceLocale][githubDemoErrorCode]
+    : legacyGithubDemoError;
 
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
+        <section className={styles.topBar} aria-label={copy.languageLabel}>
+          <div className={styles.localeSwitcher}>
+            <form action={setWorkspaceLocaleAction}>
+              <input name="redirectPath" type="hidden" value="/" />
+              <input name="locale" type="hidden" value="ja" />
+              <button
+                className={styles.localeButton}
+                data-active={workspaceLocale === "ja"}
+                type="submit"
+              >
+                {copy.switchToJapanese}
+              </button>
+            </form>
+            <form action={setWorkspaceLocaleAction}>
+              <input name="redirectPath" type="hidden" value="/" />
+              <input name="locale" type="hidden" value="en" />
+              <button
+                className={styles.localeButton}
+                data-active={workspaceLocale === "en"}
+                type="submit"
+              >
+                {copy.switchToEnglish}
+              </button>
+            </form>
+          </div>
+        </section>
+
         <section className={styles.hero}>
           <div className={styles.panel}>
-            <span className={styles.kicker}>Slice 1 · Web shell skeleton</span>
-            <h1>Review architecture, state, and progress in one place.</h1>
-            <p>
-              Locus now has a runnable Next.js shell that honors the layered
-              server boundaries from the docs. The first workspace is demo-backed,
-              auth-stubbed, and reopenable.
-            </p>
+            <span className={styles.kicker}>{copy.kicker}</span>
+            <h1>{copy.title}</h1>
+            <p className={styles.lead}>{copy.lead}</p>
+
             <div className={styles.ctas}>
               <form action={startDemoSessionAction}>
                 <button className={styles.primaryButton} type="submit">
-                  Open demo review workspace
+                  {copy.openSeedDemo}
                 </button>
               </form>
               <Link className={styles.secondaryLink} href="/settings/connections">
-                View connection stubs
+                {copy.openConnections}
               </Link>
             </div>
+
             <form action={startGitHubDemoSessionAction} className={styles.githubDemoForm}>
               <label className={styles.githubDemoField}>
-                <span>GitHub owner</span>
+                <span>{copy.githubOwnerLabel}</span>
                 <input
                   autoComplete="off"
                   defaultValue={defaultGitHubOwner}
                   name="owner"
-                  placeholder="octocat"
+                  placeholder={copy.githubOwnerPlaceholder}
                   required
                   type="text"
                 />
               </label>
               <label className={styles.githubDemoField}>
-                <span>Repository</span>
+                <span>{copy.repositoryLabel}</span>
                 <input
                   autoComplete="off"
                   defaultValue={defaultGitHubRepository}
                   name="repository"
-                  placeholder="Hello-World"
+                  placeholder={copy.repositoryPlaceholder}
                   required
                   type="text"
                 />
               </label>
               <label className={styles.githubDemoField}>
-                <span>PR number</span>
+                <span>{copy.pullRequestNumberLabel}</span>
                 <input
                   autoComplete="off"
                   defaultValue={defaultGitHubPullRequestNumber}
                   min={1}
                   name="pullRequestNumber"
-                  placeholder="123"
+                  placeholder={copy.pullRequestNumberPlaceholder}
                   required
                   type="number"
                 />
               </label>
               <button className={styles.secondaryButton} type="submit">
-                Open GitHub PR demo
+                {copy.openGitHubDemo}
               </button>
             </form>
+
             {githubDemoError ? <p className={styles.errorBanner}>{githubDemoError}</p> : null}
-            <p className={styles.demoHint}>
-              Public repositories work without <code>GITHUB_TOKEN</code>, but rate limits are lower.
-              The workspace opens immediately, then initial analysis runs in the background.
-              Environment variables are optional defaults.
-            </p>
+
+            <ul className={styles.demoHintList}>
+              {copy.hints.map((hint) => (
+                <li key={hint}>{hint}</li>
+              ))}
+            </ul>
           </div>
 
           <aside className={styles.sidePanel}>
             <div>
-              <h2>What is wired already</h2>
+              <h2>{copy.sidePanelTitle}</h2>
               <ul>
-                <li>
-                  <span className={styles.sideLabel}>Auth stub</span>
-                  Demo reviewer identity is persisted in a cookie so the workspace
-                  can gate entry without a real OAuth flow yet.
-                </li>
-                <li>
-                  <span className={styles.sideLabel}>Workspace state</span>
-                  Selected change group and review progress are persisted via a
-                  file-backed repository for the initial flow.
-                </li>
-                <li>
-                  <span className={styles.sideLabel}>BFF surface</span>
-                  Route handlers and server actions already call into use cases
-                  instead of reaching into infrastructure from the App Router.
-                </li>
+                {copy.sidePanelItems.map((item) => (
+                  <li key={item.label}>
+                    <span className={styles.sideLabel}>{item.label}</span>
+                    {item.description}
+                  </li>
+                ))}
               </ul>
             </div>
           </aside>
         </section>
 
         <section className={styles.cards}>
-          <article className={styles.card}>
-            <h3>Framework surface</h3>
-            <p>
-              App Router pages and route handlers stay thin and only delegate to
-              presentation helpers or application use cases.
-            </p>
-          </article>
-          <article className={styles.card}>
-            <h3>Layered server</h3>
-            <p>
-              Domain, application, presentation, and infrastructure folders now
-              exist in runnable form, with lint rules that guard the boundaries.
-            </p>
-          </article>
-          <article className={styles.card}>
-            <h3>Next implementation step</h3>
-            <p>
-              The workspace is ready for fixture-backed review sessions and the
-              first parser-driven semantic analysis slice. It can now ingest a
-              GitHub pull request into semantic groups from form input.
-            </p>
-            <ul>
-              <li>Review state persistence</li>
-              <li>Empty review workspace navigation</li>
-              <li>GitHub snapshot ingestion adapter</li>
-            </ul>
-          </article>
+          {copy.cards.map((card) => (
+            <article className={styles.card} key={card.title}>
+              <h3>{card.title}</h3>
+              <p>{card.description}</p>
+            </article>
+          ))}
         </section>
       </div>
     </main>
