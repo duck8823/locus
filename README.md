@@ -121,6 +121,11 @@ export GITHUB_TOKEN=your-github-token
 export LOCUS_GITHUB_DEMO_OWNER=owner
 export LOCUS_GITHUB_DEMO_REPO=repository
 export LOCUS_GITHUB_DEMO_PR_NUMBER=123
+
+# Optional: durable analysis queue tuning
+export LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS=3
+export LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS=500
+export LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS=600000
 ```
 
 `GITHUB_TOKEN` is optional for public repositories (but recommended to avoid low anonymous rate limits).
