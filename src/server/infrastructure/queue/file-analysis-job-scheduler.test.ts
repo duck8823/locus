@@ -103,6 +103,187 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persisted.jobs[0]?.attempts).toBe(1);
   });
 
+  it("reuses an existing pending job for the same review and reason", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    const first = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-deduped",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "initial_ingestion",
+    });
+    const second = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-deduped",
+      requestedAt: "2026-03-10T00:01:00.000Z",
+      reason: "initial_ingestion",
+    });
+
+    expect(second.jobId).toBe(first.jobId);
+    expect(second.reason).toBe("initial_ingestion");
+
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ reviewId: string; status: string; reason: string }>;
+    };
+    expect(persisted.jobs).toHaveLength(1);
+    expect(persisted.jobs[0]?.reviewId).toBe("review-deduped");
+    expect(persisted.jobs[0]?.status).toBe("queued");
+    expect(persisted.jobs[0]?.reason).toBe("initial_ingestion");
+  });
+
+  it("queues a follow-up job when the same review/reason is already running", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const runningStartedAt = new Date().toISOString();
+    await writeFile(
+      filePath,
+      JSON.stringify(
+        {
+          jobs: [
+            {
+              jobId: "job-running",
+              reviewId: "review-running",
+              requestedAt: "2026-03-10T00:00:00.000Z",
+              reason: "code_host_webhook",
+              status: "running",
+              queuedAt: runningStartedAt,
+              startedAt: runningStartedAt,
+              completedAt: null,
+              durationMs: null,
+              attempts: 1,
+              lastError: null,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    const scheduled = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-running",
+      requestedAt: "2026-03-10T00:01:00.000Z",
+      reason: "code_host_webhook",
+    });
+
+    expect(scheduled.jobId).not.toBe("job-running");
+
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ jobId: string; reviewId: string; reason: string; status: string }>;
+    };
+    expect(persisted.jobs).toHaveLength(2);
+    expect(
+      persisted.jobs.map((job) => `${job.jobId}:${job.reviewId}:${job.reason}:${job.status}`),
+    ).toContain("job-running:review-running:code_host_webhook:running");
+    expect(
+      persisted.jobs.some(
+        (job) =>
+          job.jobId === scheduled.jobId &&
+          job.reviewId === "review-running" &&
+          job.reason === "code_host_webhook" &&
+          job.status === "queued",
+      ),
+    ).toBe(true);
+  });
+
+  it("queues a new job when existing queued job already consumed retries", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    await writeFile(
+      filePath,
+      JSON.stringify(
+        {
+          jobs: [
+            {
+              jobId: "job-queued-retrying",
+              reviewId: "review-queued-retrying",
+              requestedAt: "2026-03-10T00:00:00.000Z",
+              reason: "code_host_webhook",
+              status: "queued",
+              queuedAt: "2026-03-10T00:00:30.000Z",
+              startedAt: null,
+              completedAt: "2026-03-10T00:00:30.000Z",
+              durationMs: 1000,
+              attempts: 2,
+              lastError: "transient",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      maxAttempts: 3,
+      onJob: async () => {},
+    });
+
+    const scheduled = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-queued-retrying",
+      requestedAt: "2026-03-10T00:01:00.000Z",
+      reason: "code_host_webhook",
+    });
+
+    expect(scheduled.jobId).not.toBe("job-queued-retrying");
+
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ jobId: string; reviewId: string; reason: string; status: string; attempts: number }>;
+    };
+    expect(persisted.jobs).toHaveLength(2);
+    expect(
+      new Set(persisted.jobs.map((job) => `${job.jobId}:${job.status}:${job.attempts}`)),
+    ).toEqual(new Set(["job-queued-retrying:queued:2", `${scheduled.jobId}:queued:0`]));
+  });
+
+  it("keeps separate pending jobs when the reason differs", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    const first = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-multi-reason",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "code_host_webhook",
+    });
+    const second = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-multi-reason",
+      requestedAt: "2026-03-10T00:01:00.000Z",
+      reason: "initial_ingestion",
+    });
+
+    expect(second.jobId).not.toBe(first.jobId);
+
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ reviewId: string; status: string; reason: string }>;
+    };
+    expect(persisted.jobs).toHaveLength(2);
+    expect(
+      persisted.jobs.map((job) => `${job.reviewId}:${job.reason}:${job.status}`).sort(),
+    ).toEqual([
+      "review-multi-reason:code_host_webhook:queued",
+      "review-multi-reason:initial_ingestion:queued",
+    ]);
+  });
+
   it("retries failed jobs up to max attempts", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");
@@ -189,6 +370,7 @@ describe("FileAnalysisJobScheduler", () => {
   it("retains only the latest terminal jobs while keeping queued/running jobs", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");
+    const runningStartedAt = new Date().toISOString();
     await writeFile(
       filePath,
       JSON.stringify(
@@ -213,8 +395,8 @@ describe("FileAnalysisJobScheduler", () => {
               requestedAt: "2026-03-10T00:00:00.000Z",
               reason: "code_host_webhook",
               status: "running",
-              queuedAt: "2026-03-10T00:00:00.000Z",
-              startedAt: "2026-03-10T00:01:00.000Z",
+              queuedAt: runningStartedAt,
+              startedAt: runningStartedAt,
               completedAt: null,
               durationMs: null,
               attempts: 1,
