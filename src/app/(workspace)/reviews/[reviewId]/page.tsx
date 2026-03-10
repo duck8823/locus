@@ -63,6 +63,7 @@ const ARCHITECTURE_CATEGORY_LABELS: Record<keyof ArchitectureNodeGroups, string>
   symbol: "Symbols",
   unknown: "Others",
 };
+const MAX_UNSUPPORTED_FILES_DISPLAY = 100;
 
 interface ArchitectureColumn {
   label: "Upstream" | "Downstream";
@@ -93,6 +94,12 @@ export default async function ReviewWorkspacePage({
     workspace.analysisStatus === "queued" ||
     workspace.analysisStatus === "fetching" ||
     workspace.analysisStatus === "parsing";
+  const displayedUnsupportedFiles = workspace.unsupportedFiles.slice(
+    0,
+    MAX_UNSUPPORTED_FILES_DISPLAY,
+  );
+  const hiddenUnsupportedFileCount =
+    workspace.unsupportedFiles.length - displayedUnsupportedFiles.length;
   const architectureColumns: ArchitectureColumn[] = selectedGroup
     ? (() => {
         const nodeById = new Map(
@@ -440,9 +447,9 @@ export default async function ReviewWorkspacePage({
                     </li>
                   ))}
                 </ul>
-                {workspace.unsupportedFiles.length > 0 ? (
+                {displayedUnsupportedFiles.length > 0 ? (
                   <ul className={styles.unsupportedFileList}>
-                    {workspace.unsupportedFiles.map((entry) => (
+                    {displayedUnsupportedFiles.map((entry) => (
                       <li key={`${entry.reason}:${entry.filePath}`} className={styles.unsupportedFileItem}>
                         <div className={styles.unsupportedFileHeader}>
                           <span>{entry.filePath}</span>
@@ -455,6 +462,12 @@ export default async function ReviewWorkspacePage({
                       </li>
                     ))}
                   </ul>
+                ) : null}
+                {hiddenUnsupportedFileCount > 0 ? (
+                  <p className={styles.muted}>
+                    Showing first {displayedUnsupportedFiles.length} entries.{" "}
+                    {hiddenUnsupportedFileCount} additional file(s) were omitted.
+                  </p>
                 ) : null}
               </>
             )}
