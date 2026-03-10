@@ -179,6 +179,28 @@
   overflow-wrap: break-word;
 }
 
+.analysisProgressTrack {
+  height: 8px;
+  width: 100%;
+  border-radius: 999px;
+  background: rgba(154, 167, 209, 0.18);
+  overflow: hidden;
+}
+
+.analysisProgressFill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(124, 156, 255, 0.8), rgba(52, 211, 153, 0.8));
+  transition: width 0.2s ease;
+}
+
+.analysisControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .changeBadge {
   display: inline-flex;
   align-items: center;
