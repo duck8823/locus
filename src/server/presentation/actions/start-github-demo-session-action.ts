@@ -12,6 +12,7 @@ import {
   type GitHubDemoErrorCode,
 } from "./github-demo-error-code";
 import { resolveDemoViewerName } from "./demo-viewer-name";
+import { WORKSPACE_LOCALE_COOKIE_NAME } from "./workspace-locale-cookie-name";
 
 const demoViewerCookieName = "locus-demo-viewer";
 
@@ -88,7 +89,7 @@ function createReviewId(owner: string, repository: string, pullRequestNumber: nu
 export async function startGitHubDemoSessionAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies();
   const viewerName = resolveDemoViewerName(
-    cookieStore.get("locus-ui-locale")?.value ?? null,
+    cookieStore.get(WORKSPACE_LOCALE_COOKIE_NAME)?.value ?? null,
   );
   let redirectPath = "/";
 

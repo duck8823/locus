@@ -6,13 +6,14 @@ import { OpenReviewWorkspaceUseCase } from "@/server/application/usecases/open-r
 import { defaultSeedReviewId } from "@/server/application/services/review-session-seed";
 import { getDependencies } from "@/server/composition/dependencies";
 import { resolveDemoViewerName } from "./demo-viewer-name";
+import { WORKSPACE_LOCALE_COOKIE_NAME } from "./workspace-locale-cookie-name";
 
 const demoViewerCookieName = "locus-demo-viewer";
 
 export async function startDemoSessionAction(): Promise<void> {
   const cookieStore = await cookies();
   const viewerName = resolveDemoViewerName(
-    cookieStore.get("locus-ui-locale")?.value ?? null,
+    cookieStore.get(WORKSPACE_LOCALE_COOKIE_NAME)?.value ?? null,
   );
 
   cookieStore.set(demoViewerCookieName, viewerName, {
