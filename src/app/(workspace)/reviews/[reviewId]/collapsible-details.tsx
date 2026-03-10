@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 interface CollapsibleDetailsProps {
   className?: string;
@@ -18,6 +18,18 @@ export function resolveCollapsibleOpenState(input: {
   return input.manualOpen ?? input.defaultOpen;
 }
 
+export function resolveManualOpenOnToggle(input: {
+  hasManualToggleIntent: boolean;
+  nextOpen: boolean;
+  previousManualOpen: boolean | null;
+}): boolean | null {
+  if (!input.hasManualToggleIntent) {
+    return input.previousManualOpen;
+  }
+
+  return input.nextOpen;
+}
+
 export function CollapsibleDetails({
   className,
   summaryClassName,
@@ -27,6 +39,7 @@ export function CollapsibleDetails({
   children,
 }: CollapsibleDetailsProps) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const hasManualToggleIntentRef = useRef(false);
   const open = resolveCollapsibleOpenState({ manualOpen, defaultOpen });
 
   return (
@@ -34,10 +47,25 @@ export function CollapsibleDetails({
       className={className}
       open={open}
       onToggle={(event) => {
-        setManualOpen(event.currentTarget.open);
+        const shouldPersistManualState = hasManualToggleIntentRef.current;
+        hasManualToggleIntentRef.current = false;
+        setManualOpen((previousManualOpen) =>
+          resolveManualOpenOnToggle({
+            hasManualToggleIntent: shouldPersistManualState,
+            nextOpen: event.currentTarget.open,
+            previousManualOpen,
+          }),
+        );
       }}
     >
-      <summary className={summaryClassName}>{summary}</summary>
+      <summary
+        className={summaryClassName}
+        onClick={() => {
+          hasManualToggleIntentRef.current = true;
+        }}
+      >
+        {summary}
+      </summary>
       <div className={contentClassName}>{children}</div>
     </details>
   );
