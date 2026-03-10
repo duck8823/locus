@@ -65,12 +65,12 @@ export class RequestManualReanalysisUseCase {
       throw new ReanalyzeSourceUnavailableError(reviewId);
     }
 
-    reviewSession.requestReanalysis(timestamp);
-    await this.dependencies.reviewSessionRepository.save(reviewSession);
     await this.dependencies.analysisJobScheduler.scheduleReviewAnalysis({
       reviewId,
       requestedAt: timestamp,
       reason: "manual_reanalysis",
     });
+    reviewSession.requestReanalysis(timestamp);
+    await this.dependencies.reviewSessionRepository.save(reviewSession);
   }
 }

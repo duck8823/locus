@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type {
   AnalysisJobScheduler,
   ScheduleAnalysisJobInput,
+  ScheduledAnalysisJob,
 } from "@/server/application/ports/analysis-job-scheduler";
 import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
 import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
@@ -40,6 +41,13 @@ class SpyAnalysisJobScheduler implements AnalysisJobScheduler {
       acceptedAt: input.requestedAt,
       reason: input.reason,
     };
+  }
+}
+
+class FailingAnalysisJobScheduler implements AnalysisJobScheduler {
+  async scheduleReviewAnalysis(input: ScheduleAnalysisJobInput): Promise<ScheduledAnalysisJob> {
+    void input;
+    throw new Error("failed to persist job");
   }
 }
 
@@ -160,5 +168,42 @@ describe("RequestManualReanalysisUseCase", () => {
     await expect(useCase.execute({ reviewId: "custom-review" })).rejects.toThrow(
       ReanalyzeSourceUnavailableError,
     );
+  });
+
+  it("does not persist running state when enqueue fails", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    reviewSessionRepository.seed(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-99",
+        title: "PR #99: base",
+        repositoryName: "octocat/locus",
+        branchLabel: "feature/base → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 99,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-10T00:00:00.000Z",
+        reanalysisStatus: "idle",
+      }),
+    );
+    const useCase = new RequestManualReanalysisUseCase({
+      reviewSessionRepository,
+      analysisJobScheduler: new FailingAnalysisJobScheduler(),
+    });
+
+    await expect(
+      useCase.execute({
+        reviewId: "github-octocat-locus-pr-99",
+        requestedAt: "2026-03-10T00:05:00.000Z",
+      }),
+    ).rejects.toThrow("failed to persist job");
+
+    const persisted = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-99");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("idle");
+    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBeNull();
   });
 });
