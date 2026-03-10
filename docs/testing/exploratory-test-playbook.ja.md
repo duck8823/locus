@@ -23,7 +23,10 @@
 
 ```bash
 npm install
-npm run demo:data:reseed
+# ローカルデモデータ初期化（スクリプト非依存）
+rm -rf .locus-data
+mkdir -p .locus-data/review-sessions .locus-data/analysis-jobs
+printf '{\n  "jobs": []\n}\n' > .locus-data/analysis-jobs/jobs.json
 npm run dev
 ```
 
@@ -41,7 +44,7 @@ npm test
 
 ### チャーター1: 初回起動体験（キャッシュなし）
 
-1. `.locus-data` を初期化（`npm run demo:data:reseed`）。
+1. `.locus-data` を初期化（上記セットアップ手順を使用）。
 2. `/` を開き、シードデモを開始する。
 3. 次を確認する:
    - ワークスペースが即時表示される
@@ -85,12 +88,13 @@ npm test
 
 ### チャーター5: ローカルデモデータ運用
 
-1. 次を実行:
-   - `npm run demo:data:status`
-   - `npm run demo:data:reset`
-   - `npm run demo:data:reseed`
-2. コマンドが安全かつ予測可能に動作するか確認する。
-3. シードデモ再表示でワークスペースが再生成されるか確認する。
+1. ローカルデモデータの reset/reseed を手動実行する:
+   - `.locus-data` を削除
+   - `.locus-data/review-sessions` と `.locus-data/analysis-jobs` を再作成
+   - `.locus-data/analysis-jobs/jobs.json` に `{ "jobs": [] }` を作成
+2. ブランチに `npm run demo:data:*` がある場合は、そのコマンドも確認する。
+3. 操作が安全かつ予測可能に動作するか確認する。
+4. シードデモ再表示でワークスペースが再生成されるか確認する。
 
 確認したいリスク:
 - `.locus-data` 以外への破壊的操作

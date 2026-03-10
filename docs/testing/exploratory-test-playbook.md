@@ -23,7 +23,10 @@ Out of scope:
 
 ```bash
 npm install
-npm run demo:data:reseed
+# reset local demo data (script-less fallback)
+rm -rf .locus-data
+mkdir -p .locus-data/review-sessions .locus-data/analysis-jobs
+printf '{\n  "jobs": []\n}\n' > .locus-data/analysis-jobs/jobs.json
 npm run dev
 ```
 
@@ -41,7 +44,7 @@ Run each charter as a 20–30 minute time-boxed session.
 
 ### Charter 1: First-run experience (no cache)
 
-1. Ensure `.locus-data` is reset: `npm run demo:data:reseed`.
+1. Ensure `.locus-data` is reset (use the setup commands above).
 2. Open `/` and start the seed demo.
 3. Verify:
    - workspace opens immediately
@@ -85,12 +88,13 @@ Expected risk to probe:
 
 ### Charter 5: Local demo-data operations
 
-1. Run:
-   - `npm run demo:data:status`
-   - `npm run demo:data:reset`
-   - `npm run demo:data:reseed`
-2. Confirm commands are safe and predictable.
-3. Reopen seed demo and ensure workspace is regenerated.
+1. Run local demo-data reset/reseed manually:
+   - remove `.locus-data`
+   - recreate `.locus-data/review-sessions` and `.locus-data/analysis-jobs`
+   - create `.locus-data/analysis-jobs/jobs.json` with `{ "jobs": [] }`
+2. If your branch provides `npm run demo:data:*`, verify those commands as well.
+3. Confirm the operations are safe and predictable.
+4. Reopen seed demo and ensure workspace is regenerated.
 
 Expected risk to probe:
 - accidental destructive operation outside `.locus-data`
