@@ -1,5 +1,6 @@
 export interface ResolveAnalysisPollIntervalInput {
   analysisStatus: string;
+  reanalysisStatus?: string;
   analysisProcessedFiles: number | null | undefined;
   analysisTotalFiles: number | null | undefined;
   isDocumentVisible: boolean;
@@ -42,6 +43,10 @@ export function resolveAnalysisPollIntervalMs(
     }
 
     return 1800;
+  }
+
+  if (input.reanalysisStatus === "running") {
+    return 1700;
   }
 
   return 2500;

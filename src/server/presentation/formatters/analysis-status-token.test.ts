@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createAnalysisStatusToken,
   isActiveAnalysisStatus,
+  isActiveWorkspaceRefreshStatus,
 } from "@/server/presentation/formatters/analysis-status-token";
 
 describe("analysis-status-token", () => {
@@ -14,6 +15,21 @@ describe("analysis-status-token", () => {
     expect(isActiveAnalysisStatus(undefined)).toBe(false);
   });
 
+  it("activates workspace refresh while reanalysis is running", () => {
+    expect(
+      isActiveWorkspaceRefreshStatus({
+        analysisStatus: "ready",
+        reanalysisStatus: "running",
+      }),
+    ).toBe(true);
+    expect(
+      isActiveWorkspaceRefreshStatus({
+        analysisStatus: "failed",
+        reanalysisStatus: "idle",
+      }),
+    ).toBe(false);
+  });
+
   it("normalizes invalid counts while creating token", () => {
     const token = createAnalysisStatusToken({
       analysisStatus: "parsing",
@@ -23,6 +39,10 @@ describe("analysis-status-token", () => {
       analysisTotalFiles: -1,
       analysisAttemptCount: Number.NaN,
       analysisError: null,
+      reanalysisStatus: "running",
+      lastReanalyzeRequestedAt: "2026-03-10T00:00:00.000Z",
+      lastReanalyzeCompletedAt: null,
+      lastReanalyzeError: null,
     });
 
     expect(token).toBe(
@@ -34,6 +54,10 @@ describe("analysis-status-token", () => {
         totalFiles: null,
         attemptCount: null,
         error: null,
+        reanalysisStatus: "running",
+        lastReanalyzeRequestedAt: "2026-03-10T00:00:00.000Z",
+        lastReanalyzeCompletedAt: null,
+        lastReanalyzeError: null,
       }),
     );
   });

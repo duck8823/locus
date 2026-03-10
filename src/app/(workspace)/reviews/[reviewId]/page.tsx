@@ -11,6 +11,7 @@ import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-wo
 import {
   createAnalysisStatusToken,
   isActiveAnalysisStatus,
+  isActiveWorkspaceRefreshStatus,
 } from "@/server/presentation/formatters/analysis-status-token";
 import { requestInitialAnalysisRetryAction } from "@/server/presentation/actions/request-initial-analysis-retry-action";
 import { requestReanalysisAction } from "@/server/presentation/actions/request-reanalysis-action";
@@ -124,6 +125,10 @@ export default async function ReviewWorkspacePage({
   const selectedGroup =
     workspace.groups.find((group) => group.isSelected) ?? workspace.groups[0];
   const isInitialAnalysisRunning = isActiveAnalysisStatus(workspace.analysisStatus);
+  const isWorkspaceRefreshRunning = isActiveWorkspaceRefreshStatus({
+    analysisStatus: workspace.analysisStatus,
+    reanalysisStatus: workspace.reanalysisStatus,
+  });
   const analysisProgressPercent = calculateAnalysisProgressPercent({
     analysisProcessedFiles: workspace.analysisProcessedFiles,
     analysisTotalFiles: workspace.analysisTotalFiles,
@@ -136,6 +141,10 @@ export default async function ReviewWorkspacePage({
     analysisTotalFiles: workspace.analysisTotalFiles,
     analysisAttemptCount: workspace.analysisAttemptCount,
     analysisError: workspace.analysisError,
+    reanalysisStatus: workspace.reanalysisStatus,
+    lastReanalyzeRequestedAt: workspace.lastReanalyzeRequestedAt,
+    lastReanalyzeCompletedAt: workspace.lastReanalyzeCompletedAt,
+    lastReanalyzeError: workspace.lastReanalyzeError,
   });
   const hiddenUnsupportedFileCount =
     Math.max(0, workspace.analysisUnsupportedFiles - workspace.unsupportedFiles.length);
@@ -201,10 +210,11 @@ export default async function ReviewWorkspacePage({
   return (
     <main className={styles.page}>
       <AnalysisStatusPoller
-        active={isInitialAnalysisRunning}
+        active={isWorkspaceRefreshRunning}
         reviewId={workspace.reviewId}
         currentToken={analysisStatusToken}
         analysisStatus={workspace.analysisStatus}
+        reanalysisStatus={workspace.reanalysisStatus}
         analysisProcessedFiles={workspace.analysisProcessedFiles}
         analysisTotalFiles={workspace.analysisTotalFiles}
       />
@@ -447,7 +457,8 @@ export default async function ReviewWorkspacePage({
             <div className={styles.analysisControls}>
               <AnalysisManualRefreshButton />
               <p className={styles.muted}>
-                Auto-refresh pauses while this tab is in the background.
+                Auto-refresh runs while initial analysis or reanalysis is active, and pauses while
+                this tab is in the background.
               </p>
             </div>
           </div>

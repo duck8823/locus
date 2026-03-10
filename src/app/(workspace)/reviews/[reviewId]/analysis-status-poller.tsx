@@ -10,6 +10,7 @@ interface AnalysisStatusPollerProps {
   reviewId: string;
   currentToken: string;
   analysisStatus: ReviewWorkspaceDto["analysisStatus"];
+  reanalysisStatus: ReviewWorkspaceDto["reanalysisStatus"];
   analysisProcessedFiles: ReviewWorkspaceDto["analysisProcessedFiles"];
   analysisTotalFiles: ReviewWorkspaceDto["analysisTotalFiles"];
 }
@@ -19,6 +20,7 @@ export function AnalysisStatusPoller({
   reviewId,
   currentToken,
   analysisStatus,
+  reanalysisStatus,
   analysisProcessedFiles,
   analysisTotalFiles,
 }: AnalysisStatusPollerProps) {
@@ -75,6 +77,7 @@ export function AnalysisStatusPoller({
 
       const delayMs = resolveAnalysisPollIntervalMs({
         analysisStatus,
+        reanalysisStatus,
         analysisProcessedFiles,
         analysisTotalFiles,
         isDocumentVisible,
@@ -84,6 +87,7 @@ export function AnalysisStatusPoller({
 
     const initialDelayMs = resolveAnalysisPollIntervalMs({
       analysisStatus,
+      reanalysisStatus,
       analysisProcessedFiles,
       analysisTotalFiles,
       isDocumentVisible: document.visibilityState === "visible",
@@ -99,6 +103,7 @@ export function AnalysisStatusPoller({
   }, [
     active,
     analysisProcessedFiles,
+    reanalysisStatus,
     analysisStatus,
     analysisTotalFiles,
     reviewId,

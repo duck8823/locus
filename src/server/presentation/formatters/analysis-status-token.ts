@@ -1,4 +1,5 @@
 import type { ReviewAnalysisStatus } from "@/server/domain/value-objects/analysis-status";
+import type { ReviewReanalysisStatus } from "@/server/domain/value-objects/reanalysis-status";
 
 export interface AnalysisStatusTokenInput {
   analysisStatus?: ReviewAnalysisStatus | null;
@@ -8,6 +9,10 @@ export interface AnalysisStatusTokenInput {
   analysisTotalFiles?: number | null;
   analysisAttemptCount?: number | null;
   analysisError?: string | null;
+  reanalysisStatus?: ReviewReanalysisStatus | null;
+  lastReanalyzeRequestedAt?: string | null;
+  lastReanalyzeCompletedAt?: string | null;
+  lastReanalyzeError?: string | null;
 }
 
 function normalizeCount(value: number | null | undefined): number | null {
@@ -24,6 +29,13 @@ export function isActiveAnalysisStatus(
   return status === "queued" || status === "fetching" || status === "parsing";
 }
 
+export function isActiveWorkspaceRefreshStatus(params: {
+  analysisStatus: ReviewAnalysisStatus | null | undefined;
+  reanalysisStatus: ReviewReanalysisStatus | null | undefined;
+}): boolean {
+  return isActiveAnalysisStatus(params.analysisStatus) || params.reanalysisStatus === "running";
+}
+
 export function createAnalysisStatusToken(input: AnalysisStatusTokenInput): string {
   return JSON.stringify({
     status: input.analysisStatus ?? "ready",
@@ -33,5 +45,9 @@ export function createAnalysisStatusToken(input: AnalysisStatusTokenInput): stri
     totalFiles: normalizeCount(input.analysisTotalFiles),
     attemptCount: normalizeCount(input.analysisAttemptCount),
     error: input.analysisError ?? null,
+    reanalysisStatus: input.reanalysisStatus ?? "idle",
+    lastReanalyzeRequestedAt: input.lastReanalyzeRequestedAt ?? null,
+    lastReanalyzeCompletedAt: input.lastReanalyzeCompletedAt ?? null,
+    lastReanalyzeError: input.lastReanalyzeError ?? null,
   });
 }
