@@ -45,7 +45,7 @@ function formatAnalysisDuration(durationMs: number): string {
 function formatArchitectureRelation(
   relation: "imports" | "calls" | "implements" | "uses",
 ): string {
-  return relation.replaceAll("_", " ");
+  return relation;
 }
 
 const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
@@ -512,6 +512,9 @@ export default async function ReviewWorkspacePage({
                                           value={linkedGroupId}
                                         />
                                         <button className={styles.archNodeButton} type="submit">
+                                          <span className={styles.srOnly}>
+                                            Switch to related change group
+                                          </span>
                                           <span className={styles.archNodeLabel}>{node.label}</span>
                                           {relation ? (
                                             <span className={styles.archNodeMeta}>
