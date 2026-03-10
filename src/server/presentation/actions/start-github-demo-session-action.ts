@@ -1,7 +1,7 @@
 "use server";
 
 import { createHash } from "node:crypto";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { PrepareGitHubReviewWorkspaceUseCase } from "@/server/application/usecases/prepare-github-review-workspace";
@@ -11,6 +11,8 @@ import {
   toGitHubDemoErrorCode,
   type GitHubDemoErrorCode,
 } from "./github-demo-error-code";
+import { resolveDemoViewerName } from "./demo-viewer-name";
+import { WORKSPACE_LOCALE_COOKIE_NAME } from "./workspace-locale-cookie-name";
 
 const demoViewerCookieName = "locus-demo-viewer";
 
@@ -85,7 +87,12 @@ function createReviewId(owner: string, repository: string, pullRequestNumber: nu
 }
 
 export async function startGitHubDemoSessionAction(formData: FormData): Promise<void> {
-  const viewerName = "Demo reviewer";
+  const headerStore = await headers();
+  const cookieStore = await cookies();
+  const viewerName = resolveDemoViewerName({
+    preferredLocale: cookieStore.get(WORKSPACE_LOCALE_COOKIE_NAME)?.value ?? null,
+    acceptLanguage: headerStore.get("accept-language"),
+  });
   let redirectPath = "/";
 
   try {
@@ -130,7 +137,6 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
       });
     }
 
-    const cookieStore = await cookies();
     cookieStore.set(demoViewerCookieName, viewerName, {
       httpOnly: true,
       sameSite: "lax",

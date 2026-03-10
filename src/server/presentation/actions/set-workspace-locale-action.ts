@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { readRequiredString } from "@/server/presentation/actions/read-required-string";
+import { WORKSPACE_LOCALE_COOKIE_NAME } from "./workspace-locale-cookie-name";
 
 const supportedLocales = new Set(["ja", "en"]);
 
@@ -34,7 +35,7 @@ export async function setWorkspaceLocaleAction(formData: FormData): Promise<void
   const locale = assertWorkspaceLocale(readRequiredString(formData, "locale"));
   const cookieStore = await cookies();
 
-  cookieStore.set("locus-ui-locale", locale, {
+  cookieStore.set(WORKSPACE_LOCALE_COOKIE_NAME, locale, {
     path: "/",
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
