@@ -48,31 +48,27 @@ const DEFAULT_MAX_RETAINED_TERMINAL_JOBS = 500;
 const DEFAULT_STALE_RUNNING_MS = 10 * 60 * 1000;
 
 function normalizeMinimumOneInteger(value: number | undefined, fallback: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
     return fallback;
   }
 
-  const normalized = Math.floor(value);
-
-  if (normalized < 1) {
+  if (value < 1) {
     return fallback;
   }
 
-  return normalized;
+  return value;
 }
 
 function normalizeNonNegativeInteger(value: number | undefined, fallback: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
     return fallback;
   }
 
-  const normalized = Math.floor(value);
-
-  if (normalized < 0) {
+  if (value < 0) {
     return fallback;
   }
 
-  return normalized;
+  return value;
 }
 
 function toErrorMessage(error: unknown): string {
