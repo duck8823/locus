@@ -27,6 +27,7 @@ import {
 import { requestInitialAnalysisRetryAction } from "@/server/presentation/actions/request-initial-analysis-retry-action";
 import { requestReanalysisAction } from "@/server/presentation/actions/request-reanalysis-action";
 import { selectReviewGroupAction } from "@/server/presentation/actions/select-review-group-action";
+import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 import { setReviewGroupStatusAction } from "@/server/presentation/actions/set-review-group-status-action";
 import {
   groupArchitectureNodes,
@@ -229,6 +230,30 @@ export default async function ReviewWorkspacePage({
           </div>
         </div>
         <div className={styles.actions}>
+          <div className={styles.localeSwitcher} aria-label={copy.actions.languageLabel}>
+            <form action={setWorkspaceLocaleAction}>
+              <input name="reviewId" type="hidden" value={workspace.reviewId} />
+              <input name="locale" type="hidden" value="ja" />
+              <button
+                className={styles.localeButton}
+                data-active={workspaceLocale === "ja"}
+                type="submit"
+              >
+                {copy.actions.switchToJapanese}
+              </button>
+            </form>
+            <form action={setWorkspaceLocaleAction}>
+              <input name="reviewId" type="hidden" value={workspace.reviewId} />
+              <input name="locale" type="hidden" value="en" />
+              <button
+                className={styles.localeButton}
+                data-active={workspaceLocale === "en"}
+                type="submit"
+              >
+                {copy.actions.switchToEnglish}
+              </button>
+            </form>
+          </div>
           <Link className={styles.actionButton} href="/settings/connections">
             {copy.links.connections}
           </Link>
