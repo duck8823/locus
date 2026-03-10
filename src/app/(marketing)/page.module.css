@@ -75,14 +75,14 @@
   background: rgba(94, 123, 255, 0.12);
   color: #dbe4ff;
   font-size: 13px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .panel h1 {
   font-size: clamp(30px, 5vw, 50px);
   line-height: 1.12;
   letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .lead {
@@ -90,7 +90,7 @@
   font-size: 16px;
   line-height: 1.6;
   max-width: 56ch;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .ctas {
@@ -111,7 +111,7 @@
   border: 1px solid transparent;
   transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .primaryButton {
@@ -158,7 +158,7 @@
   font-size: 12px;
   color: var(--muted);
   letter-spacing: 0.02em;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .githubDemoField input {
@@ -180,7 +180,7 @@
   color: #ffdede;
   padding: 9px 11px;
   font-size: 14px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .demoHintList {
@@ -194,7 +194,7 @@
 }
 
 .demoHintList li {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .sidePanel {
@@ -207,7 +207,7 @@
 .sidePanel h2 {
   font-size: 22px;
   margin-bottom: 14px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .sidePanel ul {
@@ -222,7 +222,7 @@
   padding: 14px;
   background: rgba(11, 16, 32, 0.45);
   color: var(--muted);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .sideLabel {
@@ -250,13 +250,13 @@
 .card h3 {
   margin-bottom: 8px;
   font-size: 18px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 .card p {
   color: var(--muted);
   line-height: 1.5;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 
 @media (max-width: 1020px) {
