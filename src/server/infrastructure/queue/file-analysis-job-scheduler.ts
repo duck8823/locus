@@ -37,12 +37,14 @@ export interface QueuedAnalysisJob {
 export interface FileAnalysisJobSchedulerOptions {
   dataDirectory?: string;
   maxAttempts?: number;
+  maxRetainedTerminalJobs?: number;
   staleRunningMs?: number;
   autoRun?: boolean;
   onJob: (job: QueuedAnalysisJob) => Promise<void>;
 }
 
 const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_MAX_RETAINED_TERMINAL_JOBS = 500;
 const DEFAULT_STALE_RUNNING_MS = 10 * 60 * 1000;
 
 function toErrorMessage(error: unknown): string {
@@ -60,6 +62,7 @@ function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
 export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
   private readonly filePath: string;
   private readonly maxAttempts: number;
+  private readonly maxRetainedTerminalJobs: number;
   private readonly staleRunningMs: number;
   private readonly autoRun: boolean;
   private readonly onJob: (job: QueuedAnalysisJob) => Promise<void>;
@@ -71,6 +74,8 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
       options.dataDirectory ??
       path.join(process.cwd(), ".locus-data", "analysis-jobs", "jobs.json");
     this.maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+    this.maxRetainedTerminalJobs =
+      options.maxRetainedTerminalJobs ?? DEFAULT_MAX_RETAINED_TERMINAL_JOBS;
     this.staleRunningMs = options.staleRunningMs ?? DEFAULT_STALE_RUNNING_MS;
     this.autoRun = options.autoRun ?? true;
     this.onJob = options.onJob;
@@ -263,12 +268,47 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
     return Math.max(0, completedAtEpochMs - startedAtEpochMs);
   }
 
+  private pruneTerminalJobs(store: QueueStore): void {
+    if (this.maxRetainedTerminalJobs < 0) {
+      return;
+    }
+
+    const terminalJobs = store.jobs.filter(
+      (job) => job.status === "succeeded" || job.status === "failed",
+    );
+
+    if (terminalJobs.length <= this.maxRetainedTerminalJobs) {
+      return;
+    }
+
+    const retainedTerminalJobs = [...terminalJobs]
+      .sort((left, right) => {
+        const leftEpochMs = Date.parse(left.completedAt ?? left.queuedAt);
+        const rightEpochMs = Date.parse(right.completedAt ?? right.queuedAt);
+        const normalizedLeftEpochMs = Number.isNaN(leftEpochMs) ? 0 : leftEpochMs;
+        const normalizedRightEpochMs = Number.isNaN(rightEpochMs) ? 0 : rightEpochMs;
+
+        return normalizedRightEpochMs - normalizedLeftEpochMs;
+      })
+      .slice(0, this.maxRetainedTerminalJobs);
+    const retainedTerminalJobIds = new Set(retainedTerminalJobs.map((job) => job.jobId));
+
+    store.jobs = store.jobs.filter((job) => {
+      if (job.status !== "succeeded" && job.status !== "failed") {
+        return true;
+      }
+
+      return retainedTerminalJobIds.has(job.jobId);
+    });
+  }
+
   private async mutateStore<T>(fn: (store: QueueStore) => T | Promise<T>): Promise<T> {
     const task = this.writeQueue
       .catch(() => undefined)
       .then(async () => {
         const store = await this.loadStore();
         const result = await fn(store);
+        this.pruneTerminalJobs(store);
         await this.persistStore(store);
         return result;
       });
