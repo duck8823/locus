@@ -251,6 +251,26 @@ describe("toReviewWorkspaceDto", () => {
       ],
       sampleFilePaths: ["assets/logo.png", "src/app.vue", "src/broken.ts"],
     });
+    expect(dto.unsupportedFiles).toEqual([
+      {
+        filePath: "assets/logo.png",
+        language: null,
+        reason: "binary_file",
+        detail: null,
+      },
+      {
+        filePath: "src/app.vue",
+        language: "vue",
+        reason: "unsupported_language",
+        detail: null,
+      },
+      {
+        filePath: "src/broken.ts",
+        language: "typescript",
+        reason: "parser_failed",
+        detail: null,
+      },
+    ]);
   });
 
   it("returns an empty unsupported summary when all files were parsed", () => {
@@ -294,6 +314,7 @@ describe("toReviewWorkspaceDto", () => {
       byReason: [],
       sampleFilePaths: [],
     });
+    expect(dto.unsupportedFiles).toEqual([]);
     expect(dto.groups[0]?.semanticChanges).toEqual([]);
     expect(dto.groups[0]?.architectureGraph).toEqual({
       nodes: [
