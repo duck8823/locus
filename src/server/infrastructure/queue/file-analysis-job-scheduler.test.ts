@@ -103,7 +103,7 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persisted.jobs[0]?.attempts).toBe(1);
   });
 
-  it("reuses an existing pending job for the same review", async () => {
+  it("reuses an existing pending job for the same review and reason", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");
     const scheduler = new FileAnalysisJobScheduler({
@@ -120,7 +120,7 @@ describe("FileAnalysisJobScheduler", () => {
     const second = await scheduler.scheduleReviewAnalysis({
       reviewId: "review-deduped",
       requestedAt: "2026-03-10T00:01:00.000Z",
-      reason: "code_host_webhook",
+      reason: "initial_ingestion",
     });
 
     expect(second.jobId).toBe(first.jobId);
@@ -133,6 +133,40 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persisted.jobs[0]?.reviewId).toBe("review-deduped");
     expect(persisted.jobs[0]?.status).toBe("queued");
     expect(persisted.jobs[0]?.reason).toBe("initial_ingestion");
+  });
+
+  it("keeps separate pending jobs when the reason differs", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    const first = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-multi-reason",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "code_host_webhook",
+    });
+    const second = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-multi-reason",
+      requestedAt: "2026-03-10T00:01:00.000Z",
+      reason: "initial_ingestion",
+    });
+
+    expect(second.jobId).not.toBe(first.jobId);
+
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ reviewId: string; status: string; reason: string }>;
+    };
+    expect(persisted.jobs).toHaveLength(2);
+    expect(
+      persisted.jobs.map((job) => `${job.reviewId}:${job.reason}:${job.status}`).sort(),
+    ).toEqual([
+      "review-multi-reason:code_host_webhook:queued",
+      "review-multi-reason:initial_ingestion:queued",
+    ]);
   });
 
   it("retries failed jobs up to max attempts", async () => {

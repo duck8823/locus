@@ -121,7 +121,9 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
       const pendingJob = [...store.jobs]
         .filter(
           (job) =>
-            job.reviewId === input.reviewId && (job.status === "queued" || job.status === "running"),
+            job.reviewId === input.reviewId &&
+            job.reason === input.reason &&
+            (job.status === "queued" || job.status === "running"),
         )
         .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))[0];
 
