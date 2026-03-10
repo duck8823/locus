@@ -8,6 +8,15 @@ import type {
 import type { ReviewReanalysisStatus } from "@/server/domain/value-objects/reanalysis-status";
 import type { ReviewAnalysisStatus } from "@/server/domain/value-objects/analysis-status";
 
+export interface ReviewWorkspaceActiveAnalysisJobDto {
+  jobId: string;
+  reason: "initial_ingestion" | "code_host_webhook";
+  status: "queued" | "running";
+  requestedAt: string;
+  queuedAt: string;
+  startedAt: string | null;
+}
+
 export interface ReviewWorkspaceSemanticChangeDto {
   semanticChangeId: string;
   symbolDisplayName: string;
@@ -86,6 +95,7 @@ export interface ReviewWorkspaceDto {
   analysisAttemptCount: number;
   analysisDurationMs: number | null;
   analysisError: string | null;
+  activeAnalysisJob: ReviewWorkspaceActiveAnalysisJobDto | null;
   reanalysisStatus: ReviewReanalysisStatus;
   lastOpenedAt: string;
   lastReanalyzeRequestedAt: string | null;

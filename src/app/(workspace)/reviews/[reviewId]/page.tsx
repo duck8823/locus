@@ -8,6 +8,7 @@ import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submi
 import { CollapsibleDetails } from "./collapsible-details";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import {
+  formatAnalysisJobReason,
   formatArchitectureCategoryLabel,
   formatArchitectureColumnLabel,
   formatArchitectureRelation,
@@ -444,6 +445,23 @@ export default async function ReviewWorkspacePage({
                   <p className={styles.muted}>
                     {copy.text.requestedAt}{" "}
                     <LocalizedDateTime isoTimestamp={workspace.analysisRequestedAt} />
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            {workspace.activeAnalysisJob ? (
+              <>
+                <p className={styles.muted}>
+                  {copy.text.trigger}: {formatAnalysisJobReason(workspace.activeAnalysisJob.reason, workspaceLocale)}
+                </p>
+                <p className={styles.muted}>
+                  {copy.text.queueAcceptedAt}{" "}
+                  <LocalizedDateTime isoTimestamp={workspace.activeAnalysisJob.queuedAt} />
+                </p>
+                {workspace.activeAnalysisJob.startedAt ? (
+                  <p className={styles.muted}>
+                    {copy.text.workerStartedAt}{" "}
+                    <LocalizedDateTime isoTimestamp={workspace.activeAnalysisJob.startedAt} />
                   </p>
                 ) : null}
               </>

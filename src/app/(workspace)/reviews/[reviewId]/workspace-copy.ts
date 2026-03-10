@@ -7,6 +7,7 @@ type SemanticSymbolKind = "function" | "method" | "class" | "module" | "unknown"
 type ReviewGroupStatus = "unread" | "in_progress" | "reviewed";
 type SemanticChangeType = "added" | "removed" | "modified" | "moved" | "renamed";
 type UnsupportedFileReason = "unsupported_language" | "parser_failed" | "binary_file";
+type AnalysisJobReason = "initial_ingestion" | "code_host_webhook";
 
 export const workspaceCopyByLocale = {
   en: {
@@ -47,6 +48,9 @@ export const workspaceCopyByLocale = {
       filesSuffix: "files",
       filesProcessedSuffix: "files processed",
       requestedAt: "Requested at",
+      queueAcceptedAt: "Queue accepted at",
+      workerStartedAt: "Worker started at",
+      trigger: "Trigger",
       progress: "Progress",
       analysisReady: "Ready",
       readyAt: "Ready at",
@@ -139,6 +143,10 @@ export const workspaceCopyByLocale = {
         downstream: "Downstream",
       },
     },
+    analysisJobReason: {
+      initial_ingestion: "Initial ingestion",
+      code_host_webhook: "Webhook ingestion",
+    },
   },
   ja: {
     links: {
@@ -177,6 +185,9 @@ export const workspaceCopyByLocale = {
       filesSuffix: "ファイル",
       filesProcessedSuffix: "ファイル処理済み",
       requestedAt: "リクエスト時刻",
+      queueAcceptedAt: "キュー受理時刻",
+      workerStartedAt: "ワーカー開始時刻",
+      trigger: "トリガー",
       progress: "進捗",
       analysisReady: "準備完了",
       readyAt: "準備完了時刻",
@@ -269,6 +280,10 @@ export const workspaceCopyByLocale = {
         downstream: "下流",
       },
     },
+    analysisJobReason: {
+      initial_ingestion: "初回取り込み",
+      code_host_webhook: "Webhook 取り込み",
+    },
   },
 } as const;
 
@@ -353,4 +368,15 @@ export function formatArchitectureColumnLabel(
 ): string {
   const copy = workspaceCopyByLocale[locale];
   return copy.architecture.column[column];
+}
+
+export function formatAnalysisJobReason(
+  reason: string,
+  locale: WorkspaceLocale,
+): string {
+  const copy = workspaceCopyByLocale[locale];
+  return (
+    copy.analysisJobReason[reason as AnalysisJobReason] ??
+    reason.replaceAll("_", " ")
+  );
 }
