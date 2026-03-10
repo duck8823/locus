@@ -278,7 +278,7 @@ export default async function ReviewWorkspacePage({
 
       <div className={styles.layout}>
         <section className={styles.panel}>
-          <h2>{copy.section.changeGroups}</h2>
+                <h2>{copy.section.changeGroups}</h2>
           {workspace.groups.length > 0 ? (
             <ul className={styles.groupList}>
               {workspace.groups.map((group) => (
@@ -297,7 +297,7 @@ export default async function ReviewWorkspacePage({
                           {formatReviewGroupStatus(group.status, workspaceLocale)}
                         </span>
                       </span>
-                      <p className={styles.groupSummary}>{group.summary}</p>
+                      <p className={styles.groupListSummary}>{group.summary}</p>
                     </button>
                   </form>
                 </li>
@@ -320,7 +320,7 @@ export default async function ReviewWorkspacePage({
                 <span className={styles.badge} data-status={selectedGroup.status}>
                   {formatReviewGroupStatus(selectedGroup.status, workspaceLocale)}
                 </span>
-                <h3 style={{ fontSize: "26px" }}>{selectedGroup.title}</h3>
+                <h3 className={styles.selectedGroupTitle}>{selectedGroup.title}</h3>
                 <p className={styles.groupSummary}>{selectedGroup.summary}</p>
                 <p className={styles.filePath}>{selectedGroup.filePath}</p>
               </div>
@@ -497,7 +497,7 @@ export default async function ReviewWorkspacePage({
                 idleLabel={copy.actions.reloadNow}
                 pendingLabel={copy.actions.refreshing}
               />
-              <p className={styles.muted}>{copy.text.autoRefreshHint}</p>
+              <p className={styles.analysisHintText}>{copy.text.autoRefreshHint}</p>
             </div>
           </div>
           <CollapsibleDetails
