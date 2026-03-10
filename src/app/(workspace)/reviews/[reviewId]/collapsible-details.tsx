@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
-interface PersistentDetailsProps {
+interface CollapsibleDetailsProps {
   className?: string;
   summaryClassName?: string;
   contentClassName?: string;
@@ -11,16 +11,23 @@ interface PersistentDetailsProps {
   children: ReactNode;
 }
 
-export function PersistentDetails({
+export function resolveCollapsibleOpenState(input: {
+  manualOpen: boolean | null;
+  defaultOpen: boolean;
+}): boolean {
+  return input.manualOpen ?? input.defaultOpen;
+}
+
+export function CollapsibleDetails({
   className,
   summaryClassName,
   contentClassName,
   summary,
   defaultOpen = false,
   children,
-}: PersistentDetailsProps) {
+}: CollapsibleDetailsProps) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  const open = manualOpen ?? defaultOpen;
+  const open = resolveCollapsibleOpenState({ manualOpen, defaultOpen });
 
   return (
     <details

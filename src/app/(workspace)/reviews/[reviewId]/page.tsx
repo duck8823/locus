@@ -5,7 +5,7 @@ import styles from "./page.module.css";
 import { AnalysisManualRefreshButton } from "./analysis-manual-refresh-button";
 import { AnalysisStatusPoller } from "./analysis-status-poller";
 import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submit-button";
-import { PersistentDetails } from "./persistent-details";
+import { CollapsibleDetails } from "./collapsible-details";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import {
   formatArchitectureCategoryLabel,
@@ -390,7 +390,7 @@ export default async function ReviewWorkspacePage({
             </div>
           )}
 
-          <PersistentDetails
+          <CollapsibleDetails
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
@@ -401,7 +401,7 @@ export default async function ReviewWorkspacePage({
             <p>
               {copy.text.whyThisExistsDescription}
             </p>
-          </PersistentDetails>
+          </CollapsibleDetails>
           <div className={styles.detailBlock}>
             <span className={styles.muted}>{copy.section.initialAnalysis}</span>
             {workspace.analysisAttemptCount > 0 ? (
@@ -500,7 +500,7 @@ export default async function ReviewWorkspacePage({
               <p className={styles.muted}>{copy.text.autoRefreshHint}</p>
             </div>
           </div>
-          <PersistentDetails
+          <CollapsibleDetails
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
@@ -563,9 +563,9 @@ export default async function ReviewWorkspacePage({
                 ) : null}
               </>
             ) : null}
-          </PersistentDetails>
+          </CollapsibleDetails>
 
-          <PersistentDetails
+          <CollapsibleDetails
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
@@ -623,7 +623,7 @@ export default async function ReviewWorkspacePage({
                 ) : null}
               </>
             )}
-          </PersistentDetails>
+          </CollapsibleDetails>
         </section>
 
         <aside className={styles.panel}>
