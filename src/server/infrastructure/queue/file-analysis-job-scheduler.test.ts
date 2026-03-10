@@ -292,4 +292,114 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persistedIds).not.toContain("job-succeeded-oldest");
     expect(persisted.jobs.filter((job) => job.status === "queued")).toHaveLength(2);
   });
+
+  it("falls back to default maxAttempts when an invalid value is provided", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    let attempts = 0;
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      maxAttempts: 0,
+      onJob: async () => {
+        attempts += 1;
+        throw new Error("always fails");
+      },
+    });
+
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-invalid-max-attempts",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "manual_reanalysis",
+    });
+
+    await scheduler.drainNow();
+
+    expect(attempts).toBe(3);
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ status: string; attempts: number }>;
+    };
+    expect(persisted.jobs[0]?.status).toBe("failed");
+    expect(persisted.jobs[0]?.attempts).toBe(3);
+  });
+
+  it("falls back to default maxAttempts when a fractional value is provided", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    let attempts = 0;
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      maxAttempts: 1.9,
+      onJob: async () => {
+        attempts += 1;
+        throw new Error("always fails");
+      },
+    });
+
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-fractional-max-attempts",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "manual_reanalysis",
+    });
+
+    await scheduler.drainNow();
+
+    expect(attempts).toBe(3);
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ status: string; attempts: number }>;
+    };
+    expect(persisted.jobs[0]?.status).toBe("failed");
+    expect(persisted.jobs[0]?.attempts).toBe(3);
+  });
+
+  it("falls back to default staleRunningMs when an invalid value is provided", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const executedJobIds: string[] = [];
+    const now = new Date().toISOString();
+    await writeFile(
+      filePath,
+      JSON.stringify(
+        {
+          jobs: [
+            {
+              jobId: "job-running-fresh",
+              reviewId: "review-fresh",
+              requestedAt: now,
+              reason: "manual_reanalysis",
+              status: "running",
+              queuedAt: now,
+              startedAt: now,
+              completedAt: null,
+              durationMs: null,
+              attempts: 1,
+              lastError: null,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      staleRunningMs: 0,
+      onJob: async (job) => {
+        executedJobIds.push(job.jobId);
+      },
+    });
+
+    await scheduler.drainNow();
+
+    expect(executedJobIds).toEqual([]);
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ status: string; startedAt: string | null }>;
+    };
+    expect(persisted.jobs[0]?.status).toBe("running");
+    expect(persisted.jobs[0]?.startedAt).toBe(now);
+  });
 });

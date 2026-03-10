@@ -4,6 +4,26 @@ import { TypeScriptParserAdapter } from "@/server/infrastructure/parser/typescri
 import { RunScheduledAnalysisJobUseCase } from "@/server/application/usecases/run-scheduled-analysis-job";
 import { FileAnalysisJobScheduler } from "@/server/infrastructure/queue/file-analysis-job-scheduler";
 
+function readOptionalNonNegativeIntegerEnv(name: string): number | undefined {
+  const value = process.env[name]?.trim();
+
+  if (!value) {
+    return undefined;
+  }
+
+  if (!/^\d+$/.test(value)) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    return undefined;
+  }
+
+  return parsed;
+}
+
 const reviewSessionRepository = new FileReviewSessionRepository();
 const parserAdapters = [new TypeScriptParserAdapter()];
 const pullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
@@ -13,6 +33,11 @@ const runScheduledAnalysisJobUseCase = new RunScheduledAnalysisJobUseCase({
   pullRequestSnapshotProvider,
 });
 const analysisJobScheduler = new FileAnalysisJobScheduler({
+  maxAttempts: readOptionalNonNegativeIntegerEnv("LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS"),
+  maxRetainedTerminalJobs: readOptionalNonNegativeIntegerEnv(
+    "LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS",
+  ),
+  staleRunningMs: readOptionalNonNegativeIntegerEnv("LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS"),
   onJob: async (job) => {
     await runScheduledAnalysisJobUseCase.execute({
       jobId: job.jobId,

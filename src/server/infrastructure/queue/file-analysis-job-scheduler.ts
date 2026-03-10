@@ -47,6 +47,30 @@ const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_MAX_RETAINED_TERMINAL_JOBS = 500;
 const DEFAULT_STALE_RUNNING_MS = 10 * 60 * 1000;
 
+function normalizeMinimumOneInteger(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    return fallback;
+  }
+
+  if (value < 1) {
+    return fallback;
+  }
+
+  return value;
+}
+
+function normalizeNonNegativeInteger(value: number | undefined, fallback: number): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) {
+    return fallback;
+  }
+
+  if (value < 0) {
+    return fallback;
+  }
+
+  return value;
+}
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -73,10 +97,15 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
     this.filePath =
       options.dataDirectory ??
       path.join(process.cwd(), ".locus-data", "analysis-jobs", "jobs.json");
-    this.maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
-    this.maxRetainedTerminalJobs =
-      options.maxRetainedTerminalJobs ?? DEFAULT_MAX_RETAINED_TERMINAL_JOBS;
-    this.staleRunningMs = options.staleRunningMs ?? DEFAULT_STALE_RUNNING_MS;
+    this.maxAttempts = normalizeMinimumOneInteger(options.maxAttempts, DEFAULT_MAX_ATTEMPTS);
+    this.maxRetainedTerminalJobs = normalizeNonNegativeInteger(
+      options.maxRetainedTerminalJobs,
+      DEFAULT_MAX_RETAINED_TERMINAL_JOBS,
+    );
+    this.staleRunningMs = normalizeMinimumOneInteger(
+      options.staleRunningMs,
+      DEFAULT_STALE_RUNNING_MS,
+    );
     this.autoRun = options.autoRun ?? true;
     this.onJob = options.onJob;
 
