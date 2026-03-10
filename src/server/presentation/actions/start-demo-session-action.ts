@@ -1,6 +1,6 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { OpenReviewWorkspaceUseCase } from "@/server/application/usecases/open-review-workspace";
 import { defaultSeedReviewId } from "@/server/application/services/review-session-seed";
@@ -11,10 +11,12 @@ import { WORKSPACE_LOCALE_COOKIE_NAME } from "./workspace-locale-cookie-name";
 const demoViewerCookieName = "locus-demo-viewer";
 
 export async function startDemoSessionAction(): Promise<void> {
+  const headerStore = await headers();
   const cookieStore = await cookies();
-  const viewerName = resolveDemoViewerName(
-    cookieStore.get(WORKSPACE_LOCALE_COOKIE_NAME)?.value ?? null,
-  );
+  const viewerName = resolveDemoViewerName({
+    preferredLocale: cookieStore.get(WORKSPACE_LOCALE_COOKIE_NAME)?.value ?? null,
+    acceptLanguage: headerStore.get("accept-language"),
+  });
 
   cookieStore.set(demoViewerCookieName, viewerName, {
     httpOnly: true,
