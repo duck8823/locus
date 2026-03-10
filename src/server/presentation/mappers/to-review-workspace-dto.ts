@@ -145,12 +145,13 @@ function toArchitectureGraph(params: {
 
   for (const nodeId of normalizedDownstream) {
     const nodeView = toArchitectureNodeView(nodeId);
+    const existing = nodes.get(nodeId);
 
     nodes.set(nodeId, {
       nodeId,
       kind: nodeView.kind,
       label: nodeView.label,
-      role: "downstream",
+      role: existing?.role === "upstream" ? "upstream" : "downstream",
       linkedGroupId: resolveLinkedGroupId(nodeId, params.filePathToGroupId),
     });
 

@@ -95,27 +95,41 @@ export default async function ReviewWorkspacePage({
     workspace.analysisStatus === "parsing";
   const architectureColumns: ArchitectureColumn[] = selectedGroup
     ? (() => {
+        const nodeById = new Map(
+          selectedGroup.architectureGraph.nodes.map((node) => [node.nodeId, node] as const),
+        );
         const centerNodeId =
           selectedGroup.architectureGraph.nodes.find((node) => node.role === "center")?.nodeId ??
           `group:${selectedGroup.groupId}`;
-        const upstreamNodes = selectedGroup.architectureGraph.nodes.filter(
-          (node) => node.role === "upstream",
-        );
-        const downstreamNodes = selectedGroup.architectureGraph.nodes.filter(
-          (node) => node.role === "downstream",
-        );
         const upstreamRelations = new Map<string, "imports" | "calls" | "implements" | "uses">();
         const downstreamRelations = new Map<string, "imports" | "calls" | "implements" | "uses">();
+        const upstreamNodeIds = new Set<string>();
+        const downstreamNodeIds = new Set<string>();
 
         for (const edge of selectedGroup.architectureGraph.edges) {
           if (edge.toNodeId === centerNodeId) {
             upstreamRelations.set(edge.fromNodeId, edge.relation);
+            upstreamNodeIds.add(edge.fromNodeId);
           }
 
           if (edge.fromNodeId === centerNodeId) {
             downstreamRelations.set(edge.toNodeId, edge.relation);
+            downstreamNodeIds.add(edge.toNodeId);
           }
         }
+
+        const upstreamNodes = [...upstreamNodeIds]
+          .map((nodeId) => nodeById.get(nodeId))
+          .filter(
+            (node): node is NonNullable<typeof node> => !!node,
+          )
+          .sort((left, right) => left.label.localeCompare(right.label));
+        const downstreamNodes = [...downstreamNodeIds]
+          .map((nodeId) => nodeById.get(nodeId))
+          .filter(
+            (node): node is NonNullable<typeof node> => !!node,
+          )
+          .sort((left, right) => left.label.localeCompare(right.label));
 
         return [
           {

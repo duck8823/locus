@@ -193,6 +193,13 @@ describe("toReviewWorkspaceDto", () => {
           linkedGroupId: null,
         },
         {
+          nodeId: "file:src/b.ts",
+          kind: "file",
+          label: "src/b.ts",
+          role: "upstream",
+          linkedGroupId: "group-2",
+        },
+        {
           nodeId: "symbol:function:UserService::findUser",
           kind: "symbol",
           label: "UserService.findUser (function)",
@@ -205,13 +212,6 @@ describe("toReviewWorkspaceDto", () => {
           label: "infrastructure",
           role: "downstream",
           linkedGroupId: null,
-        },
-        {
-          nodeId: "file:src/b.ts",
-          kind: "file",
-          label: "src/b.ts",
-          role: "downstream",
-          linkedGroupId: "group-2",
         },
       ],
       edges: [
