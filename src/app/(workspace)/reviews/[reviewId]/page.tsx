@@ -53,8 +53,13 @@ function formatCoveragePercent(supportedCount: number, totalCount: number): stri
     return "0%";
   }
 
-  const percent = (supportedCount / totalCount) * 100;
-  return `${Math.round(percent)}%`;
+  const rawPercent = (supportedCount / totalCount) * 100;
+  const normalizedPercent =
+    supportedCount < totalCount ? Math.min(rawPercent, 99.9) : Math.min(rawPercent, 100);
+  const flooredPercent = Math.floor(normalizedPercent * 10) / 10;
+  const formatted = flooredPercent.toFixed(1);
+
+  return formatted.endsWith(".0") ? `${formatted.slice(0, -2)}%` : `${formatted}%`;
 }
 
 const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
