@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const port = process.env.PLAYWRIGHT_PORT ?? "4173";
 const baseURL = `http://127.0.0.1:${port}`;
+const isCI = !!process.env.CI;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -11,7 +12,6 @@ export default defineConfig({
   workers: 1,
   timeout: 60_000,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
-  globalSetup: "./e2e/global-setup.ts",
   use: {
     baseURL,
     trace: "on-first-retry",
@@ -25,9 +25,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run dev -- --port ${port}`,
+    command: isCI
+      ? `npm run build && npm run start -- --port ${port}`
+      : `npm run dev -- --port ${port}`,
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !isCI,
     timeout: 120_000,
   },
 });

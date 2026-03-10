@@ -51,12 +51,15 @@ test("keeps review status changes after reload", async ({ page }) => {
   await openSeedWorkspace(page);
 
   await page.getByTestId("status-button-reviewed").click();
+  await expect(page.getByTestId("status-button-reviewed")).toHaveAttribute(
+    "data-active",
+    "true",
+  );
   await expect(page).toHaveURL(workspacePathPattern);
   await page.reload();
   await expect(page).toHaveURL(workspacePathPattern);
-
-  const selectedGroup = page.locator(
-    'button[data-testid^="group-button-"][data-selected="true"]',
+  await expect(page.getByTestId("status-button-reviewed")).toHaveAttribute(
+    "data-active",
+    "true",
   );
-  await expect(selectedGroup).toContainText(/Reviewed|確認済み/);
 });
