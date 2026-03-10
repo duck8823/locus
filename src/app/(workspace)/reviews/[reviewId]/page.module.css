@@ -205,6 +205,43 @@
   margin-bottom: 20px;
 }
 
+.collapsibleDetail {
+  margin-bottom: 20px;
+  border: 1px solid rgba(154, 167, 209, 0.14);
+  border-radius: 14px;
+  background: rgba(11, 16, 32, 0.35);
+}
+
+.collapsibleSummary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.collapsibleSummary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsibleSummary::after {
+  content: "▾";
+  color: var(--muted);
+  transition: transform 0.16s ease;
+}
+
+.collapsibleDetail:not([open]) .collapsibleSummary::after {
+  transform: rotate(-90deg);
+}
+
+.collapsibleContent {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
 .semanticChangeList {
   list-style: none;
   display: grid;

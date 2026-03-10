@@ -5,6 +5,7 @@ import styles from "./page.module.css";
 import { AnalysisManualRefreshButton } from "./analysis-manual-refresh-button";
 import { AnalysisStatusPoller } from "./analysis-status-poller";
 import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submit-button";
+import { CollapsibleDetails } from "./collapsible-details";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import {
   formatArchitectureCategoryLabel,
@@ -389,12 +390,18 @@ export default async function ReviewWorkspacePage({
             </div>
           )}
 
-          <div className={styles.detailBlock}>
-            <span className={styles.muted}>{copy.section.whyThisExists}</span>
+          <CollapsibleDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            summary={
+              <span className={styles.muted}>{copy.section.whyThisExists}</span>
+            }
+          >
             <p>
               {copy.text.whyThisExistsDescription}
             </p>
-          </div>
+          </CollapsibleDetails>
           <div className={styles.detailBlock}>
             <span className={styles.muted}>{copy.section.initialAnalysis}</span>
             {workspace.analysisAttemptCount > 0 ? (
@@ -493,8 +500,15 @@ export default async function ReviewWorkspacePage({
               <p className={styles.muted}>{copy.text.autoRefreshHint}</p>
             </div>
           </div>
-          <div className={styles.detailBlock}>
-            <span className={styles.muted}>{copy.section.reanalysisStatus}</span>
+          <CollapsibleDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            defaultOpen={workspace.reanalysisStatus !== "idle"}
+            summary={
+              <span className={styles.muted}>{copy.section.reanalysisStatus}</span>
+            }
+          >
             {workspace.reanalysisStatus === "idle" ? (
               <p>{copy.text.notRequestedYet}</p>
             ) : null}
@@ -549,10 +563,17 @@ export default async function ReviewWorkspacePage({
                 ) : null}
               </>
             ) : null}
-          </div>
+          </CollapsibleDetails>
 
-          <div className={styles.detailBlock}>
-            <span className={styles.muted}>{copy.section.analysisCoverage}</span>
+          <CollapsibleDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            defaultOpen={workspace.unsupportedSummary.totalCount > 0}
+            summary={
+              <span className={styles.muted}>{copy.section.analysisCoverage}</span>
+            }
+          >
             {workspace.analysisTotalFiles !== null &&
             workspace.analysisSupportedFiles !== null &&
             workspace.analysisCoveragePercent !== null ? (
@@ -602,7 +623,7 @@ export default async function ReviewWorkspacePage({
                 ) : null}
               </>
             )}
-          </div>
+          </CollapsibleDetails>
         </section>
 
         <aside className={styles.panel}>
