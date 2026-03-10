@@ -48,16 +48,8 @@ function formatArchitectureRelation(
   return relation;
 }
 
-function formatCoveragePercent(supportedCount: number, totalCount: number): string {
-  if (totalCount <= 0) {
-    return "0%";
-  }
-
-  const rawPercent = (supportedCount / totalCount) * 100;
-  const normalizedPercent =
-    supportedCount < totalCount ? Math.min(rawPercent, 99.9) : Math.min(rawPercent, 100);
-  const flooredPercent = Math.floor(normalizedPercent * 10) / 10;
-  const formatted = flooredPercent.toFixed(1);
+function formatCoveragePercent(coveragePercent: number): string {
+  const formatted = coveragePercent.toFixed(1);
 
   return formatted.endsWith(".0") ? `${formatted.slice(0, -2)}%` : `${formatted}%`;
 }
@@ -107,12 +99,8 @@ export default async function ReviewWorkspacePage({
     workspace.analysisStatus === "queued" ||
     workspace.analysisStatus === "fetching" ||
     workspace.analysisStatus === "parsing";
-  const totalFileCount = workspace.analysisTotalFiles ?? null;
-  const unsupportedFileCount = workspace.unsupportedSummary.totalCount;
-  const supportedFileCount =
-    totalFileCount !== null ? Math.max(0, totalFileCount - unsupportedFileCount) : null;
   const hiddenUnsupportedFileCount =
-    workspace.unsupportedSummary.totalCount - workspace.unsupportedFiles.length;
+    Math.max(0, workspace.analysisUnsupportedFiles - workspace.unsupportedFiles.length);
   const architectureColumns: ArchitectureColumn[] = selectedGroup
     ? (() => {
         const nodeById = new Map(
@@ -445,10 +433,12 @@ export default async function ReviewWorkspacePage({
 
           <div className={styles.detailBlock}>
             <span className={styles.muted}>Analysis coverage</span>
-            {totalFileCount !== null && supportedFileCount !== null ? (
+            {workspace.analysisTotalFiles !== null &&
+            workspace.analysisSupportedFiles !== null &&
+            workspace.analysisCoveragePercent !== null ? (
               <p className={styles.muted}>
-                Coverage: {supportedFileCount}/{totalFileCount} (
-                {formatCoveragePercent(supportedFileCount, totalFileCount)})
+                Coverage: {workspace.analysisSupportedFiles}/{workspace.analysisTotalFiles} (
+                {formatCoveragePercent(workspace.analysisCoveragePercent)})
               </p>
             ) : null}
             {workspace.unsupportedSummary.totalCount === 0 ? (
