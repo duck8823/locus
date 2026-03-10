@@ -214,11 +214,13 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
     input: FindQueuedAnalysisJobInput,
   ): Promise<ActiveAnalysisJobSnapshot | null> {
     const store = await this.loadStore();
+    const nowEpochMs = Date.now();
     const activeJobs = store.jobs.filter(
       (job) =>
         job.reviewId === input.reviewId &&
         job.reason === input.reason &&
-        (job.status === "queued" || job.status === "running"),
+        (job.status === "queued" ||
+          (job.status === "running" && !this.isRunningJobStale(job, nowEpochMs))),
     );
     const runningJob = [...activeJobs]
       .filter((job) => job.status === "running")
@@ -324,27 +326,29 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
     const nowEpochMs = Date.parse(now);
 
     for (const job of jobs) {
-      if (job.status !== "running") {
+      if (!this.isRunningJobStale(job, nowEpochMs)) {
         continue;
       }
 
-      const startedAtEpochMs = Date.parse(job.startedAt ?? "");
-
-      if (Number.isNaN(nowEpochMs) || Number.isNaN(startedAtEpochMs)) {
-        job.status = "queued";
-        job.startedAt = null;
-        job.completedAt = null;
-        job.durationMs = null;
-        continue;
-      }
-
-      if (nowEpochMs - startedAtEpochMs >= this.staleRunningMs) {
-        job.status = "queued";
-        job.startedAt = null;
-        job.completedAt = null;
-        job.durationMs = null;
-      }
+      job.status = "queued";
+      job.startedAt = null;
+      job.completedAt = null;
+      job.durationMs = null;
     }
+  }
+
+  private isRunningJobStale(job: PersistedAnalysisJobRecord, nowEpochMs: number): boolean {
+    if (job.status !== "running") {
+      return false;
+    }
+
+    const startedAtEpochMs = Date.parse(job.startedAt ?? "");
+
+    if (Number.isNaN(nowEpochMs) || Number.isNaN(startedAtEpochMs)) {
+      return true;
+    }
+
+    return nowEpochMs - startedAtEpochMs >= this.staleRunningMs;
   }
 
   private async markJobSucceeded(jobId: string, startedAt: string): Promise<void> {

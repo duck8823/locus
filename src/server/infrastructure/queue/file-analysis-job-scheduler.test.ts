@@ -225,6 +225,9 @@ describe("FileAnalysisJobScheduler", () => {
   it("returns running job from active lookup when manual reanalysis is already claimed", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");
+    const runningQueuedAt = new Date(Date.now() - 5_000).toISOString();
+    const runningStartedAt = new Date(Date.now() - 4_000).toISOString();
+    const followupQueuedAt = new Date(Date.now() - 1_000).toISOString();
     await writeFile(
       filePath,
       JSON.stringify(
@@ -233,11 +236,11 @@ describe("FileAnalysisJobScheduler", () => {
             {
               jobId: "job-running-manual",
               reviewId: "review-active-lookup",
-              requestedAt: "2026-03-10T00:01:00.000Z",
+              requestedAt: runningQueuedAt,
               reason: "manual_reanalysis",
               status: "running",
-              queuedAt: "2026-03-10T00:01:00.000Z",
-              startedAt: "2026-03-10T00:01:05.000Z",
+              queuedAt: runningQueuedAt,
+              startedAt: runningStartedAt,
               completedAt: null,
               durationMs: null,
               attempts: 1,
@@ -246,10 +249,10 @@ describe("FileAnalysisJobScheduler", () => {
             {
               jobId: "job-queued-manual",
               reviewId: "review-active-lookup",
-              requestedAt: "2026-03-10T00:02:00.000Z",
+              requestedAt: followupQueuedAt,
               reason: "manual_reanalysis",
               status: "queued",
-              queuedAt: "2026-03-10T00:02:00.000Z",
+              queuedAt: followupQueuedAt,
               startedAt: null,
               completedAt: null,
               durationMs: null,
@@ -278,10 +281,10 @@ describe("FileAnalysisJobScheduler", () => {
     expect(activeJob).toMatchObject({
       jobId: "job-running-manual",
       reviewId: "review-active-lookup",
-      requestedAt: "2026-03-10T00:01:00.000Z",
+      requestedAt: runningQueuedAt,
       reason: "manual_reanalysis",
       status: "running",
-      startedAt: "2026-03-10T00:01:05.000Z",
+      startedAt: runningStartedAt,
     });
   });
 
@@ -311,6 +314,51 @@ describe("FileAnalysisJobScheduler", () => {
       status: "queued",
       startedAt: null,
     });
+  });
+
+  it("ignores stale running jobs in active lookup", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const staleStartedAt = new Date(Date.now() - 60_000).toISOString();
+    await writeFile(
+      filePath,
+      JSON.stringify(
+        {
+          jobs: [
+            {
+              jobId: "job-stale-running-manual",
+              reviewId: "review-stale-active-lookup",
+              requestedAt: "2026-03-10T00:00:00.000Z",
+              reason: "manual_reanalysis",
+              status: "running",
+              queuedAt: staleStartedAt,
+              startedAt: staleStartedAt,
+              completedAt: null,
+              durationMs: null,
+              attempts: 1,
+              lastError: null,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      staleRunningMs: 1_000,
+      onJob: async () => {},
+    });
+
+    const activeJob = await scheduler.findActiveJob({
+      reviewId: "review-stale-active-lookup",
+      reason: "manual_reanalysis",
+    });
+
+    expect(activeJob).toBeNull();
   });
 
   it("queues a follow-up job when the same review/reason is already running", async () => {
