@@ -445,6 +445,12 @@ export default async function ReviewWorkspacePage({
 
           <div className={styles.detailBlock}>
             <span className={styles.muted}>Analysis coverage</span>
+            {totalFileCount !== null && supportedFileCount !== null ? (
+              <p className={styles.muted}>
+                Coverage: {supportedFileCount}/{totalFileCount} (
+                {formatCoveragePercent(supportedFileCount, totalFileCount)})
+              </p>
+            ) : null}
             {workspace.unsupportedSummary.totalCount === 0 ? (
               <p>All changed files were covered by active parser adapters.</p>
             ) : (
@@ -453,12 +459,6 @@ export default async function ReviewWorkspacePage({
                   {workspace.unsupportedSummary.totalCount} file(s) were excluded from semantic
                   analysis.
                 </p>
-                {totalFileCount !== null && supportedFileCount !== null ? (
-                  <p className={styles.muted}>
-                    Coverage: {supportedFileCount}/{totalFileCount} (
-                    {formatCoveragePercent(supportedFileCount, totalFileCount)})
-                  </p>
-                ) : null}
                 <ul className={styles.unsupportedList}>
                   {workspace.unsupportedSummary.byReason.map((entry) => (
                     <li key={entry.reason}>
