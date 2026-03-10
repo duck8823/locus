@@ -6,6 +6,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { PrepareGitHubReviewWorkspaceUseCase } from "@/server/application/usecases/prepare-github-review-workspace";
 import { getDependencies } from "@/server/composition/dependencies";
+import {
+  GitHubDemoActionError,
+  toGitHubDemoErrorCode,
+  type GitHubDemoErrorCode,
+} from "./github-demo-error-code";
 
 const demoViewerCookieName = "locus-demo-viewer";
 
@@ -28,7 +33,7 @@ function readRequiredValue(params: {
   formData: FormData;
   formFieldName: string;
   envName: string;
-  label: string;
+  missingCode: GitHubDemoErrorCode;
 }): string {
   const formValue = readTrimmedFormValue(params.formData, params.formFieldName);
 
@@ -42,18 +47,18 @@ function readRequiredValue(params: {
     return envValue;
   }
 
-  throw new Error(`${params.label} is required.`);
+  throw new GitHubDemoActionError(params.missingCode);
 }
 
 function parsePullRequestNumber(rawValue: string): number {
   if (!/^\d+$/.test(rawValue)) {
-    throw new Error("GitHub pull request number must be a positive integer.");
+    throw new GitHubDemoActionError("pull_request_number_invalid");
   }
 
   const pullRequestNumber = Number(rawValue);
 
   if (!Number.isInteger(pullRequestNumber) || pullRequestNumber <= 0) {
-    throw new Error("GitHub pull request number must be a positive integer.");
+    throw new GitHubDemoActionError("pull_request_number_invalid");
   }
 
   return pullRequestNumber;
@@ -79,21 +84,6 @@ function createReviewId(owner: string, repository: string, pullRequestNumber: nu
   return `github-${normalizedOwner}-${normalizedRepository}-pr-${pullRequestNumber}-${discriminator}`;
 }
 
-function createDemoErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return "GitHub demo を開始できませんでした。";
-  }
-
-  if (
-    error.message.endsWith(" is required.") ||
-    error.message === "GitHub pull request number must be a positive integer."
-  ) {
-    return error.message;
-  }
-
-  return "GitHub demo を開始できませんでした。入力値と設定を確認してください。";
-}
-
 export async function startGitHubDemoSessionAction(formData: FormData): Promise<void> {
   const viewerName = "Demo reviewer";
   let redirectPath = "/";
@@ -103,19 +93,19 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
       formData,
       formFieldName: "owner",
       envName: "LOCUS_GITHUB_DEMO_OWNER",
-      label: "GitHub owner",
+      missingCode: "owner_required",
     });
     const repository = readRequiredValue({
       formData,
       formFieldName: "repository",
       envName: "LOCUS_GITHUB_DEMO_REPO",
-      label: "GitHub repository",
+      missingCode: "repository_required",
     });
     const pullRequestNumberRaw = readRequiredValue({
       formData,
       formFieldName: "pullRequestNumber",
       envName: "LOCUS_GITHUB_DEMO_PR_NUMBER",
-      label: "GitHub pull request number",
+      missingCode: "pull_request_number_required",
     });
     const pullRequestNumber = parsePullRequestNumber(pullRequestNumberRaw);
     const reviewId = createReviewId(owner, repository, pullRequestNumber);
@@ -151,8 +141,8 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
     revalidatePath(`/reviews/${reviewId}`);
     redirectPath = `/reviews/${reviewId}`;
   } catch (error) {
-    const message = createDemoErrorMessage(error);
-    redirectPath = `/?githubDemoError=${encodeURIComponent(message)}`;
+    const errorCode = toGitHubDemoErrorCode(error);
+    redirectPath = `/?githubDemoErrorCode=${encodeURIComponent(errorCode)}`;
   }
 
   redirect(redirectPath);
