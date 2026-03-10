@@ -292,4 +292,34 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persistedIds).not.toContain("job-succeeded-oldest");
     expect(persisted.jobs.filter((job) => job.status === "queued")).toHaveLength(2);
   });
+
+  it("falls back to default maxAttempts when an invalid value is provided", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    let attempts = 0;
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      maxAttempts: 0,
+      onJob: async () => {
+        attempts += 1;
+        throw new Error("always fails");
+      },
+    });
+
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-invalid-max-attempts",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "manual_reanalysis",
+    });
+
+    await scheduler.drainNow();
+
+    expect(attempts).toBe(3);
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ status: string; attempts: number }>;
+    };
+    expect(persisted.jobs[0]?.status).toBe("failed");
+    expect(persisted.jobs[0]?.attempts).toBe(3);
+  });
 });
