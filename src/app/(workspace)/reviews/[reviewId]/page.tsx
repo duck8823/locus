@@ -48,6 +48,20 @@ function formatArchitectureRelation(
   return relation;
 }
 
+function formatCoveragePercent(supportedCount: number, totalCount: number): string {
+  if (totalCount <= 0) {
+    return "0%";
+  }
+
+  const rawPercent = (supportedCount / totalCount) * 100;
+  const normalizedPercent =
+    supportedCount < totalCount ? Math.min(rawPercent, 99.9) : Math.min(rawPercent, 100);
+  const flooredPercent = Math.floor(normalizedPercent * 10) / 10;
+  const formatted = flooredPercent.toFixed(1);
+
+  return formatted.endsWith(".0") ? `${formatted.slice(0, -2)}%` : `${formatted}%`;
+}
+
 const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
   layer: true,
   file: true,
@@ -93,6 +107,10 @@ export default async function ReviewWorkspacePage({
     workspace.analysisStatus === "queued" ||
     workspace.analysisStatus === "fetching" ||
     workspace.analysisStatus === "parsing";
+  const totalFileCount = workspace.analysisTotalFiles ?? null;
+  const unsupportedFileCount = workspace.unsupportedSummary.totalCount;
+  const supportedFileCount =
+    totalFileCount !== null ? Math.max(0, totalFileCount - unsupportedFileCount) : null;
   const hiddenUnsupportedFileCount =
     workspace.unsupportedSummary.totalCount - workspace.unsupportedFiles.length;
   const architectureColumns: ArchitectureColumn[] = selectedGroup
@@ -427,6 +445,12 @@ export default async function ReviewWorkspacePage({
 
           <div className={styles.detailBlock}>
             <span className={styles.muted}>Analysis coverage</span>
+            {totalFileCount !== null && supportedFileCount !== null ? (
+              <p className={styles.muted}>
+                Coverage: {supportedFileCount}/{totalFileCount} (
+                {formatCoveragePercent(supportedFileCount, totalFileCount)})
+              </p>
+            ) : null}
             {workspace.unsupportedSummary.totalCount === 0 ? (
               <p>All changed files were covered by active parser adapters.</p>
             ) : (
