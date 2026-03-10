@@ -5,13 +5,16 @@ import type {
   UnsupportedFileAnalysis,
   UnsupportedFileReason,
 } from "@/server/domain/value-objects/semantic-change";
+import { toArchitectureNodeView } from "@/server/presentation/formatters/architecture-node";
 import type {
+  ReviewWorkspaceArchitectureGraphDto,
   ReviewWorkspaceDto,
   ReviewWorkspaceSemanticChangeDto,
   ReviewWorkspaceUnsupportedSummaryDto,
 } from "@/server/presentation/dto/review-workspace-dto";
 
 const UNSUPPORTED_SAMPLE_LIMIT = 5;
+const FILE_NODE_PREFIX = "file:";
 
 function toSemanticChangeDto(change: SemanticChange): ReviewWorkspaceSemanticChangeDto {
   return {
@@ -72,11 +75,128 @@ function calculateAnalysisDurationMs(params: {
   return Math.max(0, completedAtEpochMs - requestedAtEpochMs);
 }
 
+function inferArchitectureRelation(nodeId: string): "imports" | "calls" | "implements" | "uses" {
+  if (nodeId.startsWith("symbol:")) {
+    return "calls";
+  }
+
+  if (nodeId.startsWith("file:")) {
+    return "imports";
+  }
+
+  return "uses";
+}
+
+function resolveLinkedGroupId(nodeId: string, filePathToGroupId: Map<string, string>): string | null {
+  if (!nodeId.startsWith(FILE_NODE_PREFIX)) {
+    return null;
+  }
+
+  const filePath = nodeId.slice(FILE_NODE_PREFIX.length).trim();
+
+  if (filePath.length === 0) {
+    return null;
+  }
+
+  return filePathToGroupId.get(filePath) ?? null;
+}
+
+function toArchitectureGraph(params: {
+  groupId: string;
+  filePath: string;
+  upstream: string[];
+  downstream: string[];
+  filePathToGroupId: Map<string, string>;
+}): ReviewWorkspaceArchitectureGraphDto {
+  const centerNodeId = `group:${params.groupId}`;
+  const nodes = new Map<string, ReviewWorkspaceArchitectureGraphDto["nodes"][number]>();
+  const edges = new Map<string, ReviewWorkspaceArchitectureGraphDto["edges"][number]>();
+
+  nodes.set(centerNodeId, {
+    nodeId: centerNodeId,
+    kind: "file",
+    label: params.filePath,
+    role: "center",
+    linkedGroupId: params.groupId,
+  });
+
+  const normalizedUpstream = [...new Set(params.upstream.map((value) => value.trim()).filter(Boolean))];
+  const normalizedDownstream = [...new Set(params.downstream.map((value) => value.trim()).filter(Boolean))];
+
+  for (const nodeId of normalizedUpstream) {
+    const nodeView = toArchitectureNodeView(nodeId);
+    const existing = nodes.get(nodeId);
+
+    nodes.set(nodeId, {
+      nodeId,
+      kind: nodeView.kind,
+      label: nodeView.label,
+      role: existing?.role === "downstream" ? "downstream" : "upstream",
+      linkedGroupId: resolveLinkedGroupId(nodeId, params.filePathToGroupId),
+    });
+
+    const edgeKey = `${nodeId}->${centerNodeId}`;
+    edges.set(edgeKey, {
+      fromNodeId: nodeId,
+      toNodeId: centerNodeId,
+      relation: inferArchitectureRelation(nodeId),
+    });
+  }
+
+  for (const nodeId of normalizedDownstream) {
+    const nodeView = toArchitectureNodeView(nodeId);
+    const existing = nodes.get(nodeId);
+
+    nodes.set(nodeId, {
+      nodeId,
+      kind: nodeView.kind,
+      label: nodeView.label,
+      role: existing?.role === "upstream" ? "upstream" : "downstream",
+      linkedGroupId: resolveLinkedGroupId(nodeId, params.filePathToGroupId),
+    });
+
+    const edgeKey = `${centerNodeId}->${nodeId}`;
+    edges.set(edgeKey, {
+      fromNodeId: centerNodeId,
+      toNodeId: nodeId,
+      relation: inferArchitectureRelation(nodeId),
+    });
+  }
+
+  const nodeOrder: Record<ReviewWorkspaceArchitectureGraphDto["nodes"][number]["role"], number> = {
+    center: 0,
+    upstream: 1,
+    downstream: 2,
+  };
+
+  return {
+    nodes: [...nodes.values()].sort((left, right) => {
+      if (nodeOrder[left.role] !== nodeOrder[right.role]) {
+        return nodeOrder[left.role] - nodeOrder[right.role];
+      }
+
+      return left.label.localeCompare(right.label);
+    }),
+    edges: [...edges.values()].sort((left, right) => {
+      const leftKey = `${left.fromNodeId}->${left.toNodeId}`;
+      const rightKey = `${right.fromNodeId}->${right.toNodeId}`;
+      return leftKey.localeCompare(rightKey);
+    }),
+  };
+}
+
 export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorkspaceDto {
   const record = reviewSession.toRecord();
   const semanticChangeMap = new Map(
     (record.semanticChanges ?? []).map((change) => [change.semanticChangeId, change] as const),
   );
+  const filePathToGroupId = new Map<string, string>();
+
+  for (const group of record.groups) {
+    if (!filePathToGroupId.has(group.filePath)) {
+      filePathToGroupId.set(group.filePath, group.groupId);
+    }
+  }
 
   return {
     reviewId: record.reviewId,
@@ -111,6 +231,13 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
       isSelected: group.groupId === record.selectedGroupId,
       upstream: [...group.upstream],
       downstream: [...group.downstream],
+      architectureGraph: toArchitectureGraph({
+        groupId: group.groupId,
+        filePath: group.filePath,
+        upstream: group.upstream,
+        downstream: group.downstream,
+        filePathToGroupId,
+      }),
       semanticChanges: (group.semanticChangeIds ?? [])
         .map((semanticChangeId) => semanticChangeMap.get(semanticChangeId))
         .filter((semanticChange): semanticChange is SemanticChange => !!semanticChange)

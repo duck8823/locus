@@ -64,7 +64,7 @@ UserService.updateProfile()         UserService.updateProfile()
 
 | 機能 | 概要 | 状態 |
 |---|---|---|
-| アーキテクチャミニマップ | 自動生成されるシステム構成図。常に現在地を表示 | 🔴 計画中 |
+| アーキテクチャミニマップ v0 | 直近 upstream/downstream と change group 遷移を表示 | 🟡 Prototype |
 | セマンティックDiff | ASTベースの関数・メソッド単位の変更可視化 | 🔴 計画中 |
 | ビジネスロジックコンテキスト | Confluence・GitHub Issues/Projects連携 | 🔴 計画中 |
 | AIレビュー補助 | コンテキストを持ったLLMによるレビュー | 🔴 計画中 |
