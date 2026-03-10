@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getDependencies } from "@/server/composition/dependencies";
 import {
   createAnalysisStatusToken,
-  isActiveAnalysisStatus,
+  isActiveWorkspaceRefreshStatus,
 } from "@/server/presentation/formatters/analysis-status-token";
 
 export async function GET(
@@ -22,6 +22,7 @@ export async function GET(
 
   const record = reviewSession.toRecord();
   const analysisStatus = record.analysisStatus ?? "ready";
+  const reanalysisStatus = record.reanalysisStatus ?? "idle";
   const payload = {
     reviewId,
     analysisStatus,
@@ -31,7 +32,14 @@ export async function GET(
     analysisTotalFiles: record.analysisTotalFiles ?? null,
     analysisAttemptCount: record.analysisAttemptCount ?? 0,
     analysisError: record.analysisError ?? null,
-    active: isActiveAnalysisStatus(analysisStatus),
+    reanalysisStatus,
+    lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt ?? null,
+    lastReanalyzeCompletedAt: record.lastReanalyzeCompletedAt ?? null,
+    lastReanalyzeError: record.lastReanalyzeError ?? null,
+    active: isActiveWorkspaceRefreshStatus({
+      analysisStatus,
+      reanalysisStatus,
+    }),
     token: createAnalysisStatusToken({
       analysisStatus,
       analysisRequestedAt: record.analysisRequestedAt ?? null,
@@ -40,6 +48,10 @@ export async function GET(
       analysisTotalFiles: record.analysisTotalFiles ?? null,
       analysisAttemptCount: record.analysisAttemptCount ?? 0,
       analysisError: record.analysisError ?? null,
+      reanalysisStatus,
+      lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt ?? null,
+      lastReanalyzeCompletedAt: record.lastReanalyzeCompletedAt ?? null,
+      lastReanalyzeError: record.lastReanalyzeError ?? null,
     }),
   };
 

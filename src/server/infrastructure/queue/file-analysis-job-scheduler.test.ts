@@ -127,12 +127,41 @@ describe("FileAnalysisJobScheduler", () => {
     expect(second.reason).toBe("initial_ingestion");
 
     const persisted = (await readJobsFile(filePath)) as {
-      jobs: Array<{ reviewId: string; status: string; reason: string }>;
+      jobs: Array<{ reviewId: string; status: string; reason: string; requestedAt: string }>;
     };
     expect(persisted.jobs).toHaveLength(1);
     expect(persisted.jobs[0]?.reviewId).toBe("review-deduped");
     expect(persisted.jobs[0]?.status).toBe("queued");
     expect(persisted.jobs[0]?.reason).toBe("initial_ingestion");
+    expect(persisted.jobs[0]?.requestedAt).toBe("2026-03-10T00:01:00.000Z");
+  });
+
+  it("keeps the latest requestedAt when a deduped request has an older timestamp", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-deduped-latest",
+      requestedAt: "2026-03-10T00:05:00.000Z",
+      reason: "manual_reanalysis",
+    });
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-deduped-latest",
+      requestedAt: "2026-03-10T00:04:00.000Z",
+      reason: "manual_reanalysis",
+    });
+
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ reviewId: string; requestedAt: string }>;
+    };
+    expect(persisted.jobs).toHaveLength(1);
+    expect(persisted.jobs[0]?.reviewId).toBe("review-deduped-latest");
+    expect(persisted.jobs[0]?.requestedAt).toBe("2026-03-10T00:05:00.000Z");
   });
 
   it("queues a follow-up job when the same review/reason is already running", async () => {

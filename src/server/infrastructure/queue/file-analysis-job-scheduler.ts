@@ -71,6 +71,17 @@ function normalizeNonNegativeInteger(value: number | undefined, fallback: number
   return value;
 }
 
+function selectLatestRequestedAt(current: string, next: string): string {
+  const currentEpochMs = Date.parse(current);
+  const nextEpochMs = Date.parse(next);
+
+  if (Number.isNaN(currentEpochMs) || Number.isNaN(nextEpochMs)) {
+    return next;
+  }
+
+  return nextEpochMs >= currentEpochMs ? next : current;
+}
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -129,6 +140,10 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
         .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))[0];
 
       if (pendingJob) {
+        pendingJob.requestedAt = selectLatestRequestedAt(
+          pendingJob.requestedAt,
+          input.requestedAt,
+        );
         return {
           jobId: pendingJob.jobId,
           acceptedAt: pendingJob.queuedAt,

@@ -8,7 +8,7 @@ export function ReanalyzeSubmitButton() {
 
   return (
     <button className={styles.actionButton} type="submit" disabled={pending}>
-      {pending ? "Reanalyzing..." : "Reanalyze now"}
+      {pending ? "Queueing..." : "Queue reanalysis"}
     </button>
   );
 }

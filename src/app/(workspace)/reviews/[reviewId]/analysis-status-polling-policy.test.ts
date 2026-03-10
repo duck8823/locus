@@ -50,4 +50,28 @@ describe("resolveAnalysisPollIntervalMs", () => {
       }),
     ).toBe(1800);
   });
+
+  it("polls while reanalysis is running even after initial analysis is ready", () => {
+    expect(
+      resolveAnalysisPollIntervalMs({
+        analysisStatus: "ready",
+        reanalysisStatus: "running",
+        analysisProcessedFiles: null,
+        analysisTotalFiles: null,
+        isDocumentVisible: true,
+      }),
+    ).toBe(1700);
+  });
+
+  it("uses a relaxed interval while idle", () => {
+    expect(
+      resolveAnalysisPollIntervalMs({
+        analysisStatus: "ready",
+        reanalysisStatus: "idle",
+        analysisProcessedFiles: null,
+        analysisTotalFiles: null,
+        isDocumentVisible: true,
+      }),
+    ).toBe(10000);
+  });
 });
