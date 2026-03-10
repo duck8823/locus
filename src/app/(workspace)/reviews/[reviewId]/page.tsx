@@ -48,6 +48,15 @@ function formatArchitectureRelation(
   return relation;
 }
 
+function formatCoveragePercent(supportedCount: number, totalCount: number): string {
+  if (totalCount <= 0) {
+    return "0%";
+  }
+
+  const percent = (supportedCount / totalCount) * 100;
+  return `${Math.round(percent)}%`;
+}
+
 const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
   layer: true,
   file: true,
@@ -93,6 +102,10 @@ export default async function ReviewWorkspacePage({
     workspace.analysisStatus === "queued" ||
     workspace.analysisStatus === "fetching" ||
     workspace.analysisStatus === "parsing";
+  const totalFileCount = workspace.analysisTotalFiles ?? null;
+  const unsupportedFileCount = workspace.unsupportedSummary.totalCount;
+  const supportedFileCount =
+    totalFileCount !== null ? Math.max(0, totalFileCount - unsupportedFileCount) : null;
   const hiddenUnsupportedFileCount =
     workspace.unsupportedSummary.totalCount - workspace.unsupportedFiles.length;
   const architectureColumns: ArchitectureColumn[] = selectedGroup
@@ -435,6 +448,12 @@ export default async function ReviewWorkspacePage({
                   {workspace.unsupportedSummary.totalCount} file(s) were excluded from semantic
                   analysis.
                 </p>
+                {totalFileCount !== null && supportedFileCount !== null ? (
+                  <p className={styles.muted}>
+                    Coverage: {supportedFileCount}/{totalFileCount} (
+                    {formatCoveragePercent(supportedFileCount, totalFileCount)})
+                  </p>
+                ) : null}
                 <ul className={styles.unsupportedList}>
                   {workspace.unsupportedSummary.byReason.map((entry) => (
                     <li key={entry.reason}>
