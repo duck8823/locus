@@ -440,11 +440,21 @@ export default async function ReviewWorkspacePage({
                     </li>
                   ))}
                 </ul>
-                {workspace.unsupportedSummary.sampleFilePaths.length > 0 ? (
-                  <p className={styles.muted}>
-                    Sample files (up to 5):{" "}
-                    {workspace.unsupportedSummary.sampleFilePaths.join(", ")}
-                  </p>
+                {workspace.unsupportedFiles.length > 0 ? (
+                  <ul className={styles.unsupportedFileList}>
+                    {workspace.unsupportedFiles.map((entry) => (
+                      <li key={`${entry.reason}:${entry.filePath}`} className={styles.unsupportedFileItem}>
+                        <div className={styles.unsupportedFileHeader}>
+                          <span>{entry.filePath}</span>
+                          <span className={styles.unsupportedFileReason}>{entry.reason}</span>
+                        </div>
+                        <p className={styles.muted}>
+                          language: {entry.language ?? "unknown"}
+                          {entry.detail ? ` · detail: ${entry.detail}` : ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
                 ) : null}
               </>
             )}
