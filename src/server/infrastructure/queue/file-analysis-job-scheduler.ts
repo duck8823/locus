@@ -116,34 +116,51 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
 
   async scheduleReviewAnalysis(input: ScheduleAnalysisJobInput): Promise<ScheduledAnalysisJob> {
     const acceptedAt = new Date().toISOString();
-    const record: PersistedAnalysisJobRecord = {
-      jobId: randomUUID(),
-      reviewId: input.reviewId,
-      requestedAt: input.requestedAt,
-      reason: input.reason,
-      status: "queued",
-      queuedAt: acceptedAt,
-      startedAt: null,
-      completedAt: null,
-      durationMs: null,
-      attempts: 0,
-      lastError: null,
-    };
+    const scheduledJob = await this.mutateStore((store) => {
+      this.recoverStaleRunningJobs(store.jobs, acceptedAt);
+      const pendingJob = [...store.jobs]
+        .filter(
+          (job) =>
+            job.reviewId === input.reviewId && (job.status === "queued" || job.status === "running"),
+        )
+        .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))[0];
 
-    await this.mutateStore((store) => {
+      if (pendingJob) {
+        return {
+          jobId: pendingJob.jobId,
+          acceptedAt: pendingJob.queuedAt,
+          reason: pendingJob.reason,
+        };
+      }
+
+      const record: PersistedAnalysisJobRecord = {
+        jobId: randomUUID(),
+        reviewId: input.reviewId,
+        requestedAt: input.requestedAt,
+        reason: input.reason,
+        status: "queued",
+        queuedAt: acceptedAt,
+        startedAt: null,
+        completedAt: null,
+        durationMs: null,
+        attempts: 0,
+        lastError: null,
+      };
+
       store.jobs.push(record);
-      return undefined;
+
+      return {
+        jobId: record.jobId,
+        acceptedAt,
+        reason: record.reason,
+      };
     });
 
     if (this.autoRun) {
       this.scheduleDrain();
     }
 
-    return {
-      jobId: record.jobId,
-      acceptedAt,
-      reason: input.reason,
-    };
+    return scheduledJob;
   }
 
   async drainNow(): Promise<void> {

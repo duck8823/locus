@@ -103,6 +103,38 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persisted.jobs[0]?.attempts).toBe(1);
   });
 
+  it("reuses an existing pending job for the same review", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    const first = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-deduped",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "initial_ingestion",
+    });
+    const second = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-deduped",
+      requestedAt: "2026-03-10T00:01:00.000Z",
+      reason: "code_host_webhook",
+    });
+
+    expect(second.jobId).toBe(first.jobId);
+    expect(second.reason).toBe("initial_ingestion");
+
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ reviewId: string; status: string; reason: string }>;
+    };
+    expect(persisted.jobs).toHaveLength(1);
+    expect(persisted.jobs[0]?.reviewId).toBe("review-deduped");
+    expect(persisted.jobs[0]?.status).toBe("queued");
+    expect(persisted.jobs[0]?.reason).toBe("initial_ingestion");
+  });
+
   it("retries failed jobs up to max attempts", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");
@@ -189,6 +221,7 @@ describe("FileAnalysisJobScheduler", () => {
   it("retains only the latest terminal jobs while keeping queued/running jobs", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");
+    const runningStartedAt = new Date().toISOString();
     await writeFile(
       filePath,
       JSON.stringify(
@@ -213,8 +246,8 @@ describe("FileAnalysisJobScheduler", () => {
               requestedAt: "2026-03-10T00:00:00.000Z",
               reason: "code_host_webhook",
               status: "running",
-              queuedAt: "2026-03-10T00:00:00.000Z",
-              startedAt: "2026-03-10T00:01:00.000Z",
+              queuedAt: runningStartedAt,
+              startedAt: runningStartedAt,
               completedAt: null,
               durationMs: null,
               attempts: 1,
