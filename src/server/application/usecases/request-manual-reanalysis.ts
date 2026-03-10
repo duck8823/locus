@@ -5,7 +5,7 @@ import {
   defaultSeedFixtureId,
   defaultSeedReviewId,
 } from "@/server/application/services/review-session-seed";
-import type { ReviewSession, ReviewSessionRecord } from "@/server/domain/entities/review-session";
+import type { ReviewSessionRecord } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
 import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
 
@@ -47,44 +47,6 @@ function resolveReviewSource(record: ReviewSessionRecord): ReviewSessionSource |
   return record.source ?? inferLegacySource(record);
 }
 
-function isTimestampAtOrAfter(current: string | null | undefined, threshold: string): boolean {
-  if (!current) {
-    return false;
-  }
-
-  const currentEpochMs = Date.parse(current);
-  const thresholdEpochMs = Date.parse(threshold);
-
-  if (!Number.isNaN(currentEpochMs) && !Number.isNaN(thresholdEpochMs)) {
-    return currentEpochMs >= thresholdEpochMs;
-  }
-
-  return current >= threshold;
-}
-
-function shouldSkipQueuedTransition(
-  reviewSession: ReviewSession,
-  requestedAt: string,
-): boolean {
-  const record = reviewSession.toRecord();
-  const reanalysisStatus = record.reanalysisStatus ?? "idle";
-
-  if (isTimestampAtOrAfter(record.lastReanalyzeRequestedAt, requestedAt)) {
-    return true;
-  }
-
-  if (
-    (reanalysisStatus === "running" ||
-      reanalysisStatus === "succeeded" ||
-      reanalysisStatus === "failed") &&
-    !record.lastReanalyzeRequestedAt
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
 export class RequestManualReanalysisUseCase {
   constructor(private readonly dependencies: RequestManualReanalysisDependencies) {}
 
@@ -108,25 +70,5 @@ export class RequestManualReanalysisUseCase {
       requestedAt: timestamp,
       reason: "manual_reanalysis",
     });
-
-    const latestSession = await this.dependencies.reviewSessionRepository.findByReviewId(reviewId);
-
-    if (!latestSession || shouldSkipQueuedTransition(latestSession, timestamp)) {
-      return;
-    }
-
-    const confirmedLatestSession = await this.dependencies.reviewSessionRepository.findByReviewId(
-      reviewId,
-    );
-
-    if (
-      !confirmedLatestSession ||
-      shouldSkipQueuedTransition(confirmedLatestSession, timestamp)
-    ) {
-      return;
-    }
-
-    confirmedLatestSession.markReanalysisQueued(timestamp);
-    await this.dependencies.reviewSessionRepository.save(confirmedLatestSession);
   }
 }

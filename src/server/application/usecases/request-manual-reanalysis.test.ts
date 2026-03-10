@@ -72,7 +72,7 @@ class FailingAnalysisJobScheduler implements AnalysisJobScheduler {
 }
 
 describe("RequestManualReanalysisUseCase", () => {
-  it("enqueues manual_reanalysis job and marks reanalysis queued", async () => {
+  it("enqueues manual_reanalysis job without mutating reanalysis state", async () => {
     const reviewSessionRepository = new InMemoryReviewSessionRepository();
     reviewSessionRepository.seed(
       ReviewSession.create({
@@ -111,8 +111,8 @@ describe("RequestManualReanalysisUseCase", () => {
         reason: "manual_reanalysis",
       },
     ]);
-    expect(persisted?.toRecord().reanalysisStatus).toBe("queued");
-    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-10T00:05:00.000Z");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("idle");
+    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBeNull();
     expect(persisted?.toRecord().lastReanalyzeCompletedAt).toBeNull();
     expect(persisted?.toRecord().lastReanalyzeError).toBeNull();
   });
@@ -153,8 +153,8 @@ describe("RequestManualReanalysisUseCase", () => {
         reason: "manual_reanalysis",
       },
     ]);
-    expect(persisted?.toRecord().reanalysisStatus).toBe("queued");
-    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-10T00:05:00.000Z");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("idle");
+    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBeNull();
   });
 
   it("raises when review is missing", async () => {
@@ -228,7 +228,7 @@ describe("RequestManualReanalysisUseCase", () => {
     expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBeNull();
   });
 
-  it("does not overwrite newer running/succeeded state while marking queued", async () => {
+  it("keeps newer running/succeeded state persisted during schedule hook", async () => {
     const reviewSessionRepository = new InMemoryReviewSessionRepository();
     reviewSessionRepository.seed(
       ReviewSession.create({
@@ -255,10 +255,7 @@ describe("RequestManualReanalysisUseCase", () => {
       }
 
       latest.requestReanalysis("2026-03-10T00:06:00.000Z");
-      latest.markReanalysisSucceeded(
-        "2026-03-10T00:06:05.000Z",
-        "2026-03-10T00:06:00.000Z",
-      );
+      latest.markReanalysisSucceeded("2026-03-10T00:06:05.000Z", "2026-03-10T00:06:00.000Z");
       await reviewSessionRepository.save(latest);
     });
     const useCase = new RequestManualReanalysisUseCase({
