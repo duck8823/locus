@@ -49,5 +49,9 @@ export function resolveAnalysisPollIntervalMs(
     return 1700;
   }
 
+  if (input.reanalysisStatus === "queued") {
+    return 2200;
+  }
+
   return 10000;
 }

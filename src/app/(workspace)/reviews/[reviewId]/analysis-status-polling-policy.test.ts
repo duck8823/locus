@@ -63,6 +63,18 @@ describe("resolveAnalysisPollIntervalMs", () => {
     ).toBe(1700);
   });
 
+  it("polls moderately while reanalysis is queued", () => {
+    expect(
+      resolveAnalysisPollIntervalMs({
+        analysisStatus: "ready",
+        reanalysisStatus: "queued",
+        analysisProcessedFiles: null,
+        analysisTotalFiles: null,
+        isDocumentVisible: true,
+      }),
+    ).toBe(2200);
+  });
+
   it("uses a relaxed interval while idle", () => {
     expect(
       resolveAnalysisPollIntervalMs({

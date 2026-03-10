@@ -462,6 +462,15 @@ export default async function ReviewWorkspacePage({
             {workspace.reanalysisStatus === "idle" ? (
               <p>Not requested yet</p>
             ) : null}
+            {workspace.reanalysisStatus === "queued" && workspace.lastReanalyzeRequestedAt ? (
+              <p>
+                Queued since{" "}
+                <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+              </p>
+            ) : null}
+            {workspace.reanalysisStatus === "queued" && !workspace.lastReanalyzeRequestedAt ? (
+              <p>Queued…</p>
+            ) : null}
             {workspace.reanalysisStatus === "running" && workspace.lastReanalyzeRequestedAt ? (
               <p>
                 Running since{" "}
