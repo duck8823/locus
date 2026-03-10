@@ -11,6 +11,7 @@ import {
   toGitHubDemoErrorCode,
   type GitHubDemoErrorCode,
 } from "./github-demo-error-code";
+import { resolveDemoViewerName } from "./demo-viewer-name";
 
 const demoViewerCookieName = "locus-demo-viewer";
 
@@ -85,7 +86,10 @@ function createReviewId(owner: string, repository: string, pullRequestNumber: nu
 }
 
 export async function startGitHubDemoSessionAction(formData: FormData): Promise<void> {
-  const viewerName = "Demo reviewer";
+  const cookieStore = await cookies();
+  const viewerName = resolveDemoViewerName(
+    cookieStore.get("locus-ui-locale")?.value ?? null,
+  );
   let redirectPath = "/";
 
   try {
@@ -130,7 +134,6 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
       });
     }
 
-    const cookieStore = await cookies();
     cookieStore.set(demoViewerCookieName, viewerName, {
       httpOnly: true,
       sameSite: "lax",
