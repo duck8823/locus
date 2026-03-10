@@ -16,7 +16,11 @@ function assertWorkspaceLocale(value: string): "ja" | "en" {
 }
 
 function assertRelativeRedirectPath(value: string): string {
-  if (!value.startsWith("/") || value.startsWith("//")) {
+  if (
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\")
+  ) {
     throw new Error(`Invalid redirectPath: ${value}`);
   }
 

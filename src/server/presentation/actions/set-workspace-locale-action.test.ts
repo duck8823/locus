@@ -79,4 +79,17 @@ describe("setWorkspaceLocaleAction", () => {
     expect(revalidatePathMock).not.toHaveBeenCalled();
     expect(redirectMock).not.toHaveBeenCalled();
   });
+
+  it("rejects redirect paths that include backslashes", async () => {
+    const formData = new FormData();
+    formData.set("redirectPath", "/\\evil.com");
+    formData.set("locale", "en");
+
+    await expect(setWorkspaceLocaleAction(formData)).rejects.toThrow(
+      "Invalid redirectPath: /\\evil.com",
+    );
+    expect(setCookieMock).not.toHaveBeenCalled();
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
 });
