@@ -49,5 +49,5 @@ export function resolveAnalysisPollIntervalMs(
     return 1700;
   }
 
-  return 2500;
+  return 10000;
 }

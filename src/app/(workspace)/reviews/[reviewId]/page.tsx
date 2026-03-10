@@ -11,7 +11,6 @@ import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-wo
 import {
   createAnalysisStatusToken,
   isActiveAnalysisStatus,
-  isActiveWorkspaceRefreshStatus,
 } from "@/server/presentation/formatters/analysis-status-token";
 import { requestInitialAnalysisRetryAction } from "@/server/presentation/actions/request-initial-analysis-retry-action";
 import { requestReanalysisAction } from "@/server/presentation/actions/request-reanalysis-action";
@@ -125,10 +124,6 @@ export default async function ReviewWorkspacePage({
   const selectedGroup =
     workspace.groups.find((group) => group.isSelected) ?? workspace.groups[0];
   const isInitialAnalysisRunning = isActiveAnalysisStatus(workspace.analysisStatus);
-  const isWorkspaceRefreshRunning = isActiveWorkspaceRefreshStatus({
-    analysisStatus: workspace.analysisStatus,
-    reanalysisStatus: workspace.reanalysisStatus,
-  });
   const analysisProgressPercent = calculateAnalysisProgressPercent({
     analysisProcessedFiles: workspace.analysisProcessedFiles,
     analysisTotalFiles: workspace.analysisTotalFiles,
@@ -210,7 +205,7 @@ export default async function ReviewWorkspacePage({
   return (
     <main className={styles.page}>
       <AnalysisStatusPoller
-        active={isWorkspaceRefreshRunning}
+        active={true}
         reviewId={workspace.reviewId}
         currentToken={analysisStatusToken}
         analysisStatus={workspace.analysisStatus}

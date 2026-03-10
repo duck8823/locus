@@ -62,4 +62,16 @@ describe("resolveAnalysisPollIntervalMs", () => {
       }),
     ).toBe(1700);
   });
+
+  it("uses a relaxed interval while idle", () => {
+    expect(
+      resolveAnalysisPollIntervalMs({
+        analysisStatus: "ready",
+        reanalysisStatus: "idle",
+        analysisProcessedFiles: null,
+        analysisTotalFiles: null,
+        isDocumentVisible: true,
+      }),
+    ).toBe(10000);
+  });
 });
