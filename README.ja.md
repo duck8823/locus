@@ -161,6 +161,7 @@ npm run demo:data:reseed   # 基本ディレクトリと空のジョブキュー
 - [`docs/adr/0004-semantic-change-ir.ja.md`](docs/adr/0004-semantic-change-ir.ja.md) / [`docs/adr/0004-semantic-change-ir.md`](docs/adr/0004-semantic-change-ir.md)
 - [`docs/architecture/web-application-blueprint.ja.md`](docs/architecture/web-application-blueprint.ja.md) / [`docs/architecture/web-application-blueprint.md`](docs/architecture/web-application-blueprint.md)
 - [`docs/architecture/semantic-analysis-pipeline.ja.md`](docs/architecture/semantic-analysis-pipeline.ja.md) / [`docs/architecture/semantic-analysis-pipeline.md`](docs/architecture/semantic-analysis-pipeline.md)
+- [`docs/testing/exploratory-test-playbook.ja.md`](docs/testing/exploratory-test-playbook.ja.md) / [`docs/testing/exploratory-test-playbook.md`](docs/testing/exploratory-test-playbook.md)
 - [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md) / [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## ロードマップ
