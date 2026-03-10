@@ -2,17 +2,22 @@ import type { WorkspaceLocale } from "@/app/(workspace)/workspace-locale";
 
 const localeCookiePattern = /(?:^|;\s*)locus-ui-locale=([^;]+)/;
 
-export function resolveWorkspaceLocaleFromCookieString(
+export function readWorkspaceLocaleFromCookieString(
   cookieHeader: string | null | undefined,
-): WorkspaceLocale {
+): WorkspaceLocale | null {
   const match = localeCookiePattern.exec(cookieHeader ?? "");
+
+  if (!match) {
+    return null;
+  }
+
   const rawValue = match?.[1] ?? "";
   let decodedValue = "";
 
   try {
     decodedValue = decodeURIComponent(rawValue).trim().toLowerCase();
   } catch {
-    return "en";
+    return null;
   }
 
   if (decodedValue === "ja" || decodedValue.startsWith("ja-")) {
@@ -23,5 +28,11 @@ export function resolveWorkspaceLocaleFromCookieString(
     return "en";
   }
 
-  return "en";
+  return null;
+}
+
+export function resolveWorkspaceLocaleFromCookieString(
+  cookieHeader: string | null | undefined,
+): WorkspaceLocale {
+  return readWorkspaceLocaleFromCookieString(cookieHeader) ?? "en";
 }

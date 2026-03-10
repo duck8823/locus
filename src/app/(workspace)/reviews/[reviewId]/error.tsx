@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { resolveWorkspaceLocaleFromCookieString } from "@/app/(workspace)/workspace-locale-client";
+import { resolveWorkspaceLocale } from "@/app/(workspace)/workspace-locale";
+import { readWorkspaceLocaleFromCookieString } from "@/app/(workspace)/workspace-locale-client";
 
 const errorCopyByLocale = {
   en: {
@@ -21,13 +22,22 @@ export default function ReviewWorkspaceError({
   error: Error;
   reset: () => void;
 }) {
-  const workspaceLocale = useMemo(
-    () =>
-      resolveWorkspaceLocaleFromCookieString(
-        typeof document !== "undefined" ? document.cookie : null,
-      ),
-    [],
-  );
+  const workspaceLocale = useMemo(() => {
+    if (typeof document === "undefined") {
+      return "en";
+    }
+
+    const localeFromCookie = readWorkspaceLocaleFromCookieString(document.cookie);
+
+    if (localeFromCookie) {
+      return localeFromCookie;
+    }
+
+    return resolveWorkspaceLocale({
+      preferredLocale: null,
+      acceptLanguage: navigator.languages?.join(",") || navigator.language || null,
+    });
+  }, []);
   const copy = errorCopyByLocale[workspaceLocale];
 
   return (

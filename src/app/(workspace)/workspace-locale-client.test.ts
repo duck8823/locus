@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveWorkspaceLocaleFromCookieString } from "./workspace-locale-client";
+import {
+  readWorkspaceLocaleFromCookieString,
+  resolveWorkspaceLocaleFromCookieString,
+} from "./workspace-locale-client";
 
 describe("workspace-locale-client", () => {
   it("returns japanese when locale cookie is ja", () => {
@@ -20,5 +23,9 @@ describe("workspace-locale-client", () => {
     expect(
       resolveWorkspaceLocaleFromCookieString("locus-ui-locale=%E0%A4%A"),
     ).toBe("en");
+  });
+
+  it("returns null from raw cookie reader when locale cookie is absent", () => {
+    expect(readWorkspaceLocaleFromCookieString("foo=1; bar=2")).toBeNull();
   });
 });
