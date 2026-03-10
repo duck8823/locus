@@ -15,9 +15,9 @@ import {
   formatSemanticChangeType,
   formatSemanticSymbolKind,
   formatUnsupportedReason,
-  resolveWorkspaceLocale,
   workspaceCopyByLocale,
 } from "./workspace-copy";
+import { resolveWorkspaceLocale } from "@/app/(workspace)/workspace-locale";
 import { LocalizedDateTime } from "@/app/components/localized-date-time";
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
 import {
@@ -232,7 +232,11 @@ export default async function ReviewWorkspacePage({
         <div className={styles.actions}>
           <div className={styles.localeSwitcher} aria-label={copy.actions.languageLabel}>
             <form action={setWorkspaceLocaleAction}>
-              <input name="reviewId" type="hidden" value={workspace.reviewId} />
+              <input
+                name="redirectPath"
+                type="hidden"
+                value={`/reviews/${workspace.reviewId}`}
+              />
               <input name="locale" type="hidden" value="ja" />
               <button
                 className={styles.localeButton}
@@ -243,7 +247,11 @@ export default async function ReviewWorkspacePage({
               </button>
             </form>
             <form action={setWorkspaceLocaleAction}>
-              <input name="reviewId" type="hidden" value={workspace.reviewId} />
+              <input
+                name="redirectPath"
+                type="hidden"
+                value={`/reviews/${workspace.reviewId}`}
+              />
               <input name="locale" type="hidden" value="en" />
               <button
                 className={styles.localeButton}
