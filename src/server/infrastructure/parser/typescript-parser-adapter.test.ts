@@ -676,4 +676,93 @@ export function run(): void {}
 
     expect(firstKeys).toEqual(secondKeys);
   });
+
+  it("tracks call references through imported aliases", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+import { validateEmail as validateInput } from "./validator";
+
+export function runValidation(value: string): boolean {
+  return validateInput(value);
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+import { validateEmail as validateInput } from "./validator";
+
+export function runValidation(value: string): boolean {
+  const normalized = value.trim();
+  return validateInput(normalized);
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.references).toContain("function::<root>::validateInput");
+  });
+
+  it("tracks namespace-qualified static call references", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export function runTasks(): void {
+  API.Tasks.execute();
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export function runTasks(): void {
+  API.Tasks.execute();
+  API.Tasks["cleanup"]?.();
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+    const references = diff.items[0]?.references ?? [];
+
+    expect(references).toContain("function::<root>::cleanup");
+    expect(references).toContain("method::API::Tasks::static::cleanup");
+    expect(references).toContain("method::API::Tasks::static::execute");
+  });
+
+  it("ignores re-export-only changes without callable body changes", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export { runTasks } from "./tasks";
+export type { TaskInput } from "./types";
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export { runTasks, runCleanup } from "./tasks";
+export type { TaskInput, TaskOutput } from "./types";
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toEqual([]);
+  });
 });
