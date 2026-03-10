@@ -2,11 +2,16 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import styles from "./page.module.css";
+import { AnalysisManualRefreshButton } from "./analysis-manual-refresh-button";
 import { AnalysisStatusPoller } from "./analysis-status-poller";
 import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submit-button";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import { LocalizedDateTime } from "@/app/components/localized-date-time";
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
+import {
+  createAnalysisStatusToken,
+  isActiveAnalysisStatus,
+} from "@/server/presentation/formatters/analysis-status-token";
 import { requestInitialAnalysisRetryAction } from "@/server/presentation/actions/request-initial-analysis-retry-action";
 import { requestReanalysisAction } from "@/server/presentation/actions/request-reanalysis-action";
 import { selectReviewGroupAction } from "@/server/presentation/actions/select-review-group-action";
@@ -54,6 +59,29 @@ function formatCoveragePercent(coveragePercent: number): string {
   return formatted.endsWith(".0") ? `${formatted.slice(0, -2)}%` : `${formatted}%`;
 }
 
+function calculateAnalysisProgressPercent(params: {
+  analysisProcessedFiles: number | null;
+  analysisTotalFiles: number | null;
+}): number | null {
+  const totalFiles = params.analysisTotalFiles;
+  const processedFiles = params.analysisProcessedFiles;
+
+  if (
+    typeof totalFiles !== "number" ||
+    !Number.isFinite(totalFiles) ||
+    totalFiles <= 0 ||
+    typeof processedFiles !== "number" ||
+    !Number.isFinite(processedFiles) ||
+    processedFiles < 0
+  ) {
+    return null;
+  }
+
+  const boundedProcessedFiles = Math.min(processedFiles, totalFiles);
+  const rawPercent = (boundedProcessedFiles / totalFiles) * 100;
+  return Math.floor(rawPercent * 10) / 10;
+}
+
 const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
   layer: true,
   file: true,
@@ -95,10 +123,20 @@ export default async function ReviewWorkspacePage({
   const workspace = await loadReviewWorkspaceDto({ reviewId });
   const selectedGroup =
     workspace.groups.find((group) => group.isSelected) ?? workspace.groups[0];
-  const isInitialAnalysisRunning =
-    workspace.analysisStatus === "queued" ||
-    workspace.analysisStatus === "fetching" ||
-    workspace.analysisStatus === "parsing";
+  const isInitialAnalysisRunning = isActiveAnalysisStatus(workspace.analysisStatus);
+  const analysisProgressPercent = calculateAnalysisProgressPercent({
+    analysisProcessedFiles: workspace.analysisProcessedFiles,
+    analysisTotalFiles: workspace.analysisTotalFiles,
+  });
+  const analysisStatusToken = createAnalysisStatusToken({
+    analysisStatus: workspace.analysisStatus,
+    analysisRequestedAt: workspace.analysisRequestedAt,
+    analysisCompletedAt: workspace.analysisCompletedAt,
+    analysisProcessedFiles: workspace.analysisProcessedFiles,
+    analysisTotalFiles: workspace.analysisTotalFiles,
+    analysisAttemptCount: workspace.analysisAttemptCount,
+    analysisError: workspace.analysisError,
+  });
   const hiddenUnsupportedFileCount =
     Math.max(0, workspace.analysisUnsupportedFiles - workspace.unsupportedFiles.length);
   const architectureColumns: ArchitectureColumn[] = selectedGroup
@@ -162,7 +200,14 @@ export default async function ReviewWorkspacePage({
 
   return (
     <main className={styles.page}>
-      <AnalysisStatusPoller active={isInitialAnalysisRunning} />
+      <AnalysisStatusPoller
+        active={isInitialAnalysisRunning}
+        reviewId={workspace.reviewId}
+        currentToken={analysisStatusToken}
+        analysisStatus={workspace.analysisStatus}
+        analysisProcessedFiles={workspace.analysisProcessedFiles}
+        analysisTotalFiles={workspace.analysisTotalFiles}
+      />
       <div className={styles.header}>
         <div>
           <Link href="/" className={styles.muted}>
@@ -354,6 +399,24 @@ export default async function ReviewWorkspacePage({
                 ) : null}
               </>
             ) : null}
+            {analysisProgressPercent !== null ? (
+              <>
+                <div
+                  className={styles.analysisProgressTrack}
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={analysisProgressPercent}
+                  aria-label="Analysis progress"
+                >
+                  <div
+                    className={styles.analysisProgressFill}
+                    style={{ width: `${analysisProgressPercent}%` }}
+                  />
+                </div>
+                <p className={styles.muted}>Progress: {analysisProgressPercent.toFixed(1)}%</p>
+              </>
+            ) : null}
             {workspace.analysisStatus === "ready" ? (
               workspace.analysisCompletedAt ? (
                 <p>
@@ -381,6 +444,12 @@ export default async function ReviewWorkspacePage({
                 this tab open and the page will refresh automatically.
               </p>
             ) : null}
+            <div className={styles.analysisControls}>
+              <AnalysisManualRefreshButton />
+              <p className={styles.muted}>
+                Auto-refresh pauses while this tab is in the background.
+              </p>
+            </div>
           </div>
           <div className={styles.detailBlock}>
             <span className={styles.muted}>Reanalysis status</span>
