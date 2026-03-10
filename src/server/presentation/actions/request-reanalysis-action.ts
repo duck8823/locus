@@ -2,17 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { ReanalyzeReviewUseCase } from "@/server/application/usecases/reanalyze-review";
+import { RequestManualReanalysisUseCase } from "@/server/application/usecases/request-manual-reanalysis";
 import { getDependencies } from "@/server/composition/dependencies";
 import { readRequiredString } from "@/server/presentation/actions/read-required-string";
 
 export async function requestReanalysisAction(formData: FormData): Promise<void> {
   const reviewId = readRequiredString(formData, "reviewId");
-  const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } = getDependencies();
-  const useCase = new ReanalyzeReviewUseCase({
+  const { reviewSessionRepository, analysisJobScheduler } = getDependencies();
+  const useCase = new RequestManualReanalysisUseCase({
     reviewSessionRepository,
-    parserAdapters,
-    pullRequestSnapshotProvider,
+    analysisJobScheduler,
   });
 
   await useCase.execute({ reviewId });
