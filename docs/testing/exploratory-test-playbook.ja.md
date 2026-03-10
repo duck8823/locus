@@ -92,9 +92,8 @@ npm test
    - `.locus-data` を削除
    - `.locus-data/review-sessions` と `.locus-data/analysis-jobs` を再作成
    - `.locus-data/analysis-jobs/jobs.json` に `{ "jobs": [] }` を作成
-2. ブランチに `npm run demo:data:*` がある場合は、そのコマンドも確認する。
-3. 操作が安全かつ予測可能に動作するか確認する。
-4. シードデモ再表示でワークスペースが再生成されるか確認する。
+2. 操作が安全かつ予測可能に動作するか確認する。
+3. シードデモ再表示でワークスペースが再生成されるか確認する。
 
 確認したいリスク:
 - `.locus-data` 以外への破壊的操作

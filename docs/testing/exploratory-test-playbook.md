@@ -92,9 +92,8 @@ Expected risk to probe:
    - remove `.locus-data`
    - recreate `.locus-data/review-sessions` and `.locus-data/analysis-jobs`
    - create `.locus-data/analysis-jobs/jobs.json` with `{ "jobs": [] }`
-2. If your branch provides `npm run demo:data:*`, verify those commands as well.
-3. Confirm the operations are safe and predictable.
-4. Reopen seed demo and ensure workspace is regenerated.
+2. Confirm the operations are safe and predictable.
+3. Reopen seed demo and ensure workspace is regenerated.
 
 Expected risk to probe:
 - accidental destructive operation outside `.locus-data`
