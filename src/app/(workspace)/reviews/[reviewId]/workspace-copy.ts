@@ -87,6 +87,9 @@ export const workspaceCopyByLocale = {
     },
     actions: {
       markStatusPrefix: "Mark",
+      languageLabel: "Language",
+      switchToEnglish: "English",
+      switchToJapanese: "日本語",
       queueReanalysis: "Queue reanalysis",
       queueingReanalysis: "Queueing...",
       reloadNow: "Reload now",
@@ -214,6 +217,9 @@ export const workspaceCopyByLocale = {
     },
     actions: {
       markStatusPrefix: "状態を",
+      languageLabel: "表示言語",
+      switchToEnglish: "English",
+      switchToJapanese: "日本語",
       queueReanalysis: "再解析をキュー投入",
       queueingReanalysis: "キュー投入中...",
       reloadNow: "今すぐ再読み込み",
