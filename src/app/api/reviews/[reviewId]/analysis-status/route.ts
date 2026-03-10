@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDependencies } from "@/server/composition/dependencies";
+import { loadActiveManualReanalysisJob } from "@/server/presentation/api/load-active-manual-reanalysis-job";
 import {
   createAnalysisStatusToken,
   isActiveWorkspaceRefreshStatus,
@@ -22,24 +23,10 @@ export async function GET(
   }
 
   const record = reviewSession.toRecord();
-  const activeManualReanalysisJob =
-    (await analysisJobScheduler.findActiveJob?.({
-      reviewId,
-      reason: "manual_reanalysis",
-    })) ??
-    (await analysisJobScheduler.findQueuedJob?.({
-      reviewId,
-      reason: "manual_reanalysis",
-    }).then((job) =>
-      job
-        ? {
-            ...job,
-            status: "queued" as const,
-            startedAt: null,
-          }
-        : null,
-    )) ??
-    null;
+  const activeManualReanalysisJob = await loadActiveManualReanalysisJob({
+    analysisJobScheduler,
+    reviewId,
+  });
   const effectiveReanalysisState = resolveEffectiveReanalysisState({
     persistedStatus: record.reanalysisStatus ?? "idle",
     persistedLastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt ?? null,
