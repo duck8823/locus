@@ -14,6 +14,7 @@ It answers:
 
 Related document:
 - [Semantic Analysis Pipeline](semantic-analysis-pipeline.md)
+- [Connections Workspace Contract](connections-workspace-contract.md)
 
 ## Runtime overview
 

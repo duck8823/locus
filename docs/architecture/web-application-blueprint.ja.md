@@ -14,6 +14,7 @@
 
 関連ドキュメント:
 - [セマンティック分析パイプライン](semantic-analysis-pipeline.ja.md)
+- [Connections Workspace 契約](connections-workspace-contract.ja.md)
 
 ## Runtime 概要
 

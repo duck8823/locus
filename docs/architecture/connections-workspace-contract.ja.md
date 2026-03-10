@@ -1,0 +1,75 @@
+# Connections Workspace 契約
+
+> English: [connections-workspace-contract.md](connections-workspace-contract.md)
+
+## 目的
+
+実際の OAuth 実装に入る前に、`/settings/connections` のサーバー→UI契約を固定する。
+
+これにより、インフラ実装がスタブ段階でも provider の状態モデルを明示的に検証できる。
+
+## スコープ
+
+- 設定画面で使う connection catalog の形
+- provider / status / authMode の意味
+- 後方互換を保った拡張ルール
+
+非スコープ:
+- OAuth トークン保存
+- provider callback handler
+- マルチテナントの資格情報管理
+
+## 現行 DTO 契約
+
+```ts
+export interface ConnectionsWorkspaceConnectionDto {
+  provider: "github" | "confluence" | "jira"
+  status: "not_connected" | "planned"
+  authMode: "oauth" | "none"
+}
+
+export interface ConnectionsWorkspaceDto {
+  generatedAt: string // ISO-8601 UTC timestamp
+  connections: ConnectionsWorkspaceConnectionDto[]
+}
+```
+
+`generatedAt` は、そのリクエストでサーバーが catalog snapshot を生成した時刻を示す。
+
+## 意味ルール
+
+### `provider`
+
+- ローカライズしない安定した機械キー
+- UI 文言参照や将来の provider 別アクション判定に使用
+- locale が変わっても同一値を維持する
+
+### `status`
+
+- `not_connected`: モデル上は利用可能だが、まだ接続されていない
+- `planned`: このフェーズでは意図的に未提供
+
+### `authMode`
+
+- `oauth`: 本番では OAuth 接続を前提とする provider
+- `none`: 認証連携を持たない provider
+
+## 多言語化の責務境界
+
+provider/status/auth の表示ラベルは presentation (`src/app/**`) 側でローカライズする。
+DTO 値自体は言語非依存のまま維持する。
+
+## 拡張ポリシー
+
+この契約を拡張するときは以下を守る:
+
+1. enum 値は加算的に追加する。
+2. 既存値の意味を壊さない。
+3. UI 側で未知の将来値にフォールバック表示を持つ。
+4. infrastructure をつなぐ前に DTO / use case のテストを追加する。
+
+## 次のステップ
+
+1. provider capability metadata（`supportsWebhook` / `supportsIssueContext`）を追加。
+2. reviewer/workspace 単位の接続状態を永続化。
+3. prototype catalog を provider adapter 実装へ置き換え。
