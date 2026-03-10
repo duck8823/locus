@@ -27,6 +27,15 @@ describe("workspace-copy", () => {
     ).toBe("ja");
   });
 
+  it("respects q-values when selecting supported locale from accept-language", () => {
+    expect(
+      resolveWorkspaceLocale({
+        preferredLocale: null,
+        acceptLanguage: "en;q=0.1, ja;q=0.9",
+      }),
+    ).toBe("ja");
+  });
+
   it("falls back to english when no supported locale is provided", () => {
     expect(
       resolveWorkspaceLocale({
