@@ -59,7 +59,7 @@ With full knowledge of your system's architecture and the linked specifications,
 
 | Feature | Description | Status |
 |---|---|---|
-| Architecture Minimap | Auto-generated system map, always shows your current location | 🔴 Planned |
+| Architecture Minimap v0 | Immediate upstream/downstream mini-map with change-group navigation | 🟡 Prototype |
 | Semantic Diff | AST-based, function-level change visualization | 🔴 Planned |
 | Business Logic Context | Confluence & GitHub Issues/Projects integration | 🔴 Planned |
 | AI Review Assistant | Context-aware review powered by LLMs | 🔴 Planned |

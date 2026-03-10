@@ -42,6 +42,12 @@ function formatAnalysisDuration(durationMs: number): string {
   return `${(durationMs / 1000).toFixed(1)} s`;
 }
 
+function formatArchitectureRelation(
+  relation: "imports" | "calls" | "implements" | "uses",
+): string {
+  return relation.replaceAll("_", " ");
+}
+
 const ARCHITECTURE_CATEGORY_FLAGS: Record<keyof ArchitectureNodeGroups, true> = {
   layer: true,
   file: true,
@@ -60,7 +66,11 @@ const ARCHITECTURE_CATEGORY_LABELS: Record<keyof ArchitectureNodeGroups, string>
 
 interface ArchitectureColumn {
   label: "Upstream" | "Downstream";
-  nodes: string[];
+  nodes: Array<{
+    nodeId: string;
+    linkedGroupId: string | null;
+  }>;
+  relationByNodeId: Map<string, "imports" | "calls" | "implements" | "uses">;
 }
 
 export default async function ReviewWorkspacePage({
@@ -84,10 +94,48 @@ export default async function ReviewWorkspacePage({
     workspace.analysisStatus === "fetching" ||
     workspace.analysisStatus === "parsing";
   const architectureColumns: ArchitectureColumn[] = selectedGroup
-    ? [
-        { label: "Upstream", nodes: selectedGroup.upstream },
-        { label: "Downstream", nodes: selectedGroup.downstream },
-      ]
+    ? (() => {
+        const centerNodeId =
+          selectedGroup.architectureGraph.nodes.find((node) => node.role === "center")?.nodeId ??
+          `group:${selectedGroup.groupId}`;
+        const upstreamNodes = selectedGroup.architectureGraph.nodes.filter(
+          (node) => node.role === "upstream",
+        );
+        const downstreamNodes = selectedGroup.architectureGraph.nodes.filter(
+          (node) => node.role === "downstream",
+        );
+        const upstreamRelations = new Map<string, "imports" | "calls" | "implements" | "uses">();
+        const downstreamRelations = new Map<string, "imports" | "calls" | "implements" | "uses">();
+
+        for (const edge of selectedGroup.architectureGraph.edges) {
+          if (edge.toNodeId === centerNodeId) {
+            upstreamRelations.set(edge.fromNodeId, edge.relation);
+          }
+
+          if (edge.fromNodeId === centerNodeId) {
+            downstreamRelations.set(edge.toNodeId, edge.relation);
+          }
+        }
+
+        return [
+          {
+            label: "Upstream" as const,
+            nodes: upstreamNodes.map((node) => ({
+              nodeId: node.nodeId,
+              linkedGroupId: node.linkedGroupId,
+            })),
+            relationByNodeId: upstreamRelations,
+          },
+          {
+            label: "Downstream" as const,
+            nodes: downstreamNodes.map((node) => ({
+              nodeId: node.nodeId,
+              linkedGroupId: node.linkedGroupId,
+            })),
+            relationByNodeId: downstreamRelations,
+          },
+        ];
+      })()
     : [];
 
   return (
@@ -392,12 +440,15 @@ export default async function ReviewWorkspacePage({
         <aside className={styles.panel}>
           <h2>Architecture pane</h2>
           <p className={styles.muted} style={{ marginBottom: "14px" }}>
-            Slice 1 keeps this to immediate neighbors only.
+            MVP v0 keeps this focused on immediate neighbors only.
           </p>
           {selectedGroup ? (
             <div className={styles.archColumns}>
               {architectureColumns.map((column) => {
-                const groupedNodes = groupArchitectureNodes(column.nodes);
+                const groupedNodes = groupArchitectureNodes(
+                  column.nodes.map((node) => node.nodeId),
+                );
+                const nodeById = new Map(column.nodes.map((node) => [node.nodeId, node] as const));
                 const categories = ARCHITECTURE_CATEGORY_ORDER
                   .map((category) => [
                     category,
@@ -427,7 +478,50 @@ export default async function ReviewWorkspacePage({
                             <ul className={styles.archNodeList}>
                               {nodes.map((node) => (
                                 <li key={`${column.label}-${node.raw}`}>
-                                  <span className={styles.archNodeLabel}>{node.label}</span>
+                                  {(() => {
+                                    const nodeRecord = nodeById.get(node.raw);
+                                    const relation = column.relationByNodeId.get(node.raw);
+                                    const linkedGroupId = nodeRecord?.linkedGroupId ?? null;
+                                    const shouldLink =
+                                      linkedGroupId !== null &&
+                                      linkedGroupId !== selectedGroup.groupId;
+
+                                    if (!shouldLink) {
+                                      return (
+                                        <div className={styles.archNodeCard}>
+                                          <span className={styles.archNodeLabel}>{node.label}</span>
+                                          {relation ? (
+                                            <span className={styles.archNodeMeta}>
+                                              {formatArchitectureRelation(relation)}
+                                            </span>
+                                          ) : null}
+                                        </div>
+                                      );
+                                    }
+
+                                    return (
+                                      <form action={selectReviewGroupAction}>
+                                        <input
+                                          name="reviewId"
+                                          type="hidden"
+                                          value={workspace.reviewId}
+                                        />
+                                        <input
+                                          name="groupId"
+                                          type="hidden"
+                                          value={linkedGroupId}
+                                        />
+                                        <button className={styles.archNodeButton} type="submit">
+                                          <span className={styles.archNodeLabel}>{node.label}</span>
+                                          {relation ? (
+                                            <span className={styles.archNodeMeta}>
+                                              {formatArchitectureRelation(relation)}
+                                            </span>
+                                          ) : null}
+                                        </button>
+                                      </form>
+                                    );
+                                  })()}
                                 </li>
                               ))}
                             </ul>
