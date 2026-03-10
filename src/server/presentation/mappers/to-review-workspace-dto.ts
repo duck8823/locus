@@ -98,6 +98,46 @@ function calculateAnalysisDurationMs(params: {
   return Math.max(0, completedAtEpochMs - requestedAtEpochMs);
 }
 
+function calculateCoverageMetrics(params: {
+  analysisTotalFiles: number | null | undefined;
+  unsupportedFileCount: number;
+}): {
+  supportedFiles: number | null;
+  coveragePercent: number | null;
+} {
+  if (
+    typeof params.analysisTotalFiles !== "number" ||
+    !Number.isFinite(params.analysisTotalFiles) ||
+    params.analysisTotalFiles < 0
+  ) {
+    return {
+      supportedFiles: null,
+      coveragePercent: null,
+    };
+  }
+
+  const totalFiles = Math.floor(params.analysisTotalFiles);
+  const unsupportedFiles = Math.max(0, Math.floor(params.unsupportedFileCount));
+  const supportedFiles = Math.max(0, totalFiles - unsupportedFiles);
+
+  if (totalFiles === 0) {
+    return {
+      supportedFiles,
+      coveragePercent: 0,
+    };
+  }
+
+  const rawPercent = (supportedFiles / totalFiles) * 100;
+  const boundedPercent =
+    supportedFiles < totalFiles ? Math.min(rawPercent, 99.9) : Math.min(rawPercent, 100);
+  const coveragePercent = Math.floor(boundedPercent * 10) / 10;
+
+  return {
+    supportedFiles,
+    coveragePercent,
+  };
+}
+
 function inferArchitectureRelation(nodeId: string): "imports" | "calls" | "implements" | "uses" {
   if (nodeId.startsWith("symbol:")) {
     return "calls";
@@ -221,6 +261,13 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     }
   }
 
+  const unsupportedSummary = toUnsupportedSummary(record.unsupportedFileAnalyses ?? []);
+  const unsupportedFiles = toUnsupportedFiles(record.unsupportedFileAnalyses ?? []);
+  const coverageMetrics = calculateCoverageMetrics({
+    analysisTotalFiles: record.analysisTotalFiles ?? null,
+    unsupportedFileCount: unsupportedSummary.totalCount,
+  });
+
   return {
     reviewId: record.reviewId,
     title: record.title,
@@ -232,6 +279,9 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     analysisCompletedAt: record.analysisCompletedAt ?? null,
     analysisTotalFiles: record.analysisTotalFiles ?? null,
     analysisProcessedFiles: record.analysisProcessedFiles ?? null,
+    analysisSupportedFiles: coverageMetrics.supportedFiles,
+    analysisUnsupportedFiles: unsupportedSummary.totalCount,
+    analysisCoveragePercent: coverageMetrics.coveragePercent,
     analysisAttemptCount: record.analysisAttemptCount ?? 0,
     analysisDurationMs: calculateAnalysisDurationMs({
       analysisRequestedAt: record.analysisRequestedAt ?? null,
@@ -244,8 +294,8 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     lastReanalyzeCompletedAt: record.lastReanalyzeCompletedAt ?? null,
     lastReanalyzeError: record.lastReanalyzeError ?? null,
     availableStatuses: [...reviewGroupStatuses],
-    unsupportedSummary: toUnsupportedSummary(record.unsupportedFileAnalyses ?? []),
-    unsupportedFiles: toUnsupportedFiles(record.unsupportedFileAnalyses ?? []),
+    unsupportedSummary,
+    unsupportedFiles,
     groups: record.groups.map((group) => ({
       groupId: group.groupId,
       title: group.title,
