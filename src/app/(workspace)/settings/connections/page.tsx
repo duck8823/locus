@@ -9,7 +9,7 @@ const copyByLocale = {
     title: "Connections",
     authStub: "Auth stub",
     description:
-      "This page is the placeholder surface for future GitHub, issue tracker, and document-source integrations.",
+      "This is a placeholder for future GitHub / issue-tracker / document integrations.",
     reviewerIdentity: "Current reviewer identity",
     signedOut: "Signed out",
     languageLabel: "Language",
@@ -26,7 +26,7 @@ const copyByLocale = {
     title: "接続設定",
     authStub: "認証スタブ",
     description:
-      "このページは将来の GitHub・課題管理・ドキュメント連携を追加するためのプレースホルダーです。",
+      "このページは将来の GitHub / 課題管理 / ドキュメント連携用プレースホルダーです。",
     reviewerIdentity: "現在のレビュアーID",
     signedOut: "未ログイン",
     languageLabel: "表示言語",

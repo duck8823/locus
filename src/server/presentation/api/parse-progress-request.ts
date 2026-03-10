@@ -10,8 +10,8 @@ export function parseProgressRequest(body: unknown): ProgressRequest {
     throw new Error("Progress request body must be an object.");
   }
 
-  const groupId = readString(body, "groupId");
-  const status = assertReviewGroupStatus(readString(body, "status"));
+  const groupId = readString(body, "groupId", { maxLength: 256 });
+  const status = assertReviewGroupStatus(readString(body, "status", { maxLength: 32 }));
 
   return {
     groupId,
@@ -19,12 +19,24 @@ export function parseProgressRequest(body: unknown): ProgressRequest {
   };
 }
 
-function readString(body: object, key: string): string {
+function readString(
+  body: object,
+  key: string,
+  options: {
+    maxLength?: number;
+  } = {},
+): string {
   const value = Reflect.get(body, key);
+  const normalizedValue = typeof value === "string" ? value.trim() : value;
+  const maxLength = options.maxLength ?? 256;
 
-  if (typeof value !== "string" || value.length === 0) {
+  if (typeof normalizedValue !== "string" || normalizedValue.length === 0) {
     throw new Error(`${key} must be a non-empty string.`);
   }
 
-  return value;
+  if (normalizedValue.length > maxLength) {
+    throw new Error(`${key} must be at most ${maxLength} characters.`);
+  }
+
+  return normalizedValue;
 }

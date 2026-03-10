@@ -144,6 +144,14 @@ npm test
 npm run build
 ```
 
+デモデータ補助コマンド（ローカル完結・外部依存なし）:
+
+```bash
+npm run demo:data:status   # .locus-data の要約を表示
+npm run demo:data:reset    # .locus-data を削除
+npm run demo:data:reseed   # 基本ディレクトリと空のジョブキューを再作成
+```
+
 ### まず読むもの
 
 - [`docs/mvp.ja.md`](docs/mvp.ja.md) / [`docs/mvp.md`](docs/mvp.md)

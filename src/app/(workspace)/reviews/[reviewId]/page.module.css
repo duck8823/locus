@@ -26,6 +26,7 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  font-size: 13px;
 }
 
 .meta span {
@@ -151,8 +152,26 @@
   word-break: break-word;
 }
 
+.groupListSummary {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .filePath {
   display: block;
+}
+
+.selectedGroupTitle {
+  margin: 0;
+  font-size: clamp(22px, 3vw, 26px);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .badge {
@@ -187,6 +206,7 @@
   flex-wrap: wrap;
   gap: 10px;
   margin: 18px 0 20px;
+  min-width: 0;
 }
 
 .statusButton {
@@ -264,6 +284,12 @@
   gap: 8px;
 }
 
+.semanticChangeHeader strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .semanticChangeMeta {
   color: var(--muted);
   font-size: 13px;
@@ -295,6 +321,14 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.analysisHintText {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  flex: 1 1 360px;
+  min-width: 0;
 }
 
 .changeBadge {
@@ -479,5 +513,14 @@
 @media (max-width: 700px) {
   .archColumns {
     grid-template-columns: 1fr;
+  }
+
+  .analysisControls {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .analysisHintText {
+    flex: 1 1 auto;
   }
 }

@@ -36,9 +36,9 @@ export const workspaceCopyByLocale = {
         "Initial analysis is in progress. Change groups will appear automatically.",
       noSemanticChangeDetails: "No semantic change details were recorded for this group.",
       changeGroupDetailsWillAppear:
-        "Change group details will appear after semantic analysis produces the first review group.",
+        "Details will appear after the first semantic-change group is ready.",
       whyThisExistsDescription:
-        "This workspace is server-rendered from a persisted review session, so reopening keeps your progress and selected change group.",
+        "This page is rendered from persisted review state, so your selected group and progress are restored.",
       attempts: "Attempts",
       lastDuration: "Last duration",
       analysisQueued: "Queued. Starting review analysis…",
@@ -52,9 +52,9 @@ export const workspaceCopyByLocale = {
       readyAt: "Ready at",
       initialAnalysisFailed: "Initial analysis failed.",
       firstRunMayTakeLonger:
-        "First run can take longer because no local cache is available yet. Keep this tab open and it will refresh automatically.",
+        "First run may take longer while local cache is empty.",
       autoRefreshHint:
-        "Auto-refresh runs while initial analysis or reanalysis is active, and pauses while this tab is in the background.",
+        "Auto-refresh runs only while analysis is active (paused in background tabs).",
       notRequestedYet: "Not requested yet",
       queuedSince: "Queued since",
       queuedOnly: "Queued…",
@@ -73,7 +73,7 @@ export const workspaceCopyByLocale = {
       showingFirstEntriesPrefix: "Showing first",
       showingFirstEntriesSuffix: "entries.",
       hiddenEntriesSuffix: "additional file(s) were omitted.",
-      architectureScopeHint: "MVP v0 keeps this focused on immediate neighbors only.",
+      architectureScopeHint: "MVP v0 shows only immediate neighbors.",
       noRelatedNodes: "No related nodes.",
       switchToRelatedGroup: "Switch to related change group",
       architectureContextWillAppear:
@@ -166,9 +166,9 @@ export const workspaceCopyByLocale = {
       changeGroupsWillAppear: "初回解析中です。完了すると変更グループが自動表示されます。",
       noSemanticChangeDetails: "このグループには詳細な差分情報がありません。",
       changeGroupDetailsWillAppear:
-        "セマンティック解析で最初の変更グループが作成されると、ここに詳細が表示されます。",
+        "最初の変更グループが作成されると、ここに詳細を表示します。",
       whyThisExistsDescription:
-        "この画面は保存済みのレビューセッションをサーバー描画しているため、再表示しても進捗と選択中グループを保持できます。",
+        "保存済みレビュー状態から描画するため、再表示しても選択中グループと進捗を保持します。",
       attempts: "試行回数",
       lastDuration: "前回所要時間",
       analysisQueued: "キュー待機中です。レビュー解析を開始します…",
@@ -182,9 +182,9 @@ export const workspaceCopyByLocale = {
       readyAt: "準備完了時刻",
       initialAnalysisFailed: "初回解析に失敗しました。",
       firstRunMayTakeLonger:
-        "初回はローカルキャッシュがないため時間がかかる場合があります。タブを開いたまま待つと自動更新されます。",
+        "初回はローカルキャッシュがないため時間がかかる場合があります。",
       autoRefreshHint:
-        "初回解析または再解析が動作中は自動更新されます。タブが非アクティブな間は自動更新を一時停止します。",
+        "解析中のみ自動更新します（非アクティブタブでは一時停止）。",
       notRequestedYet: "未リクエスト",
       queuedSince: "キュー投入時刻",
       queuedOnly: "キュー待機中…",
@@ -203,7 +203,7 @@ export const workspaceCopyByLocale = {
       showingFirstEntriesPrefix: "先頭",
       showingFirstEntriesSuffix: "件を表示中。",
       hiddenEntriesSuffix: "件は省略しています。",
-      architectureScopeHint: "MVP v0 では直接の隣接ノードのみ表示します。",
+      architectureScopeHint: "MVP v0 は直接の隣接ノードのみ表示します。",
       noRelatedNodes: "関連ノードはありません。",
       switchToRelatedGroup: "関連する変更グループに切り替える",
       architectureContextWillAppear:

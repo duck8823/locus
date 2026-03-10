@@ -45,7 +45,7 @@ const marketingCopyByLocale = {
     kicker: "Slice 1 · Workspace demo",
     title: "Open a PR review workspace in seconds.",
     lead:
-      "Start with the seed demo or any public GitHub pull request. Initial analysis runs asynchronously so the UI stays responsive.",
+      "Start from the seed demo or any public GitHub PR. Initial analysis runs asynchronously.",
     openSeedDemo: "Open seed demo",
     openConnections: "Connection settings",
     githubOwnerLabel: "GitHub owner",
@@ -57,37 +57,37 @@ const marketingCopyByLocale = {
     openGitHubDemo: "Open GitHub demo",
     hints: [
       "Public repositories work without GITHUB_TOKEN (with stricter rate limits).",
-      "The workspace opens first, then initial analysis continues in the background.",
-      "Environment variables can be used as optional form defaults.",
+      "Workspace opens first; analysis continues in the background.",
+      "Environment variables can provide optional defaults.",
     ],
     sidePanelTitle: "What works today",
     sidePanelItems: [
       {
         label: "Auth stub",
-        description: "Reviewer identity is stored in a cookie for reopenable demo access.",
+        description: "Reviewer identity is stored in a cookie.",
       },
       {
         label: "Workspace state",
-        description: "Selected group and review status are persisted in a file-backed repository.",
+        description: "Selected group and status are stored in file persistence.",
       },
       {
         label: "BFF boundary",
-        description: "App Router handlers stay thin and delegate to use cases.",
+        description: "Route handlers stay thin and delegate to use cases.",
       },
     ],
     cards: [
       {
         title: "Layered server",
-        description: "Domain/application/presentation/infrastructure boundaries are runnable in this prototype.",
+        description: "Domain/application/presentation/infrastructure boundaries are runnable.",
       },
       {
         title: "Async analysis UX",
-        description: "Opening a workspace is immediate while ingestion and analysis continue in the queue.",
+        description: "Workspace opening is immediate while queue ingestion and analysis continue.",
       },
       {
         title: "Next step",
         description:
-          "Expand parser coverage and semantic grouping depth while keeping review progress persistent.",
+          "Expand parser coverage and semantic grouping depth while keeping progress persistence.",
       },
     ],
   },
@@ -98,7 +98,7 @@ const marketingCopyByLocale = {
     kicker: "Slice 1 · ワークスペースデモ",
     title: "PR レビュー画面をすぐに開けます。",
     lead:
-      "シードデモまたは public GitHub PR から開始できます。初回解析は非同期で進むため、画面操作は止まりません。",
+      "シードデモまたは public GitHub PR から開始できます。初回解析は非同期で進みます。",
     openSeedDemo: "シードデモを開く",
     openConnections: "接続設定",
     githubOwnerLabel: "GitHub オーナー",
@@ -110,28 +110,28 @@ const marketingCopyByLocale = {
     openGitHubDemo: "GitHub デモを開く",
     hints: [
       "public リポジトリは GITHUB_TOKEN なしでも利用できます（レート制限は厳しくなります）。",
-      "ワークスペースは先に開き、初回解析はバックグラウンドで続行します。",
-      "環境変数はフォーム初期値として任意で利用できます。",
+      "ワークスペースを先に開き、解析はバックグラウンドで続行します。",
+      "環境変数でフォーム初期値を任意設定できます。",
     ],
     sidePanelTitle: "現時点で使える機能",
     sidePanelItems: [
       {
         label: "認証スタブ",
-        description: "レビュアーIDを cookie に保存し、デモ画面を再表示できます。",
+        description: "レビュアーIDを cookie に保存します。",
       },
       {
         label: "ワークスペース状態",
-        description: "選択中グループとレビュー状態はファイル保存で保持されます。",
+        description: "選択中グループとレビュー状態をファイル保存で保持します。",
       },
       {
         label: "BFF 境界",
-        description: "App Router は薄く保ち、ユースケースへ委譲しています。",
+        description: "App Router は薄く保ち、ユースケースへ委譲します。",
       },
     ],
     cards: [
       {
         title: "レイヤードサーバー",
-        description: "Domain/Application/Presentation/Infrastructure の境界を実動構成で確認できます。",
+        description: "Domain/Application/Presentation/Infrastructure の境界を確認できます。",
       },
       {
         title: "非同期解析 UX",
@@ -139,7 +139,7 @@ const marketingCopyByLocale = {
       },
       {
         title: "次のステップ",
-        description: "レビュー進捗の保持を維持したまま、パーサー対応と差分解析の深さを拡張します。",
+        description: "進捗保持を維持したまま、パーサー対応と差分解析の深さを拡張します。",
       },
     ],
   },
