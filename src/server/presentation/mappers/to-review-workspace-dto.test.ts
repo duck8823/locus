@@ -133,6 +133,9 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.analysisCompletedAt).toBeNull();
     expect(dto.analysisTotalFiles).toBe(12);
     expect(dto.analysisProcessedFiles).toBe(4);
+    expect(dto.analysisSupportedFiles).toBe(9);
+    expect(dto.analysisUnsupportedFiles).toBe(3);
+    expect(dto.analysisCoveragePercent).toBe(75);
     expect(dto.analysisAttemptCount).toBe(2);
     expect(dto.analysisDurationMs).toBeNull();
     expect(dto.analysisError).toBeNull();
@@ -301,6 +304,9 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.analysisCompletedAt).toBeNull();
     expect(dto.analysisTotalFiles).toBeNull();
     expect(dto.analysisProcessedFiles).toBeNull();
+    expect(dto.analysisSupportedFiles).toBeNull();
+    expect(dto.analysisUnsupportedFiles).toBe(0);
+    expect(dto.analysisCoveragePercent).toBeNull();
     expect(dto.analysisAttemptCount).toBe(0);
     expect(dto.analysisDurationMs).toBeNull();
     expect(dto.analysisError).toBeNull();
@@ -357,6 +363,9 @@ describe("toReviewWorkspaceDto", () => {
 
     const dto = toReviewWorkspaceDto(reviewSession);
 
+    expect(dto.analysisSupportedFiles).toBeNull();
+    expect(dto.analysisUnsupportedFiles).toBe(0);
+    expect(dto.analysisCoveragePercent).toBeNull();
     expect(dto.analysisAttemptCount).toBe(1);
     expect(dto.analysisDurationMs).toBe(2500);
   });
@@ -392,9 +401,51 @@ describe("toReviewWorkspaceDto", () => {
 
     const dto = toReviewWorkspaceDto(reviewSession);
 
+    expect(dto.analysisSupportedFiles).toBeNull();
+    expect(dto.analysisUnsupportedFiles).toBe(120);
+    expect(dto.analysisCoveragePercent).toBeNull();
     expect(dto.unsupportedSummary.totalCount).toBe(120);
     expect(dto.unsupportedFiles).toHaveLength(100);
     expect(dto.unsupportedFiles[0]?.filePath).toBe("generated/file-1.bin");
     expect(dto.unsupportedFiles[99]?.filePath).toBe("generated/file-100.bin");
+  });
+
+  it("caps partial coverage below 100 percent", () => {
+    const unsupportedFileAnalyses = [
+      {
+        reviewId: "review-5",
+        fileId: "u-1",
+        filePath: "assets/ignored.bin",
+        language: null,
+        reason: "binary_file" as const,
+      },
+    ];
+    const reviewSession = ReviewSession.create({
+      reviewId: "review-5",
+      title: "Coverage precision",
+      repositoryName: "duck8823/locus",
+      branchLabel: "main",
+      viewerName: "Duck",
+      lastOpenedAt: "2026-03-08T00:00:00.000Z",
+      analysisTotalFiles: 1000,
+      groups: [
+        {
+          groupId: "group-1",
+          title: "Group 1",
+          summary: "Primary",
+          filePath: "src/a.ts",
+          status: "unread",
+          upstream: [],
+          downstream: [],
+        },
+      ],
+      unsupportedFileAnalyses,
+    });
+
+    const dto = toReviewWorkspaceDto(reviewSession);
+
+    expect(dto.analysisSupportedFiles).toBe(999);
+    expect(dto.analysisUnsupportedFiles).toBe(1);
+    expect(dto.analysisCoveragePercent).toBe(99.9);
   });
 });

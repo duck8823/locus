@@ -80,6 +80,9 @@ export interface ReviewWorkspaceDto {
   analysisCompletedAt: string | null;
   analysisTotalFiles: number | null;
   analysisProcessedFiles: number | null;
+  analysisSupportedFiles: number | null;
+  analysisUnsupportedFiles: number;
+  analysisCoveragePercent: number | null;
   analysisAttemptCount: number;
   analysisDurationMs: number | null;
   analysisError: string | null;
