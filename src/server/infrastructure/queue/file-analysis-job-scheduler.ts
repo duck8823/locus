@@ -2,7 +2,10 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import type {
+  ActiveAnalysisJobSnapshot,
   AnalysisJobScheduler,
+  FindQueuedAnalysisJobInput,
+  QueuedAnalysisJobSnapshot,
   ScheduleAnalysisJobInput,
   ScheduledAnalysisJob,
 } from "@/server/application/ports/analysis-job-scheduler";
@@ -181,6 +184,79 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
     return scheduledJob;
   }
 
+  async findQueuedJob(
+    input: FindQueuedAnalysisJobInput,
+  ): Promise<QueuedAnalysisJobSnapshot | null> {
+    const store = await this.loadStore();
+    const queuedJob = [...store.jobs]
+      .filter(
+        (job) =>
+          job.reviewId === input.reviewId &&
+          job.reason === input.reason &&
+          job.status === "queued",
+      )
+      .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))[0];
+
+    if (!queuedJob) {
+      return null;
+    }
+
+    return {
+      jobId: queuedJob.jobId,
+      reviewId: queuedJob.reviewId,
+      requestedAt: queuedJob.requestedAt,
+      reason: queuedJob.reason,
+      queuedAt: queuedJob.queuedAt,
+    };
+  }
+
+  async findActiveJob(
+    input: FindQueuedAnalysisJobInput,
+  ): Promise<ActiveAnalysisJobSnapshot | null> {
+    const store = await this.loadStore();
+    const nowEpochMs = Date.now();
+    const activeJobs = store.jobs.filter(
+      (job) =>
+        job.reviewId === input.reviewId &&
+        job.reason === input.reason &&
+        (job.status === "queued" ||
+          (job.status === "running" && !this.isRunningJobStale(job, nowEpochMs))),
+    );
+    const runningJob = [...activeJobs]
+      .filter((job) => job.status === "running")
+      .sort((left, right) => (right.startedAt ?? right.queuedAt).localeCompare(left.startedAt ?? left.queuedAt))[0];
+
+    if (runningJob) {
+      return {
+        jobId: runningJob.jobId,
+        reviewId: runningJob.reviewId,
+        requestedAt: runningJob.requestedAt,
+        reason: runningJob.reason,
+        status: "running",
+        queuedAt: runningJob.queuedAt,
+        startedAt: runningJob.startedAt,
+      };
+    }
+
+    const queuedJob = [...activeJobs]
+      .filter((job) => job.status === "queued")
+      .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))[0];
+
+    if (!queuedJob) {
+      return null;
+    }
+
+    return {
+      jobId: queuedJob.jobId,
+      reviewId: queuedJob.reviewId,
+      requestedAt: queuedJob.requestedAt,
+      reason: queuedJob.reason,
+      status: "queued",
+      queuedAt: queuedJob.queuedAt,
+      startedAt: queuedJob.startedAt,
+    };
+  }
+
   async drainNow(): Promise<void> {
     await this.drain();
   }
@@ -250,27 +326,29 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
     const nowEpochMs = Date.parse(now);
 
     for (const job of jobs) {
-      if (job.status !== "running") {
+      if (!this.isRunningJobStale(job, nowEpochMs)) {
         continue;
       }
 
-      const startedAtEpochMs = Date.parse(job.startedAt ?? "");
-
-      if (Number.isNaN(nowEpochMs) || Number.isNaN(startedAtEpochMs)) {
-        job.status = "queued";
-        job.startedAt = null;
-        job.completedAt = null;
-        job.durationMs = null;
-        continue;
-      }
-
-      if (nowEpochMs - startedAtEpochMs >= this.staleRunningMs) {
-        job.status = "queued";
-        job.startedAt = null;
-        job.completedAt = null;
-        job.durationMs = null;
-      }
+      job.status = "queued";
+      job.startedAt = null;
+      job.completedAt = null;
+      job.durationMs = null;
     }
+  }
+
+  private isRunningJobStale(job: PersistedAnalysisJobRecord, nowEpochMs: number): boolean {
+    if (job.status !== "running") {
+      return false;
+    }
+
+    const startedAtEpochMs = Date.parse(job.startedAt ?? "");
+
+    if (Number.isNaN(nowEpochMs) || Number.isNaN(startedAtEpochMs)) {
+      return true;
+    }
+
+    return nowEpochMs - startedAtEpochMs >= this.staleRunningMs;
   }
 
   private async markJobSucceeded(jobId: string, startedAt: string): Promise<void> {

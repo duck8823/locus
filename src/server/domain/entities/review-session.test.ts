@@ -58,12 +58,16 @@ describe("ReviewSession", () => {
     expect(() => session.selectGroup("missing")).toThrow(ReviewGroupNotFoundError);
   });
 
-  it("tracks running/succeeded/failed reanalysis metadata", () => {
+  it("tracks queued/running/succeeded/failed reanalysis metadata", () => {
     const session = createSession();
 
-    session.requestReanalysis("2026-03-08T00:00:00.000Z");
-    expect(session.toRecord().reanalysisStatus).toBe("running");
+    session.markReanalysisQueued("2026-03-08T00:00:00.000Z");
+    expect(session.toRecord().reanalysisStatus).toBe("queued");
     expect(session.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-08T00:00:00.000Z");
+
+    session.requestReanalysis("2026-03-08T00:00:05.000Z");
+    expect(session.toRecord().reanalysisStatus).toBe("running");
+    expect(session.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-08T00:00:05.000Z");
 
     session.markReanalysisSucceeded("2026-03-08T00:00:10.000Z");
     expect(session.toRecord().reanalysisStatus).toBe("succeeded");

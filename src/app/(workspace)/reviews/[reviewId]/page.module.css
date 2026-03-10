@@ -4,6 +4,14 @@
   padding: 32px 24px 72px;
 }
 
+.workspaceTitle {
+  margin-top: 12px;
+  margin-bottom: 10px;
+  font-size: 40px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .header {
   display: flex;
   flex-wrap: wrap;
@@ -18,6 +26,12 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.meta span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .actions {
@@ -39,6 +53,11 @@
 .actionButton {
   min-height: 42px;
   padding: 0 16px;
+  line-height: 1.3;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .actionButton:disabled {
@@ -75,6 +94,7 @@
   width: 100%;
   text-align: left;
   padding: 14px;
+  min-width: 0;
 }
 
 .groupButton[data-selected="true"] {
@@ -84,16 +104,29 @@
 
 .groupTitle {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
   font-weight: 600;
 }
 
+.groupTitleText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .groupSummary,
 .filePath,
 .muted {
   color: var(--muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.filePath {
+  display: block;
 }
 
 .badge {
@@ -260,9 +293,16 @@
 
 .unsupportedFileHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.unsupportedFilePath {
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .unsupportedFileReason {

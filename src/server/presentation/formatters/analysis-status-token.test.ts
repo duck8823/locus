@@ -24,6 +24,12 @@ describe("analysis-status-token", () => {
     ).toBe(true);
     expect(
       isActiveWorkspaceRefreshStatus({
+        analysisStatus: "ready",
+        reanalysisStatus: "queued",
+      }),
+    ).toBe(true);
+    expect(
+      isActiveWorkspaceRefreshStatus({
         analysisStatus: "failed",
         reanalysisStatus: "idle",
       }),

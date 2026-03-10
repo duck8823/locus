@@ -33,7 +33,11 @@ export function isActiveWorkspaceRefreshStatus(params: {
   analysisStatus: ReviewAnalysisStatus | null | undefined;
   reanalysisStatus: ReviewReanalysisStatus | null | undefined;
 }): boolean {
-  return isActiveAnalysisStatus(params.analysisStatus) || params.reanalysisStatus === "running";
+  return (
+    isActiveAnalysisStatus(params.analysisStatus) ||
+    params.reanalysisStatus === "queued" ||
+    params.reanalysisStatus === "running"
+  );
 }
 
 export function createAnalysisStatusToken(input: AnalysisStatusTokenInput): string {

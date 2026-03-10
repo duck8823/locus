@@ -3,12 +3,20 @@
 import { useFormStatus } from "react-dom";
 import styles from "./page.module.css";
 
-export function InitialAnalysisRetrySubmitButton() {
+interface InitialAnalysisRetrySubmitButtonProps {
+  idleLabel: string;
+  pendingLabel: string;
+}
+
+export function InitialAnalysisRetrySubmitButton({
+  idleLabel,
+  pendingLabel,
+}: InitialAnalysisRetrySubmitButtonProps) {
   const { pending } = useFormStatus();
 
   return (
     <button className={styles.actionButton} type="submit" disabled={pending}>
-      {pending ? "Retrying..." : "Retry initial analysis"}
+      {pending ? pendingLabel : idleLabel}
     </button>
   );
 }

@@ -383,6 +383,13 @@ export class ReviewSession {
     this.record.analysisError = errorMessage;
   }
 
+  markReanalysisQueued(at: string): void {
+    this.record.lastReanalyzeRequestedAt = at;
+    this.record.reanalysisStatus = "queued";
+    this.record.lastReanalyzeCompletedAt = null;
+    this.record.lastReanalyzeError = null;
+  }
+
   requestReanalysis(at: string): void {
     this.record.lastReanalyzeRequestedAt = at;
     this.record.reanalysisStatus = "running";

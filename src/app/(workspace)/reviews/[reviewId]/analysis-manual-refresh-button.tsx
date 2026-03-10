@@ -4,7 +4,15 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
 
-export function AnalysisManualRefreshButton() {
+interface AnalysisManualRefreshButtonProps {
+  idleLabel: string;
+  pendingLabel: string;
+}
+
+export function AnalysisManualRefreshButton({
+  idleLabel,
+  pendingLabel,
+}: AnalysisManualRefreshButtonProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
@@ -19,7 +27,7 @@ export function AnalysisManualRefreshButton() {
       }}
       type="button"
     >
-      {isPending ? "Refreshing..." : "Reload now"}
+      {isPending ? pendingLabel : idleLabel}
     </button>
   );
 }

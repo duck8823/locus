@@ -1,1 +1,1 @@
-export type ReviewReanalysisStatus = "idle" | "running" | "succeeded" | "failed";
+export type ReviewReanalysisStatus = "idle" | "queued" | "running" | "succeeded" | "failed";
