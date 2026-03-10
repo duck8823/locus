@@ -123,7 +123,7 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
           (job) =>
             job.reviewId === input.reviewId &&
             job.reason === input.reason &&
-            (job.status === "queued" || job.status === "running"),
+            job.status === "queued",
         )
         .sort((left, right) => left.queuedAt.localeCompare(right.queuedAt))[0];
 

@@ -135,6 +135,68 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persisted.jobs[0]?.reason).toBe("initial_ingestion");
   });
 
+  it("queues a follow-up job when the same review/reason is already running", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    const runningStartedAt = new Date().toISOString();
+    await writeFile(
+      filePath,
+      JSON.stringify(
+        {
+          jobs: [
+            {
+              jobId: "job-running",
+              reviewId: "review-running",
+              requestedAt: "2026-03-10T00:00:00.000Z",
+              reason: "code_host_webhook",
+              status: "running",
+              queuedAt: runningStartedAt,
+              startedAt: runningStartedAt,
+              completedAt: null,
+              durationMs: null,
+              attempts: 1,
+              lastError: null,
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    const scheduled = await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-running",
+      requestedAt: "2026-03-10T00:01:00.000Z",
+      reason: "code_host_webhook",
+    });
+
+    expect(scheduled.jobId).not.toBe("job-running");
+
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ jobId: string; reviewId: string; reason: string; status: string }>;
+    };
+    expect(persisted.jobs).toHaveLength(2);
+    expect(
+      persisted.jobs.map((job) => `${job.jobId}:${job.reviewId}:${job.reason}:${job.status}`),
+    ).toContain("job-running:review-running:code_host_webhook:running");
+    expect(
+      persisted.jobs.some(
+        (job) =>
+          job.jobId === scheduled.jobId &&
+          job.reviewId === "review-running" &&
+          job.reason === "code_host_webhook" &&
+          job.status === "queued",
+      ),
+    ).toBe(true);
+  });
+
   it("keeps separate pending jobs when the reason differs", async () => {
     const dataDirectory = await createTempDataDirectory();
     const filePath = path.join(dataDirectory, "jobs.json");
