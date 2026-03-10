@@ -15,6 +15,7 @@ import type {
 } from "@/server/presentation/dto/review-workspace-dto";
 
 const UNSUPPORTED_SAMPLE_LIMIT = 5;
+const UNSUPPORTED_DETAILS_LIMIT = 100;
 const FILE_NODE_PREFIX = "file:";
 
 function toSemanticChangeDto(change: SemanticChange): ReviewWorkspaceSemanticChangeDto {
@@ -61,22 +62,22 @@ function toUnsupportedSummary(
 function toUnsupportedFiles(
   unsupportedFileAnalyses: UnsupportedFileAnalysis[],
 ): ReviewWorkspaceUnsupportedFileDto[] {
-  return [...unsupportedFileAnalyses]
-    .sort((left, right) => {
-      const byPath = left.filePath.localeCompare(right.filePath);
+  const rows: ReviewWorkspaceUnsupportedFileDto[] = [];
 
-      if (byPath !== 0) {
-        return byPath;
-      }
-
-      return left.reason.localeCompare(right.reason);
-    })
-    .map((entry) => ({
+  for (const entry of unsupportedFileAnalyses) {
+    rows.push({
       filePath: entry.filePath,
       language: entry.language ?? null,
       reason: entry.reason,
       detail: entry.detail ?? null,
-    }));
+    });
+
+    if (rows.length >= UNSUPPORTED_DETAILS_LIMIT) {
+      break;
+    }
+  }
+
+  return rows;
 }
 
 function calculateAnalysisDurationMs(params: {

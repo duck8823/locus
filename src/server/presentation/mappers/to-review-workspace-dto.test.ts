@@ -360,4 +360,41 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.analysisAttemptCount).toBe(1);
     expect(dto.analysisDurationMs).toBe(2500);
   });
+
+  it("limits unsupported file details to the first 100 rows while keeping summary counts", () => {
+    const unsupportedFileAnalyses = Array.from({ length: 120 }, (_, index) => ({
+      reviewId: "review-4",
+      fileId: `u-${index + 1}`,
+      filePath: `generated/file-${index + 1}.bin`,
+      language: null,
+      reason: "binary_file" as const,
+    }));
+    const reviewSession = ReviewSession.create({
+      reviewId: "review-4",
+      title: "Coverage limit",
+      repositoryName: "duck8823/locus",
+      branchLabel: "main",
+      viewerName: "Duck",
+      lastOpenedAt: "2026-03-08T00:00:00.000Z",
+      groups: [
+        {
+          groupId: "group-1",
+          title: "Group 1",
+          summary: "Primary",
+          filePath: "src/a.ts",
+          status: "unread",
+          upstream: [],
+          downstream: [],
+        },
+      ],
+      unsupportedFileAnalyses,
+    });
+
+    const dto = toReviewWorkspaceDto(reviewSession);
+
+    expect(dto.unsupportedSummary.totalCount).toBe(120);
+    expect(dto.unsupportedFiles).toHaveLength(100);
+    expect(dto.unsupportedFiles[0]?.filePath).toBe("generated/file-1.bin");
+    expect(dto.unsupportedFiles[99]?.filePath).toBe("generated/file-100.bin");
+  });
 });
