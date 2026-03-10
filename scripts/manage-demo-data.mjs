@@ -98,6 +98,15 @@ async function readReviewSessionSummary(dataDir) {
   }
 }
 
+function assertSafeDataDirectory(dataDir) {
+  if (path.basename(dataDir) !== ".locus-data") {
+    throw new Error(
+      `Refusing to operate on non-demo directory: ${dataDir}. ` +
+        "Use a path that ends with '.locus-data'.",
+    );
+  }
+}
+
 async function showStatus(dataDir) {
   const [jobsSummary, reviewSessionSummary] = await Promise.all([
     readJobsSummary(dataDir),
@@ -125,11 +134,13 @@ async function showStatus(dataDir) {
 }
 
 async function resetData(dataDir) {
+  assertSafeDataDirectory(dataDir);
   await rm(dataDir, { recursive: true, force: true });
   console.log(`Removed demo data directory: ${dataDir}`);
 }
 
 async function reseedData(dataDir) {
+  assertSafeDataDirectory(dataDir);
   await resetData(dataDir);
 
   const reviewSessionsDir = path.join(dataDir, "review-sessions");

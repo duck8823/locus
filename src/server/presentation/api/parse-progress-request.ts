@@ -23,18 +23,19 @@ function readString(
   body: object,
   key: string,
   options: {
-    maxLength: number;
-  },
+    maxLength?: number;
+  } = {},
 ): string {
   const value = Reflect.get(body, key);
   const normalizedValue = typeof value === "string" ? value.trim() : value;
+  const maxLength = options.maxLength ?? 256;
 
   if (typeof normalizedValue !== "string" || normalizedValue.length === 0) {
     throw new Error(`${key} must be a non-empty string.`);
   }
 
-  if (normalizedValue.length > options.maxLength) {
-    throw new Error(`${key} must be at most ${options.maxLength} characters.`);
+  if (normalizedValue.length > maxLength) {
+    throw new Error(`${key} must be at most ${maxLength} characters.`);
   }
 
   return normalizedValue;

@@ -111,7 +111,7 @@ function unwrapExpression(expression: ts.Expression): ts.Expression {
 }
 
 function readElementAccessName(argumentExpression: ts.Expression): string | null {
-  if (ts.isStringLiteral(argumentExpression) || ts.isNumericLiteral(argumentExpression)) {
+  if (ts.isStringLiteral(argumentExpression)) {
     return argumentExpression.text;
   }
 
