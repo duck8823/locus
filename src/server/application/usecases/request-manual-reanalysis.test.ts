@@ -44,6 +44,26 @@ class SpyAnalysisJobScheduler implements AnalysisJobScheduler {
   }
 }
 
+class HookedAnalysisJobScheduler implements AnalysisJobScheduler {
+  readonly calls: ScheduleAnalysisJobInput[] = [];
+
+  constructor(
+    private readonly onSchedule: (
+      input: ScheduleAnalysisJobInput,
+    ) => Promise<void> | void,
+  ) {}
+
+  async scheduleReviewAnalysis(input: ScheduleAnalysisJobInput): Promise<ScheduledAnalysisJob> {
+    this.calls.push(input);
+    await this.onSchedule(input);
+    return {
+      jobId: "hooked-job",
+      acceptedAt: input.requestedAt,
+      reason: input.reason,
+    };
+  }
+}
+
 class FailingAnalysisJobScheduler implements AnalysisJobScheduler {
   async scheduleReviewAnalysis(input: ScheduleAnalysisJobInput): Promise<ScheduledAnalysisJob> {
     void input;
@@ -52,7 +72,7 @@ class FailingAnalysisJobScheduler implements AnalysisJobScheduler {
 }
 
 describe("RequestManualReanalysisUseCase", () => {
-  it("enqueues manual_reanalysis job without mutating session state immediately", async () => {
+  it("enqueues manual_reanalysis job and marks reanalysis queued", async () => {
     const reviewSessionRepository = new InMemoryReviewSessionRepository();
     reviewSessionRepository.seed(
       ReviewSession.create({
@@ -91,8 +111,8 @@ describe("RequestManualReanalysisUseCase", () => {
         reason: "manual_reanalysis",
       },
     ]);
-    expect(persisted?.toRecord().reanalysisStatus).toBe("idle");
-    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBeNull();
+    expect(persisted?.toRecord().reanalysisStatus).toBe("queued");
+    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-10T00:05:00.000Z");
     expect(persisted?.toRecord().lastReanalyzeCompletedAt).toBeNull();
     expect(persisted?.toRecord().lastReanalyzeError).toBeNull();
   });
@@ -133,7 +153,8 @@ describe("RequestManualReanalysisUseCase", () => {
         reason: "manual_reanalysis",
       },
     ]);
-    expect(persisted?.toRecord().reanalysisStatus).toBe("idle");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("queued");
+    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-10T00:05:00.000Z");
   });
 
   it("raises when review is missing", async () => {
@@ -205,5 +226,55 @@ describe("RequestManualReanalysisUseCase", () => {
     const persisted = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-99");
     expect(persisted?.toRecord().reanalysisStatus).toBe("idle");
     expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBeNull();
+  });
+
+  it("does not overwrite newer running/succeeded state while marking queued", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    reviewSessionRepository.seed(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-100",
+        title: "PR #100: base",
+        repositoryName: "octocat/locus",
+        branchLabel: "feature/base → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 100,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-10T00:00:00.000Z",
+        reanalysisStatus: "idle",
+      }),
+    );
+    const analysisJobScheduler = new HookedAnalysisJobScheduler(async () => {
+      const latest = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-100");
+      if (!latest) {
+        throw new Error("unexpected missing session");
+      }
+
+      latest.requestReanalysis("2026-03-10T00:06:00.000Z");
+      latest.markReanalysisSucceeded(
+        "2026-03-10T00:06:05.000Z",
+        "2026-03-10T00:06:00.000Z",
+      );
+      await reviewSessionRepository.save(latest);
+    });
+    const useCase = new RequestManualReanalysisUseCase({
+      reviewSessionRepository,
+      analysisJobScheduler,
+    });
+
+    await useCase.execute({
+      reviewId: "github-octocat-locus-pr-100",
+      requestedAt: "2026-03-10T00:05:00.000Z",
+    });
+
+    const persisted = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-100");
+    expect(analysisJobScheduler.calls).toHaveLength(1);
+    expect(persisted?.toRecord().reanalysisStatus).toBe("succeeded");
+    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-10T00:06:00.000Z");
+    expect(persisted?.toRecord().lastReanalyzeCompletedAt).toBe("2026-03-10T00:06:05.000Z");
   });
 });
