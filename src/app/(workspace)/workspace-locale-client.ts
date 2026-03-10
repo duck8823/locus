@@ -7,7 +7,13 @@ export function resolveWorkspaceLocaleFromCookieString(
 ): WorkspaceLocale {
   const match = localeCookiePattern.exec(cookieHeader ?? "");
   const rawValue = match?.[1] ?? "";
-  const decodedValue = decodeURIComponent(rawValue).trim().toLowerCase();
+  let decodedValue = "";
+
+  try {
+    decodedValue = decodeURIComponent(rawValue).trim().toLowerCase();
+  } catch {
+    return "en";
+  }
 
   if (decodedValue === "ja" || decodedValue.startsWith("ja-")) {
     return "ja";

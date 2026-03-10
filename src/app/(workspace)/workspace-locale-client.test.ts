@@ -15,4 +15,10 @@ describe("workspace-locale-client", () => {
   it("returns english when cookie header is missing", () => {
     expect(resolveWorkspaceLocaleFromCookieString(null)).toBe("en");
   });
+
+  it("returns english when locale cookie has malformed URI encoding", () => {
+    expect(
+      resolveWorkspaceLocaleFromCookieString("locus-ui-locale=%E0%A4%A"),
+    ).toBe("en");
+  });
 });
