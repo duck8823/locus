@@ -85,8 +85,8 @@ describe("toReviewWorkspaceDto", () => {
           summary: "Primary",
           filePath: "src/a.ts",
           status: "unread",
-          upstream: [],
-          downstream: [],
+          upstream: ["layer:domain", "file:src/b.ts", "symbol:function:UserService::findUser"],
+          downstream: ["layer:infrastructure", "file:src/b.ts"],
           semanticChangeIds: ["change-1", "missing-change", "change-2"],
         },
         {
@@ -176,6 +176,72 @@ describe("toReviewWorkspaceDto", () => {
       },
     ]);
     expect(dto.groups[1]?.semanticChanges).toEqual([]);
+    expect(dto.groups[0]?.architectureGraph).toEqual({
+      nodes: [
+        {
+          nodeId: "group:group-1",
+          kind: "file",
+          label: "src/a.ts",
+          role: "center",
+          linkedGroupId: "group-1",
+        },
+        {
+          nodeId: "layer:domain",
+          kind: "layer",
+          label: "domain",
+          role: "upstream",
+          linkedGroupId: null,
+        },
+        {
+          nodeId: "symbol:function:UserService::findUser",
+          kind: "symbol",
+          label: "UserService.findUser (function)",
+          role: "upstream",
+          linkedGroupId: null,
+        },
+        {
+          nodeId: "layer:infrastructure",
+          kind: "layer",
+          label: "infrastructure",
+          role: "downstream",
+          linkedGroupId: null,
+        },
+        {
+          nodeId: "file:src/b.ts",
+          kind: "file",
+          label: "src/b.ts",
+          role: "downstream",
+          linkedGroupId: "group-2",
+        },
+      ],
+      edges: [
+        {
+          fromNodeId: "file:src/b.ts",
+          toNodeId: "group:group-1",
+          relation: "imports",
+        },
+        {
+          fromNodeId: "group:group-1",
+          toNodeId: "file:src/b.ts",
+          relation: "imports",
+        },
+        {
+          fromNodeId: "group:group-1",
+          toNodeId: "layer:infrastructure",
+          relation: "uses",
+        },
+        {
+          fromNodeId: "layer:domain",
+          toNodeId: "group:group-1",
+          relation: "uses",
+        },
+        {
+          fromNodeId: "symbol:function:UserService::findUser",
+          toNodeId: "group:group-1",
+          relation: "calls",
+        },
+      ],
+    });
     expect(dto.unsupportedSummary).toEqual({
       totalCount: 3,
       byReason: [
@@ -229,6 +295,18 @@ describe("toReviewWorkspaceDto", () => {
       sampleFilePaths: [],
     });
     expect(dto.groups[0]?.semanticChanges).toEqual([]);
+    expect(dto.groups[0]?.architectureGraph).toEqual({
+      nodes: [
+        {
+          nodeId: "group:group-1",
+          kind: "file",
+          label: "src/a.ts",
+          role: "center",
+          linkedGroupId: "group-1",
+        },
+      ],
+      edges: [],
+    });
   });
 
   it("calculates analysis duration from requested/completed timestamps", () => {

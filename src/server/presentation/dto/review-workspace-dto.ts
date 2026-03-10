@@ -39,7 +39,27 @@ export interface ReviewWorkspaceGroupDto {
   isSelected: boolean;
   upstream: string[];
   downstream: string[];
+  architectureGraph: ReviewWorkspaceArchitectureGraphDto;
   semanticChanges: ReviewWorkspaceSemanticChangeDto[];
+}
+
+export interface ReviewWorkspaceArchitectureNodeDto {
+  nodeId: string;
+  kind: "layer" | "file" | "symbol" | "unknown";
+  label: string;
+  role: "center" | "upstream" | "downstream";
+  linkedGroupId: string | null;
+}
+
+export interface ReviewWorkspaceArchitectureEdgeDto {
+  fromNodeId: string;
+  toNodeId: string;
+  relation: "imports" | "calls" | "implements" | "uses";
+}
+
+export interface ReviewWorkspaceArchitectureGraphDto {
+  nodes: ReviewWorkspaceArchitectureNodeDto[];
+  edges: ReviewWorkspaceArchitectureEdgeDto[];
 }
 
 export interface ReviewWorkspaceDto {
