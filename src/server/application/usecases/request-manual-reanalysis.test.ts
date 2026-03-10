@@ -52,7 +52,7 @@ class FailingAnalysisJobScheduler implements AnalysisJobScheduler {
 }
 
 describe("RequestManualReanalysisUseCase", () => {
-  it("marks reanalysis running and enqueues manual_reanalysis job", async () => {
+  it("enqueues manual_reanalysis job without mutating session state immediately", async () => {
     const reviewSessionRepository = new InMemoryReviewSessionRepository();
     reviewSessionRepository.seed(
       ReviewSession.create({
@@ -91,8 +91,8 @@ describe("RequestManualReanalysisUseCase", () => {
         reason: "manual_reanalysis",
       },
     ]);
-    expect(persisted?.toRecord().reanalysisStatus).toBe("running");
-    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBe("2026-03-10T00:05:00.000Z");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("idle");
+    expect(persisted?.toRecord().lastReanalyzeRequestedAt).toBeNull();
     expect(persisted?.toRecord().lastReanalyzeCompletedAt).toBeNull();
     expect(persisted?.toRecord().lastReanalyzeError).toBeNull();
   });
@@ -133,7 +133,7 @@ describe("RequestManualReanalysisUseCase", () => {
         reason: "manual_reanalysis",
       },
     ]);
-    expect(persisted?.toRecord().reanalysisStatus).toBe("running");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("idle");
   });
 
   it("raises when review is missing", async () => {

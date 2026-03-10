@@ -70,7 +70,5 @@ export class RequestManualReanalysisUseCase {
       requestedAt: timestamp,
       reason: "manual_reanalysis",
     });
-    reviewSession.requestReanalysis(timestamp);
-    await this.dependencies.reviewSessionRepository.save(reviewSession);
   }
 }
