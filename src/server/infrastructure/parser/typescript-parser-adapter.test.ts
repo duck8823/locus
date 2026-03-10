@@ -609,4 +609,71 @@ export function format(input: string | number): string {
     expect(diff.items[0]?.bodySummary).toBe("Callable added");
     expect(typeof diff.items[0]?.metadata?.instanceDiscriminator).toBe("string");
   });
+
+  it("collects optional-chaining call references from property and element access", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+export function runWorkflow(): void {
+  UserService.updateProfile();
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+export function runWorkflow(): void {
+  UserService?.updateProfile?.();
+  UserService["refresh"]?.();
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+
+    expect(diff.items).toHaveLength(1);
+    expect(diff.items[0]?.references).toEqual([
+      "function::<root>::refresh",
+      "function::<root>::updateProfile",
+      "method::UserService::static::refresh",
+      "method::UserService::static::updateProfile",
+    ]);
+  });
+
+  it("keeps symbol keys stable across repeated parses", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const snapshot = createSnapshot({
+      revision: "after",
+      content: `
+export class ServiceStore {
+  update = (value: number) => value + 1;
+
+  static flush(): void {
+    console.info("flush");
+  }
+
+  flush(): void {
+    console.info("instance flush");
+  }
+}
+
+export function run(): void {}
+`.trim(),
+    });
+
+    const firstParse = await adapter.parse(snapshot);
+    const secondParse = await adapter.parse(snapshot);
+    const firstKeys = (firstParse.raw as { callables: Array<{ symbolKey: string }> }).callables
+      .map((callable) => callable.symbolKey)
+      .sort();
+    const secondKeys = (secondParse.raw as { callables: Array<{ symbolKey: string }> }).callables
+      .map((callable) => callable.symbolKey)
+      .sort();
+
+    expect(firstKeys).toEqual(secondKeys);
+  });
 });

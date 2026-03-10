@@ -91,36 +91,87 @@ function readName(name: ts.PropertyName | ts.BindingName | ts.ModuleName | undef
   return name.getText();
 }
 
-function normalizeMemberChain(expression: ts.Expression): string | null {
-  if (ts.isIdentifier(expression) || ts.isPrivateIdentifier(expression)) {
-    return expression.text;
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+
+  while (true) {
+    if (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isSatisfiesExpression(current) ||
+      ts.isNonNullExpression(current)
+    ) {
+      current = current.expression;
+      continue;
+    }
+
+    return current;
+  }
+}
+
+function readElementAccessName(argumentExpression: ts.Expression): string | null {
+  if (ts.isStringLiteral(argumentExpression) || ts.isNumericLiteral(argumentExpression)) {
+    return argumentExpression.text;
   }
 
-  if (expression.kind === ts.SyntaxKind.ThisKeyword) {
+  if (ts.isNoSubstitutionTemplateLiteral(argumentExpression)) {
+    return argumentExpression.text;
+  }
+
+  return null;
+}
+
+function normalizeMemberChain(expression: ts.Expression): string | null {
+  const normalizedExpression = unwrapExpression(expression);
+
+  if (ts.isIdentifier(normalizedExpression) || ts.isPrivateIdentifier(normalizedExpression)) {
+    return normalizedExpression.text;
+  }
+
+  if (normalizedExpression.kind === ts.SyntaxKind.ThisKeyword) {
     return "this";
   }
 
-  if (ts.isPropertyAccessExpression(expression)) {
-    const base = normalizeMemberChain(expression.expression);
+  if (ts.isPropertyAccessExpression(normalizedExpression)) {
+    const base = normalizeMemberChain(normalizedExpression.expression);
 
     if (!base) {
       return null;
     }
 
-    return `${base}.${expression.name.text}`;
+    return `${base}.${normalizedExpression.name.text}`;
+  }
+
+  if (ts.isElementAccessExpression(normalizedExpression)) {
+    const base = normalizeMemberChain(normalizedExpression.expression);
+
+    if (!base || !normalizedExpression.argumentExpression) {
+      return null;
+    }
+
+    const segment = readElementAccessName(normalizedExpression.argumentExpression);
+
+    if (!segment) {
+      return null;
+    }
+
+    return `${base}.${segment}`;
   }
 
   return null;
 }
 
 function toReferenceSymbolKeys(expression: ts.Expression): string[] {
-  if (ts.isIdentifier(expression)) {
-    return [`function::<root>::${expression.text}`];
+  const normalizedExpression = unwrapExpression(expression);
+
+  if (ts.isIdentifier(normalizedExpression)) {
+    return [`function::<root>::${normalizedExpression.text}`];
   }
 
-  if (ts.isPropertyAccessExpression(expression)) {
-    const owner = normalizeMemberChain(expression.expression);
-    const methodName = expression.name.text;
+  if (ts.isPropertyAccessExpression(normalizedExpression)) {
+    const owner = normalizeMemberChain(normalizedExpression.expression);
+    const methodName = normalizedExpression.name.text;
     const keys = new Set<string>([`function::<root>::${methodName}`]);
 
     // Heuristic: treat owner-qualified references as type/container symbols only when
@@ -132,6 +183,32 @@ function toReferenceSymbolKeys(expression: ts.Expression): string[] {
     }
 
     return [...keys];
+  }
+
+  if (ts.isElementAccessExpression(normalizedExpression)) {
+    const owner = normalizeMemberChain(normalizedExpression.expression);
+
+    if (!normalizedExpression.argumentExpression) {
+      return [];
+    }
+
+    const memberName = readElementAccessName(normalizedExpression.argumentExpression);
+
+    if (!memberName) {
+      return [];
+    }
+
+    const keys = new Set<string>([`function::<root>::${memberName}`]);
+
+    if (owner && owner !== "this" && /^[A-Z]/.test(owner)) {
+      keys.add(`method::${owner.replace(/\./g, "::")}::static::${memberName}`);
+    }
+
+    return [...keys];
+  }
+
+  if (ts.isCallExpression(normalizedExpression)) {
+    return toReferenceSymbolKeys(normalizedExpression.expression);
   }
 
   return [];
