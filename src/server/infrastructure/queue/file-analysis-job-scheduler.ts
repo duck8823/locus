@@ -106,7 +106,7 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
       options.maxRetainedTerminalJobs,
       DEFAULT_MAX_RETAINED_TERMINAL_JOBS,
     );
-    this.staleRunningMs = normalizeNonNegativeInteger(
+    this.staleRunningMs = normalizeMinimumOneInteger(
       options.staleRunningMs,
       DEFAULT_STALE_RUNNING_MS,
     );
