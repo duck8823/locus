@@ -1,7 +1,6 @@
 import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
-import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
 import {
-  isConnectionStateTransitionTransactionalRepository,
+  type ConnectionStateTransitionTransactionalRepository,
   type ConnectionStateTransitionRepository,
 } from "@/server/domain/repositories/connection-state-transition-repository";
 import {
@@ -19,8 +18,8 @@ export interface SetConnectionStateInput {
 }
 
 export interface SetConnectionStateDependencies {
-  connectionStateRepository: ConnectionStateRepository;
-  connectionStateTransitionRepository: ConnectionStateTransitionRepository;
+  connectionStateTransitionRepository: ConnectionStateTransitionRepository &
+    ConnectionStateTransitionTransactionalRepository;
   connectionProviderCatalog: ConnectionProviderCatalog;
 }
 
@@ -81,36 +80,12 @@ export class SetConnectionStateUseCase {
       };
     };
 
-    let savedStates: PersistedConnectionState[];
-
-    if (
-      isConnectionStateTransitionTransactionalRepository(
-        this.dependencies.connectionStateTransitionRepository,
-      )
-    ) {
-      const result =
-        await this.dependencies.connectionStateTransitionRepository.updateStateAndAppendTransition(
-          input.reviewerId,
-          (states) => buildMutation(states),
-        );
-      savedStates = result.states;
-    } else {
-      let transitionDraft: PersistedConnectionStateTransitionDraft | null = null;
-      savedStates = await this.dependencies.connectionStateRepository.updateForReviewerId(
+    const result =
+      await this.dependencies.connectionStateTransitionRepository.updateStateAndAppendTransition(
         input.reviewerId,
-        (states) => {
-          const mutation = buildMutation(states);
-          transitionDraft = mutation.transition;
-          return mutation.states;
-        },
+        (states) => buildMutation(states),
       );
-
-      if (transitionDraft) {
-        await this.dependencies.connectionStateTransitionRepository.appendTransition(
-          transitionDraft,
-        );
-      }
-    }
+    const savedStates = result.states;
 
     const nextState = selectLatestProviderState(savedStates, input.provider);
 

@@ -33,14 +33,3 @@ export interface ConnectionStateTransitionTransactionalRepository {
     },
   ): Promise<UpdateConnectionStateAndTransitionResult>;
 }
-
-export function isConnectionStateTransitionTransactionalRepository(
-  value: unknown,
-): value is ConnectionStateTransitionRepository & ConnectionStateTransitionTransactionalRepository {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "updateStateAndAppendTransition" in value &&
-    typeof value.updateStateAndAppendTransition === "function"
-  );
-}
