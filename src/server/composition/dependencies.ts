@@ -1,4 +1,5 @@
 import { FileReviewSessionRepository } from "@/server/infrastructure/db/file-review-session-repository";
+import { FileConnectionStateRepository } from "@/server/infrastructure/db/file-connection-state-repository";
 import { GitHubPullRequestSnapshotProvider } from "@/server/infrastructure/github/github-pull-request-snapshot-provider";
 import { TypeScriptParserAdapter } from "@/server/infrastructure/parser/typescript-parser-adapter";
 import { RunScheduledAnalysisJobUseCase } from "@/server/application/usecases/run-scheduled-analysis-job";
@@ -25,6 +26,7 @@ function readOptionalNonNegativeIntegerEnv(name: string): number | undefined {
 }
 
 const reviewSessionRepository = new FileReviewSessionRepository();
+const connectionStateRepository = new FileConnectionStateRepository();
 const parserAdapters = [new TypeScriptParserAdapter()];
 const pullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
 const runScheduledAnalysisJobUseCase = new RunScheduledAnalysisJobUseCase({
@@ -51,6 +53,7 @@ const analysisJobScheduler = new FileAnalysisJobScheduler({
 export function getDependencies() {
   return {
     reviewSessionRepository,
+    connectionStateRepository,
     analysisJobScheduler,
     parserAdapters,
     pullRequestSnapshotProvider,
