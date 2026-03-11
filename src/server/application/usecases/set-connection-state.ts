@@ -1,7 +1,6 @@
 import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
 import {
   type ConnectionStateTransitionTransactionalRepository,
-  type ConnectionStateTransitionRepository,
 } from "@/server/domain/repositories/connection-state-transition-repository";
 import {
   assertConnectionStatusTransition,
@@ -18,8 +17,7 @@ export interface SetConnectionStateInput {
 }
 
 export interface SetConnectionStateDependencies {
-  connectionStateTransitionRepository: ConnectionStateTransitionRepository &
-    ConnectionStateTransitionTransactionalRepository;
+  connectionStateTransitionRepository: ConnectionStateTransitionTransactionalRepository;
   connectionProviderCatalog: ConnectionProviderCatalog;
 }
 
