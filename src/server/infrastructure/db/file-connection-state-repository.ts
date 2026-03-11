@@ -1,11 +1,12 @@
 import path from "node:path";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
 import type { PersistedConnectionState } from "@/server/domain/value-objects/connection-state";
 
 interface ConnectionStateFileRecord {
   reviewerId?: string;
-  connections?: PersistedConnectionState[];
+  connections?: unknown;
 }
 
 export interface FileConnectionStateRepositoryOptions {
@@ -14,36 +15,27 @@ export interface FileConnectionStateRepositoryOptions {
 
 export class FileConnectionStateRepository implements ConnectionStateRepository {
   private readonly dataDirectory: string;
+  private readonly writeQueues = new Map<string, Promise<void>>();
 
   constructor(options: FileConnectionStateRepositoryOptions = {}) {
     this.dataDirectory = options.dataDirectory ?? path.join(process.cwd(), ".locus-data", "connection-states");
   }
 
   async findByReviewerId(reviewerId: string): Promise<PersistedConnectionState[]> {
-    const filePath = path.join(this.dataDirectory, `${encodeURIComponent(reviewerId)}.json`);
+    const filePath = this.getFilePath(reviewerId);
 
     try {
       const raw = await readFile(filePath, "utf8");
       const parsed = parseConnectionStateFile(raw);
 
-      if (!parsed) {
+      if (!parsed || !Array.isArray(parsed.connections)) {
         return [];
       }
 
-      const connections = parsed.connections;
-
-      if (!Array.isArray(connections)) {
-        return [];
-      }
-
-      return connections
-        .filter((connection) => isNonEmptyString(connection?.provider))
-        .map((connection) => ({
-          provider: connection.provider,
-          status: normalizeStatus(connection.status),
-          statusUpdatedAt: normalizeStatusUpdatedAt(connection.statusUpdatedAt),
-          connectedAccountLabel: normalizeConnectedAccountLabel(connection.connectedAccountLabel),
-        }));
+      return parsed.connections.flatMap((record) => {
+        const normalized = normalizeConnectionStateRecord(record);
+        return normalized ? [normalized] : [];
+      });
     } catch (error) {
       if (isMissingFileError(error)) {
         return [];
@@ -52,11 +44,63 @@ export class FileConnectionStateRepository implements ConnectionStateRepository 
       throw error;
     }
   }
+
+  async saveForReviewerId(
+    reviewerId: string,
+    states: PersistedConnectionState[],
+  ): Promise<void> {
+    const normalizedStates = states.flatMap((record) => {
+      const normalized = normalizeConnectionStateRecord(record);
+      return normalized ? [normalized] : [];
+    });
+
+    const content = JSON.stringify(
+      {
+        reviewerId,
+        connections: normalizedStates,
+      },
+      null,
+      2,
+    );
+
+    const previousWrite = this.writeQueues.get(reviewerId) ?? Promise.resolve();
+    const nextWrite = previousWrite
+      .catch(() => undefined)
+      .then(async () => {
+        await mkdir(this.dataDirectory, { recursive: true });
+
+        const filePath = this.getFilePath(reviewerId);
+        const tempFilePath = `${filePath}.${randomUUID()}.tmp`;
+
+        await writeFile(tempFilePath, content);
+        await rename(tempFilePath, filePath);
+      });
+
+    this.writeQueues.set(reviewerId, nextWrite);
+
+    try {
+      await nextWrite;
+    } finally {
+      if (this.writeQueues.get(reviewerId) === nextWrite) {
+        this.writeQueues.delete(reviewerId);
+      }
+    }
+  }
+
+  private getFilePath(reviewerId: string): string {
+    return path.join(this.dataDirectory, `${encodeURIComponent(reviewerId)}.json`);
+  }
 }
 
 function parseConnectionStateFile(raw: string): ConnectionStateFileRecord | null {
   try {
-    return JSON.parse(raw) as ConnectionStateFileRecord;
+    const parsed = JSON.parse(raw) as unknown;
+
+    if (!isPlainObject(parsed)) {
+      return null;
+    }
+
+    return parsed as ConnectionStateFileRecord;
   } catch (error) {
     if (error instanceof SyntaxError) {
       return null;
@@ -66,12 +110,45 @@ function parseConnectionStateFile(raw: string): ConnectionStateFileRecord | null
   }
 }
 
+function normalizeConnectionStateRecord(record: unknown): PersistedConnectionState | null {
+  if (!isPlainObject(record)) {
+    return null;
+  }
+
+  const provider = normalizeProvider(record.provider);
+
+  if (!provider) {
+    return null;
+  }
+
+  return {
+    provider,
+    status: normalizeStatus(record.status),
+    statusUpdatedAt: normalizeStatusUpdatedAt(record.statusUpdatedAt),
+    connectedAccountLabel: normalizeConnectedAccountLabel(record.connectedAccountLabel),
+  };
+}
+
+function normalizeProvider(provider: unknown): string | null {
+  if (!isNonEmptyString(provider)) {
+    return null;
+  }
+
+  const normalized = provider.trim();
+
+  if (normalized.length > 120) {
+    return null;
+  }
+
+  return normalized;
+}
+
 function normalizeStatus(status: unknown): string {
   if (!isNonEmptyString(status)) {
     return "not_connected";
   }
 
-  return status;
+  return status.trim();
 }
 
 function normalizeStatusUpdatedAt(statusUpdatedAt: unknown): string | null {
@@ -99,6 +176,10 @@ function normalizeConnectedAccountLabel(connectedAccountLabel: unknown): string 
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {

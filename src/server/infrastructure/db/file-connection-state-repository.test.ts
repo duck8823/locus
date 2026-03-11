@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -75,25 +75,34 @@ describe("FileConnectionStateRepository", () => {
     expect(result).toEqual([]);
   });
 
-  it("normalizes invalid statusUpdatedAt into null fallback", async () => {
+  it("skips invalid records and normalizes valid records", async () => {
     const { dataDirectory, repository } = await createRepository();
     await mkdir(dataDirectory, { recursive: true });
     await writeFile(
-      path.join(dataDirectory, "invalid-date-reviewer.json"),
+      path.join(dataDirectory, "mixed-reviewer.json"),
       JSON.stringify({
-        reviewerId: "invalid-date-reviewer",
+        reviewerId: "mixed-reviewer",
         connections: [
           {
-            provider: "github",
-            status: "connected",
+            provider: " github ",
+            status: " connected ",
             statusUpdatedAt: "not-a-date",
-            connectedAccountLabel: "duck8823",
+            connectedAccountLabel: " duck8823 ",
           },
+          {
+            provider: "",
+            status: "connected",
+            statusUpdatedAt: "2026-03-11T00:00:00.000Z",
+            connectedAccountLabel: "skip-me",
+          },
+          null,
+          42,
+          "invalid",
         ],
       }),
     );
 
-    const result = await repository.findByReviewerId("invalid-date-reviewer");
+    const result = await repository.findByReviewerId("mixed-reviewer");
     expect(result).toEqual([
       {
         provider: "github",
@@ -102,5 +111,59 @@ describe("FileConnectionStateRepository", () => {
         connectedAccountLabel: "duck8823",
       },
     ]);
+  });
+
+  it("saves and reloads states using atomic file writes", async () => {
+    const { dataDirectory, repository } = await createRepository();
+    await repository.saveForReviewerId("saved-reviewer", [
+      {
+        provider: "github",
+        status: "connected",
+        statusUpdatedAt: "2026-03-11T00:00:00.000Z",
+        connectedAccountLabel: "duck8823",
+      },
+      {
+        provider: "jira",
+        status: "",
+        statusUpdatedAt: "invalid-date",
+        connectedAccountLabel: " ",
+      },
+      {
+        provider: "",
+        status: "connected",
+        statusUpdatedAt: "2026-03-11T00:00:00.000Z",
+        connectedAccountLabel: "skip-me",
+      },
+    ]);
+
+    const filePath = path.join(dataDirectory, "saved-reviewer.json");
+    const raw = await readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw) as {
+      reviewerId: string;
+      connections: Array<{
+        provider: string;
+        status: string;
+        statusUpdatedAt: string | null;
+        connectedAccountLabel: string | null;
+      }>;
+    };
+
+    expect(parsed.reviewerId).toBe("saved-reviewer");
+    expect(parsed.connections).toEqual([
+      {
+        provider: "github",
+        status: "connected",
+        statusUpdatedAt: "2026-03-11T00:00:00.000Z",
+        connectedAccountLabel: "duck8823",
+      },
+      {
+        provider: "jira",
+        status: "not_connected",
+        statusUpdatedAt: null,
+        connectedAccountLabel: null,
+      },
+    ]);
+
+    await expect(repository.findByReviewerId("saved-reviewer")).resolves.toEqual(parsed.connections);
   });
 });

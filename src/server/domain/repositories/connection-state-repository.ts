@@ -2,4 +2,5 @@ import type { PersistedConnectionState } from "@/server/domain/value-objects/con
 
 export interface ConnectionStateRepository {
   findByReviewerId(reviewerId: string): Promise<PersistedConnectionState[]>;
+  saveForReviewerId(reviewerId: string, states: PersistedConnectionState[]): Promise<void>;
 }
