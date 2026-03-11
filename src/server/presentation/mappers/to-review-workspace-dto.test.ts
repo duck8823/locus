@@ -340,6 +340,81 @@ describe("toReviewWorkspaceDto", () => {
     });
   });
 
+  it("orders semantic changes by impact priority with deterministic tie-breakers", () => {
+    const reviewSession = ReviewSession.create({
+      reviewId: "review-4",
+      title: "Ordering demo",
+      repositoryName: "duck8823/locus",
+      branchLabel: "main",
+      viewerName: "Duck",
+      lastOpenedAt: "2026-03-08T00:00:00.000Z",
+      selectedGroupId: "group-1",
+      groups: [
+        {
+          groupId: "group-1",
+          title: "Group 1",
+          summary: "Primary",
+          filePath: "src/a.ts",
+          status: "unread",
+          upstream: [],
+          downstream: [],
+          semanticChangeIds: ["change-c", "change-a", "change-b", "change-d"],
+        },
+      ],
+      semanticChanges: [
+        createSemanticChange("change-a", {
+          symbol: {
+            stableKey: "function::<root>::RenameTask",
+            displayName: "RenameTask",
+            kind: "function",
+          },
+          change: {
+            type: "renamed",
+          },
+        }),
+        createSemanticChange("change-b", {
+          symbol: {
+            stableKey: "function::<root>::AddTask",
+            displayName: "AddTask",
+            kind: "function",
+          },
+          change: {
+            type: "added",
+          },
+        }),
+        createSemanticChange("change-c", {
+          symbol: {
+            stableKey: "function::<root>::CoreTask",
+            displayName: "CoreTask",
+            kind: "function",
+          },
+          change: {
+            type: "modified",
+          },
+        }),
+        createSemanticChange("change-d", {
+          symbol: {
+            stableKey: "function::<root>::RemoveTask",
+            displayName: "RemoveTask",
+            kind: "function",
+          },
+          change: {
+            type: "removed",
+          },
+        }),
+      ],
+    });
+
+    const dto = toReviewWorkspaceDto(reviewSession);
+
+    expect(dto.groups[0]?.semanticChanges.map((change) => change.symbolDisplayName)).toEqual([
+      "CoreTask",
+      "AddTask",
+      "RemoveTask",
+      "RenameTask",
+    ]);
+  });
+
   it("calculates analysis duration from requested/completed timestamps", () => {
     const reviewSession = ReviewSession.create({
       reviewId: "review-3",
