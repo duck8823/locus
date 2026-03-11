@@ -1,12 +1,19 @@
 import path from "node:path";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { analyzeSourceSnapshots } from "@/server/application/services/analyze-source-snapshots";
 import type { SourceSnapshotPair } from "@/server/domain/value-objects/source-snapshot";
 import { TypeScriptParserAdapter } from "@/server/infrastructure/parser/typescript-parser-adapter";
 
-function readFixture(relativePath: string): string {
-  return readFileSync(path.join(process.cwd(), relativePath), "utf8");
+const fixtureDirectory = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "fixtures",
+  "real-pr",
+);
+
+function readFixture(fileName: string): string {
+  return readFileSync(path.join(fixtureDirectory, fileName), "utf8");
 }
 
 function createRealPrFixturePairs(reviewId: string): SourceSnapshotPair[] {
@@ -21,7 +28,7 @@ function createRealPrFixturePairs(reviewId: string): SourceSnapshotPair[] {
         language: "typescript",
         revision: "before",
         content: readFixture(
-          "src/server/infrastructure/parser/fixtures/real-pr/set-workspace-locale-action.before.ts.txt",
+          "set-workspace-locale-action.before.ts.txt",
         ),
         metadata: {
           codeHost: "github",
@@ -36,7 +43,7 @@ function createRealPrFixturePairs(reviewId: string): SourceSnapshotPair[] {
         language: "typescript",
         revision: "after",
         content: readFixture(
-          "src/server/infrastructure/parser/fixtures/real-pr/set-workspace-locale-action.after.ts.txt",
+          "set-workspace-locale-action.after.ts.txt",
         ),
         metadata: {
           codeHost: "github",
@@ -55,7 +62,7 @@ function createRealPrFixturePairs(reviewId: string): SourceSnapshotPair[] {
         language: "typescript",
         revision: "before",
         content: readFixture(
-          "src/server/infrastructure/parser/fixtures/real-pr/start-github-demo-session-action.before.ts.txt",
+          "start-github-demo-session-action.before.ts.txt",
         ),
         metadata: {
           codeHost: "github",
@@ -70,7 +77,7 @@ function createRealPrFixturePairs(reviewId: string): SourceSnapshotPair[] {
         language: "typescript",
         revision: "after",
         content: readFixture(
-          "src/server/infrastructure/parser/fixtures/real-pr/start-github-demo-session-action.after.ts.txt",
+          "start-github-demo-session-action.after.ts.txt",
         ),
         metadata: {
           codeHost: "github",
@@ -150,7 +157,7 @@ describe("TypeScriptParserAdapter real PR fixtures", () => {
     expect(result.unsupportedFiles).toEqual([]);
     expect(result.semanticChanges.length).toBeGreaterThanOrEqual(5);
     expect(result.groups.length).toBe(2);
-    expect(durationMs).toBeLessThanOrEqual(5_000);
+    expect(durationMs).toBeLessThanOrEqual(1_000);
     expect(
       result.semanticChanges.map((change) => change.symbol.displayName),
     ).toEqual(

@@ -47,7 +47,7 @@ ANALYZE_SNAPSHOTS_REAL_PR_BENCHMARK=1 \
   - `durationMs <= 10_000`
   - expected group/change counts (`200`)
 - Real PR fixture regression test additionally enforces:
-  - `durationMs <= 5_000`
+  - `durationMs <= 1_000`
   - non-empty semantic change extraction from both fixture files
 
 The threshold is intentionally loose for CI stability; track trend changes with this baseline document over time.

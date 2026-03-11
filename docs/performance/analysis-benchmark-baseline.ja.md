@@ -47,7 +47,7 @@ ANALYZE_SNAPSHOTS_REAL_PR_BENCHMARK=1 \
   - `durationMs <= 10_000`
   - 期待する group/change 件数（`200`）
 - 実PRフィクスチャ回帰テストでは追加で以下を検証:
-  - `durationMs <= 5_000`
+  - `durationMs <= 1_000`
   - 2ファイル両方で semantic change を抽出できること
 
 しきい値は CI 安定性のため緩めに設定している。トレンド監視は本ドキュメントの基準値を更新して行う。
