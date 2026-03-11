@@ -51,12 +51,11 @@ export interface GetConnectionsWorkspaceDependencies {
   connectionProviderCatalog: ConnectionProviderCatalog;
 }
 
-const RECENT_TRANSITIONS_LIMIT = 40;
 const DEFAULT_TRANSITION_PAGE = 1;
 const DEFAULT_TRANSITION_PAGE_SIZE = 5;
 const MAX_TRANSITION_PAGE = 30;
 const MAX_TRANSITION_PAGE_SIZE = 20;
-const MAX_TRANSITION_FETCH_LIMIT = 200;
+const MAX_TRANSITION_FETCH_LIMIT = 5_000;
 
 export class GetConnectionsWorkspaceUseCase {
   constructor(private readonly dependencies: GetConnectionsWorkspaceDependencies) {}
@@ -68,19 +67,12 @@ export class GetConnectionsWorkspaceUseCase {
     const transitionStartIndex = (transitionPage - 1) * transitionPageSize;
     const transitionEndIndex = transitionStartIndex + transitionPageSize;
     const catalogConnections = this.dependencies.connectionProviderCatalog.listProviders();
-    const transitionFetchLimit = Math.min(
-      MAX_TRANSITION_FETCH_LIMIT,
-      Math.max(
-        RECENT_TRANSITIONS_LIMIT,
-        catalogConnections.length * transitionEndIndex + RECENT_TRANSITIONS_LIMIT,
-      ),
-    );
     const [connectionStates, recentTransitions] = await Promise.all([
       this.dependencies.connectionStateRepository.findByReviewerId(input.reviewerId),
       this.dependencies.connectionStateTransitionRepository.listRecentByReviewerId(
         input.reviewerId,
         {
-          limit: transitionFetchLimit,
+          limit: MAX_TRANSITION_FETCH_LIMIT,
         },
       ),
     ]);
