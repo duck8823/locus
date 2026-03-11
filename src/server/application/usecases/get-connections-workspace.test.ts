@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PrototypeConnectionProviderCatalog } from "@/server/application/services/connection-catalog";
 import { GetConnectionsWorkspaceUseCase } from "@/server/application/usecases/get-connections-workspace";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
 
@@ -18,7 +19,42 @@ class InMemoryConnectionStateRepository implements ConnectionStateRepository {
   async findByReviewerId(reviewerId: string) {
     return this.recordsByReviewerId[reviewerId] ?? [];
   }
+
+  async saveForReviewerId(
+    reviewerId: string,
+    states: {
+      provider: string;
+      status: string;
+      statusUpdatedAt: string | null;
+      connectedAccountLabel: string | null;
+    }[],
+  ): Promise<void> {
+    this.recordsByReviewerId[reviewerId] = states;
+  }
+
+  async updateForReviewerId(
+    reviewerId: string,
+    updater: (
+      states: {
+        provider: string;
+        status: string;
+        statusUpdatedAt: string | null;
+        connectedAccountLabel: string | null;
+      }[],
+    ) => {
+      provider: string;
+      status: string;
+      statusUpdatedAt: string | null;
+      connectedAccountLabel: string | null;
+    }[],
+  ) {
+    const nextStates = updater(this.recordsByReviewerId[reviewerId] ?? []);
+    this.recordsByReviewerId[reviewerId] = nextStates;
+    return nextStates;
+  }
 }
+
+const connectionProviderCatalog = new PrototypeConnectionProviderCatalog();
 
 describe("GetConnectionsWorkspaceUseCase", () => {
   it("merges persisted reviewer state with catalog defaults", async () => {
@@ -33,6 +69,7 @@ describe("GetConnectionsWorkspaceUseCase", () => {
           },
         ],
       }),
+      connectionProviderCatalog,
     });
 
     const result = await useCase.execute({ reviewerId: "demo-reviewer" });
@@ -89,6 +126,7 @@ describe("GetConnectionsWorkspaceUseCase", () => {
           },
         ],
       }),
+      connectionProviderCatalog,
     });
 
     const result = await useCase.execute({ reviewerId: "future-reviewer" });
@@ -118,6 +156,7 @@ describe("GetConnectionsWorkspaceUseCase", () => {
           },
         ],
       }),
+      connectionProviderCatalog,
     });
 
     const result = await useCase.execute({ reviewerId: "transition-reviewer" });

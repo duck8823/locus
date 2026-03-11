@@ -88,8 +88,15 @@ DTO 値自体は言語非依存のまま維持する。
 3. UI 側で未知の将来値にフォールバック表示を持つ。
 4. infrastructure をつなぐ前に DTO / use case のテストを追加する。
 
+## 現在のプロトタイプ実装範囲
+
+- read path は provider の既定値と reviewer 単位の永続化状態をマージして返す。
+- write path は `SetConnectionStateUseCase` + `setConnectionStateAction` で制御された状態遷移を扱う。
+- provider metadata は `ConnectionProviderCatalog` port と prototype adapter 経由で解決する。
+- file-backed の状態ロードは record 形状を検証し、壊れた entry は安全にスキップする。
+
 ## 次のステップ
 
-1. 状態遷移を制御する write-side の use case / action を追加。
-2. file-backed 実装を本番用の永続化基盤へ置き換え。
-3. prototype catalog を provider adapter 実装へ置き換え。
+1. 状態遷移の監査履歴（誰が・いつ・なぜ）を追加し、運用時の追跡性を上げる。
+2. file-backed 実装を本番用の永続化基盤へ置き換える。
+3. prototype 前提の OAuth 表現を実トークン/コールバックフローに置き換える。

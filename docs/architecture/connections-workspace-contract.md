@@ -88,8 +88,15 @@ When extending this contract:
 3. Add fallback rendering for unknown future values in UI.
 4. Cover DTO/use case changes with unit tests before wiring infrastructure.
 
+## Current prototype coverage
+
+- Read path merges static provider defaults with reviewer-scoped persisted states.
+- Write path supports controlled transitions via `SetConnectionStateUseCase` + `setConnectionStateAction`.
+- Provider metadata now goes through a `ConnectionProviderCatalog` port with a prototype adapter implementation.
+- File-backed persisted-state loading validates record shape and safely skips malformed entries.
+
 ## Next Steps
 
-1. Add write-side use case and action for controlled state transitions.
+1. Add transition audit history (who/when/why) for troubleshooting and observability.
 2. Replace file-backed state with production persistence.
-3. Replace prototype catalog entries with provider adapters.
+3. Replace prototype OAuth assumptions with real token/callback flows.

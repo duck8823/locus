@@ -67,3 +67,24 @@ test("keeps review status changes after reload", async ({ page }) => {
     "true",
   );
 });
+
+test("persists connection state transitions in settings workspace", async ({ page }) => {
+  await openSeedWorkspace(page);
+  await page.goto("/settings/connections");
+
+  const transitionSelect = page.getByTestId("connection-transition-select-github");
+  await expect(transitionSelect).toBeVisible();
+  await transitionSelect.selectOption("not_connected");
+  await page.getByTestId("connection-transition-submit-github").click();
+
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        const text = await page.getByTestId("connection-status-github").innerText();
+        return text;
+      },
+      { timeout: 30_000 },
+    )
+    .toMatch(/Not connected|未接続/);
+});
