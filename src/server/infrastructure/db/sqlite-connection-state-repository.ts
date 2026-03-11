@@ -35,6 +35,7 @@ export interface SqliteConnectionStateRepositoryOptions {
 
 const DEFAULT_TRANSITION_LIMIT = 20;
 const MAX_TRANSITION_LIMIT = 100;
+const MAX_CONNECTED_ACCOUNT_LABEL_LENGTH = 200;
 
 export class SqliteConnectionStateRepository
   implements
@@ -604,7 +605,16 @@ function normalizeConnectedAccountLabel(connectedAccountLabel: unknown): string 
   }
 
   const trimmed = connectedAccountLabel.trim();
-  return trimmed.length > 0 ? trimmed : null;
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (trimmed.length > MAX_CONNECTED_ACCOUNT_LABEL_LENGTH) {
+    return trimmed.slice(0, MAX_CONNECTED_ACCOUNT_LABEL_LENGTH);
+  }
+
+  return trimmed;
 }
 
 function isNonEmptyString(value: unknown): value is string {

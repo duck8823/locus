@@ -103,6 +103,7 @@ What is intentionally still open:
 ### Local development
 
 Prerequisite: **Node.js 22.5+** (required for `node:sqlite`).
+If your runtime disables experimental Node APIs, set `NODE_OPTIONS=--experimental-sqlite` before launch.
 
 ```bash
 npm install

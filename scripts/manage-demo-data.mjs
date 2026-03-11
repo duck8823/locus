@@ -201,6 +201,9 @@ function initializeConnectionStateSchema(database) {
 
     CREATE INDEX IF NOT EXISTS idx_connection_state_transitions_reviewer_changed
       ON connection_state_transitions (reviewer_id, changed_at DESC, transition_id DESC);
+
+    CREATE INDEX IF NOT EXISTS idx_connection_state_transitions_reviewer_provider_changed
+      ON connection_state_transitions (reviewer_id, provider, changed_at DESC, transition_id DESC);
   `);
 }
 

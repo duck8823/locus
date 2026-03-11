@@ -90,6 +90,20 @@ describe("setConnectionStateAction", () => {
     });
   });
 
+
+  it("rejects overly long account labels", async () => {
+    const formData = new FormData();
+    formData.set("reviewerId", "demo-reviewer");
+    formData.set("provider", "github");
+    formData.set("nextStatus", "connected");
+    formData.set("connectedAccountLabel", "a".repeat(201));
+    formData.set("redirectPath", "/settings/connections");
+
+    await expect(setConnectionStateAction(formData)).rejects.toThrow(
+      "connectedAccountLabel must be at most 200 characters",
+    );
+    expect(executeMock).not.toHaveBeenCalled();
+  });
   it("rejects unsupported statuses", async () => {
     const formData = new FormData();
     formData.set("reviewerId", "demo-reviewer");
