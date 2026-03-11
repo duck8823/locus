@@ -43,6 +43,10 @@ class InMemoryTransactionalConnectionStateTransitionRepository
     return this.transitions.filter((transition) => transition.reviewerId === reviewerId);
   }
 
+  async countByReviewerId(reviewerId: string): Promise<number> {
+    return this.transitions.filter((transition) => transition.reviewerId === reviewerId).length;
+  }
+
   async findStatesByReviewerId(reviewerId: string): Promise<PersistedConnectionState[]> {
     return this.recordsByReviewerId[reviewerId] ?? [];
   }

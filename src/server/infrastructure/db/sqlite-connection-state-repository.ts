@@ -5,6 +5,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
 import type {
+  CountConnectionStateTransitionOptions,
   ConnectionStateTransitionRepository,
   ConnectionStateTransitionTransactionalRepository,
   ListConnectionStateTransitionOptions,
@@ -41,7 +42,7 @@ export interface SqliteConnectionStateRepositoryOptions {
 }
 
 const DEFAULT_TRANSITION_LIMIT = 20;
-const MAX_TRANSITION_LIMIT = 5_000;
+const MAX_TRANSITION_LIMIT = 200;
 const MAX_CONNECTED_ACCOUNT_LABEL_LENGTH = 200;
 const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 const DEFAULT_MAX_TRANSITIONS_PER_REVIEWER = 200;
@@ -177,54 +178,75 @@ export class SqliteConnectionStateRepository
     await this.ensureLegacyReviewerMigrated(reviewerId);
 
     const limit = normalizeTransitionLimit(options.limit);
+    const offset = normalizeTransitionOffset(options.offset);
     const provider = normalizeProvider(options.provider);
-
+    const reason = normalizeTransitionReasonFilter(options.reason);
+    const where = buildTransitionWhereClause({
+      reviewerId,
+      provider,
+      reason,
+    });
     const database = this.databaseHandle;
-    const rows = provider
-      ? database
-          .prepare(
-            `SELECT
-              transition_id,
-              reviewer_id,
-              provider,
-              previous_status,
-              next_status,
-              changed_at,
-              reason,
-              actor_type,
-              actor_id,
-              connected_account_label
-             FROM connection_state_transitions
-             WHERE reviewer_id = ?
-               AND provider = ?
-             ORDER BY changed_at DESC, transition_id DESC
-             LIMIT ?`
-          )
-          .all(reviewerId, provider, limit)
-      : database
-          .prepare(
-            `SELECT
-              transition_id,
-              reviewer_id,
-              provider,
-              previous_status,
-              next_status,
-              changed_at,
-              reason,
-              actor_type,
-              actor_id,
-              connected_account_label
-             FROM connection_state_transitions
-             WHERE reviewer_id = ?
-             ORDER BY changed_at DESC, transition_id DESC
-             LIMIT ?`
-          )
-          .all(reviewerId, limit);
+    const rows = database
+      .prepare(
+        `SELECT
+          transition_id,
+          reviewer_id,
+          provider,
+          previous_status,
+          next_status,
+          changed_at,
+          reason,
+          actor_type,
+          actor_id,
+          connected_account_label
+         FROM connection_state_transitions
+         WHERE ${where.clause}
+         ORDER BY changed_at DESC, transition_id DESC
+         LIMIT ?
+         OFFSET ?`
+      )
+      .all(...where.params, limit, offset);
 
     return rows.flatMap((row) => {
       const normalized = normalizeTransitionRow(row);
       return normalized ? [normalized] : [];
     });
+  }
+
+  async countByReviewerId(
+    reviewerId: string,
+    options: CountConnectionStateTransitionOptions = {},
+  ): Promise<number> {
+    await this.ensureLegacyReviewerMigrated(reviewerId);
+
+    const provider = normalizeProvider(options.provider);
+    const reason = normalizeTransitionReasonFilter(options.reason);
+    const where = buildTransitionWhereClause({
+      reviewerId,
+      provider,
+      reason,
+    });
+    const database = this.databaseHandle;
+    const row = database
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM connection_state_transitions
+         WHERE ${where.clause}`
+      )
+      .get(...where.params) as { count?: unknown } | undefined;
+
+    if (!row) {
+      return 0;
+    }
+
+    const count = typeof row.count === "number" ? row.count : Number(row.count ?? 0);
+
+    if (!Number.isFinite(count) || count <= 0) {
+      return 0;
+    }
+
+    return Math.floor(count);
   }
 
   private selectStatesForReviewerId(reviewerId: string): PersistedConnectionState[] {
@@ -691,6 +713,48 @@ function normalizeTransitionLimit(value: number | undefined): number {
   }
 
   return Math.min(value, MAX_TRANSITION_LIMIT);
+}
+
+function normalizeTransitionOffset(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+    return 0;
+  }
+
+  return value;
+}
+
+function normalizeTransitionReasonFilter(
+  value: ConnectionStateTransitionReason | undefined,
+): ConnectionStateTransitionReason | null {
+  if (value === "manual" || value === "token-expired" || value === "webhook") {
+    return value;
+  }
+
+  return null;
+}
+
+function buildTransitionWhereClause(input: {
+  reviewerId: string;
+  provider: string | null;
+  reason: ConnectionStateTransitionReason | null;
+}): { clause: string; params: unknown[] } {
+  const conditions = ["reviewer_id = ?"];
+  const params: unknown[] = [input.reviewerId];
+
+  if (input.provider) {
+    conditions.push("provider = ?");
+    params.push(input.provider);
+  }
+
+  if (input.reason) {
+    conditions.push("reason = ?");
+    params.push(input.reason);
+  }
+
+  return {
+    clause: conditions.join(" AND "),
+    params,
+  };
 }
 
 function normalizeMaxTransitionsPerReviewer(value: number | undefined): number {

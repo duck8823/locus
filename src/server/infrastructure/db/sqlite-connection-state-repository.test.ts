@@ -322,6 +322,13 @@ describe("SqliteConnectionStateRepository", () => {
       actorType: "system",
       actorId: "oauth-monitor",
     });
+
+    await expect(
+      repository.countByReviewerId("demo-reviewer", {
+        provider: "github",
+        reason: "token-expired",
+      }),
+    ).resolves.toBe(1);
   });
 
   it("prunes older transitions when retention limit is exceeded", async () => {

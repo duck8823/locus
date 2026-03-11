@@ -80,8 +80,60 @@ class InMemoryConnectionStateTransitionRepository
 
   async listRecentByReviewerId(
     reviewerId: string,
+    options: {
+      provider?: string;
+      reason?: "manual" | "token-expired" | "webhook";
+      limit?: number;
+      offset?: number;
+    } = {},
   ): Promise<PersistedConnectionStateTransition[]> {
-    return this.recordsByReviewerId[reviewerId] ?? [];
+    const providerFilter = options.provider?.trim() || null;
+    const reasonFilter = options.reason ?? null;
+    const offset =
+      typeof options.offset === "number" && options.offset > 0
+        ? Math.floor(options.offset)
+        : 0;
+    const limit =
+      typeof options.limit === "number" && options.limit > 0
+        ? Math.floor(options.limit)
+        : 20;
+
+    const transitions = (this.recordsByReviewerId[reviewerId] ?? []).filter((transition) => {
+      if (providerFilter && transition.provider !== providerFilter) {
+        return false;
+      }
+
+      if (reasonFilter && transition.reason !== reasonFilter) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return transitions.slice(offset, offset + limit);
+  }
+
+  async countByReviewerId(
+    reviewerId: string,
+    options: {
+      provider?: string;
+      reason?: "manual" | "token-expired" | "webhook";
+    } = {},
+  ): Promise<number> {
+    const providerFilter = options.provider?.trim() || null;
+    const reasonFilter = options.reason ?? null;
+
+    return (this.recordsByReviewerId[reviewerId] ?? []).filter((transition) => {
+      if (providerFilter && transition.provider !== providerFilter) {
+        return false;
+      }
+
+      if (reasonFilter && transition.reason !== reasonFilter) {
+        return false;
+      }
+
+      return true;
+    }).length;
   }
 }
 

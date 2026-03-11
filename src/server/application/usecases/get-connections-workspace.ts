@@ -55,7 +55,6 @@ const DEFAULT_TRANSITION_PAGE = 1;
 const DEFAULT_TRANSITION_PAGE_SIZE = 5;
 const MAX_TRANSITION_PAGE = 30;
 const MAX_TRANSITION_PAGE_SIZE = 20;
-const MAX_TRANSITION_FETCH_LIMIT = 5_000;
 
 export class GetConnectionsWorkspaceUseCase {
   constructor(private readonly dependencies: GetConnectionsWorkspaceDependencies) {}
@@ -67,20 +66,50 @@ export class GetConnectionsWorkspaceUseCase {
     const transitionStartIndex = (transitionPage - 1) * transitionPageSize;
     const transitionEndIndex = transitionStartIndex + transitionPageSize;
     const catalogConnections = this.dependencies.connectionProviderCatalog.listProviders();
-    const [connectionStates, recentTransitions] = await Promise.all([
+    const [connectionStates, transitionSnapshots] = await Promise.all([
       this.dependencies.connectionStateRepository.findByReviewerId(input.reviewerId),
-      this.dependencies.connectionStateTransitionRepository.listRecentByReviewerId(
-        input.reviewerId,
-        {
-          limit: MAX_TRANSITION_FETCH_LIMIT,
-        },
+      Promise.all(
+        catalogConnections.map(async (catalogConnection) => {
+          const transitionQuery = {
+            provider: catalogConnection.provider,
+            reason: transitionReason === "all" ? undefined : transitionReason,
+          } as const;
+          const [totalCount, transitions] = await Promise.all([
+            this.dependencies.connectionStateTransitionRepository.countByReviewerId(
+              input.reviewerId,
+              transitionQuery,
+            ),
+            this.dependencies.connectionStateTransitionRepository.listRecentByReviewerId(
+              input.reviewerId,
+              {
+                ...transitionQuery,
+                limit: transitionPageSize,
+                offset: transitionStartIndex,
+              },
+            ),
+          ]);
+
+          return {
+            provider: catalogConnection.provider,
+            totalCount,
+            recentTransitions: transitions.map((transition) => ({
+              transitionId: transition.transitionId,
+              previousStatus: transition.previousStatus,
+              nextStatus: transition.nextStatus,
+              changedAt: transition.changedAt,
+              reason: transition.reason,
+              actorType: transition.actorType,
+              actorId: transition.actorId,
+              connectedAccountLabel: transition.connectedAccountLabel,
+            })),
+          };
+        }),
       ),
     ]);
     const stateByProvider = new Map<string, (typeof connectionStates)[number]>();
-    const recentTransitionsByProvider = new Map<
-      string,
-      ConnectionsWorkspaceTransitionRecord[]
-    >();
+    const transitionSnapshotByProvider = new Map(
+      transitionSnapshots.map((snapshot) => [snapshot.provider, snapshot] as const),
+    );
 
     for (const connectionState of connectionStates) {
       const previous = stateByProvider.get(connectionState.provider);
@@ -95,39 +124,12 @@ export class GetConnectionsWorkspaceUseCase {
       }
     }
 
-    for (const transition of recentTransitions) {
-      if (transitionReason !== "all" && transition.reason !== transitionReason) {
-        continue;
-      }
-
-      const transitions = recentTransitionsByProvider.get(transition.provider) ?? [];
-
-      transitions.push({
-        transitionId: transition.transitionId,
-        previousStatus: transition.previousStatus,
-        nextStatus: transition.nextStatus,
-        changedAt: transition.changedAt,
-        reason: transition.reason,
-        actorType: transition.actorType,
-        actorId: transition.actorId,
-        connectedAccountLabel: transition.connectedAccountLabel,
-      });
-      recentTransitionsByProvider.set(transition.provider, transitions);
-    }
-
     return {
       connections: catalogConnections.map((catalogConnection) => {
         const persistedState = stateByProvider.get(catalogConnection.provider);
-        const allRecentTransitions =
-          recentTransitionsByProvider.get(catalogConnection.provider) ?? [];
-        const recentTransitions = allRecentTransitions.slice(
-          transitionStartIndex,
-          transitionEndIndex,
-        );
-        const visibleTransitionCount = Math.min(
-          allRecentTransitions.length,
-          transitionEndIndex,
-        );
+        const transitionSnapshot = transitionSnapshotByProvider.get(catalogConnection.provider);
+        const recentTransitions = transitionSnapshot?.recentTransitions ?? [];
+        const totalCount = transitionSnapshot?.totalCount ?? 0;
 
         return {
           provider: catalogConnection.provider,
@@ -138,8 +140,8 @@ export class GetConnectionsWorkspaceUseCase {
           stateSource: persistedState ? "persisted" : "catalog_default",
           capabilities: catalogConnection.capabilities,
           recentTransitions,
-          recentTransitionsTotalCount: allRecentTransitions.length,
-          recentTransitionsHasMore: allRecentTransitions.length > visibleTransitionCount,
+          recentTransitionsTotalCount: totalCount,
+          recentTransitionsHasMore: totalCount > transitionEndIndex,
         };
       }),
     };
