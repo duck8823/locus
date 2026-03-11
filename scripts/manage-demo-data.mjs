@@ -4,6 +4,8 @@ import { access, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promise
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+const SQLITE_BUSY_TIMEOUT_MS = 5_000;
+
 function printUsage() {
   console.log(`Usage:
   node scripts/manage-demo-data.mjs status [--data-dir <path>]
@@ -141,7 +143,7 @@ async function readConnectionStateDatabaseSummary(dataDir) {
     throw error;
   }
 
-  const database = new DatabaseSync(databasePath);
+  const database = new DatabaseSync(databasePath, { timeout: SQLITE_BUSY_TIMEOUT_MS });
 
   try {
     initializeConnectionStateSchema(database);
@@ -254,7 +256,7 @@ async function resetData(dataDir) {
 }
 
 function seedConnectionStateDatabase(databasePath) {
-  const database = new DatabaseSync(databasePath);
+  const database = new DatabaseSync(databasePath, { timeout: SQLITE_BUSY_TIMEOUT_MS });
 
   try {
     initializeConnectionStateSchema(database);

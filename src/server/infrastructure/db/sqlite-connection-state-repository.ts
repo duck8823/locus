@@ -36,6 +36,7 @@ export interface SqliteConnectionStateRepositoryOptions {
 const DEFAULT_TRANSITION_LIMIT = 20;
 const MAX_TRANSITION_LIMIT = 100;
 const MAX_CONNECTED_ACCOUNT_LABEL_LENGTH = 200;
+const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 
 export class SqliteConnectionStateRepository
   implements
@@ -59,7 +60,9 @@ export class SqliteConnectionStateRepository
       path.join(process.cwd(), ".locus-data", "connection-states");
 
     mkdirSync(path.dirname(this.databasePath), { recursive: true });
-    this.database = new DatabaseSync(this.databasePath);
+    this.database = new DatabaseSync(this.databasePath, {
+      timeout: SQLITE_BUSY_TIMEOUT_MS,
+    });
     initializeDatabaseSchema(this.database);
   }
 
