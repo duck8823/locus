@@ -15,6 +15,10 @@ interface ParsedTypeScriptSnapshotRaw {
 
 type MethodScope = "instance" | "static";
 
+interface ImportAliasContext {
+  namedImportAliases: Map<string, string>;
+}
+
 interface ParsedCallable {
   symbolKey: string;
   displayName: string;
@@ -31,8 +35,22 @@ interface ParsedCallable {
 }
 
 function toScriptKind(filePath: string): ts.ScriptKind {
-  if (filePath.endsWith(".tsx")) {
+  const normalized = filePath.toLowerCase();
+
+  if (normalized.endsWith(".tsx")) {
     return ts.ScriptKind.TSX;
+  }
+
+  if (normalized.endsWith(".jsx")) {
+    return ts.ScriptKind.JSX;
+  }
+
+  if (
+    normalized.endsWith(".js") ||
+    normalized.endsWith(".mjs") ||
+    normalized.endsWith(".cjs")
+  ) {
+    return ts.ScriptKind.JS;
   }
 
   return ts.ScriptKind.TS;
@@ -162,24 +180,65 @@ function normalizeMemberChain(expression: ts.Expression): string | null {
   return null;
 }
 
-function toReferenceSymbolKeys(expression: ts.Expression): string[] {
+function toSymbolKey(kind: "function" | "method", container: string, displayName: string): string {
+  if (kind === "method") {
+    return `method::${container.replace(/\./g, "::")}::static::${displayName}`;
+  }
+
+  return `function::<root>::${displayName}`;
+}
+
+function resolveCanonicalOwner(owner: string, importAliases: ImportAliasContext): string | null {
+  const [rootSegment, ...restSegments] = owner.split(".");
+
+  if (!rootSegment) {
+    return null;
+  }
+
+  const canonicalRoot = importAliases.namedImportAliases.get(rootSegment);
+
+  if (!canonicalRoot || canonicalRoot === rootSegment) {
+    return null;
+  }
+
+  return [canonicalRoot, ...restSegments].join(".");
+}
+
+function toReferenceSymbolKeys(expression: ts.Expression, importAliases: ImportAliasContext): string[] {
   const normalizedExpression = unwrapExpression(expression);
 
   if (ts.isIdentifier(normalizedExpression)) {
-    return [`function::<root>::${normalizedExpression.text}`];
+    const keys = new Set<string>([toSymbolKey("function", "<root>", normalizedExpression.text)]);
+    const canonicalName = importAliases.namedImportAliases.get(normalizedExpression.text);
+
+    if (canonicalName && canonicalName !== normalizedExpression.text) {
+      keys.add(toSymbolKey("function", "<root>", canonicalName));
+    }
+
+    return [...keys];
   }
 
   if (ts.isPropertyAccessExpression(normalizedExpression)) {
     const owner = normalizeMemberChain(normalizedExpression.expression);
     const methodName = normalizedExpression.name.text;
-    const keys = new Set<string>([`function::<root>::${methodName}`]);
+    const keys = new Set<string>([toSymbolKey("function", "<root>", methodName)]);
+    const canonicalOwner = owner ? resolveCanonicalOwner(owner, importAliases) : null;
+    const staticOwners = new Set<string>();
 
     // Heuristic: treat owner-qualified references as type/container symbols only when
     // the owner starts with an uppercase letter (e.g. UserService.updateProfile()).
     // Instance calls like userService.updateProfile() stay on the root-function fallback.
     // This is intentionally conservative until type-aware symbol resolution is added.
     if (owner && owner !== "this" && /^[A-Z]/.test(owner)) {
-      keys.add(`method::${owner.replace(/\./g, "::")}::static::${methodName}`);
+      staticOwners.add(owner);
+    }
+
+    if (canonicalOwner && canonicalOwner !== "this" && /^[A-Z]/.test(canonicalOwner)) {
+      staticOwners.add(canonicalOwner);
+    }
+
+    for (const staticOwner of staticOwners) {
+      keys.add(toSymbolKey("method", staticOwner, methodName));
     }
 
     return [...keys];
@@ -198,23 +257,33 @@ function toReferenceSymbolKeys(expression: ts.Expression): string[] {
       return [];
     }
 
-    const keys = new Set<string>([`function::<root>::${memberName}`]);
+    const keys = new Set<string>([toSymbolKey("function", "<root>", memberName)]);
+    const canonicalOwner = owner ? resolveCanonicalOwner(owner, importAliases) : null;
+    const staticOwners = new Set<string>();
 
     if (owner && owner !== "this" && /^[A-Z]/.test(owner)) {
-      keys.add(`method::${owner.replace(/\./g, "::")}::static::${memberName}`);
+      staticOwners.add(owner);
+    }
+
+    if (canonicalOwner && canonicalOwner !== "this" && /^[A-Z]/.test(canonicalOwner)) {
+      staticOwners.add(canonicalOwner);
+    }
+
+    for (const staticOwner of staticOwners) {
+      keys.add(toSymbolKey("method", staticOwner, memberName));
     }
 
     return [...keys];
   }
 
   if (ts.isCallExpression(normalizedExpression)) {
-    return toReferenceSymbolKeys(normalizedExpression.expression);
+    return toReferenceSymbolKeys(normalizedExpression.expression, importAliases);
   }
 
   return [];
 }
 
-function extractCallReferences(node: ts.Node | undefined): string[] {
+function extractCallReferences(node: ts.Node | undefined, importAliases: ImportAliasContext): string[] {
   if (!node) {
     return [];
   }
@@ -223,7 +292,7 @@ function extractCallReferences(node: ts.Node | undefined): string[] {
 
   const visit = (current: ts.Node) => {
     if (ts.isCallExpression(current)) {
-      for (const reference of toReferenceSymbolKeys(current.expression)) {
+      for (const reference of toReferenceSymbolKeys(current.expression, importAliases)) {
         references.add(reference);
       }
     }
@@ -345,6 +414,7 @@ function extractSignatureText(
 
 function createCallable(params: {
   sourceFile: ts.SourceFile;
+  importAliases: ImportAliasContext;
   kind: "function" | "method";
   displayName: string;
   containerPath: string[];
@@ -376,12 +446,13 @@ function createCallable(params: {
     normalizedBody,
     normalizedText: `${normalizedSignature}=>${normalizedBody}`,
     region: toRegion(params.sourceFile, params.regionNode),
-    references: extractCallReferences(params.body),
+    references: extractCallReferences(params.body, params.importAliases),
   };
 }
 
 function collectVariableCallableDeclarations(
   sourceFile: ts.SourceFile,
+  importAliases: ImportAliasContext,
   statement: ts.VariableStatement,
   containerPath: string[],
 ): ParsedCallable[] {
@@ -403,6 +474,7 @@ function collectVariableCallableDeclarations(
     callables.push(
       createCallable({
         sourceFile,
+        importAliases,
         kind: "function",
         displayName,
         containerPath,
@@ -419,6 +491,7 @@ function collectVariableCallableDeclarations(
 
 function collectExportAssignmentCallable(
   sourceFile: ts.SourceFile,
+  importAliases: ImportAliasContext,
   statement: ts.ExportAssignment,
   containerPath: string[],
 ): ParsedCallable[] {
@@ -435,6 +508,7 @@ function collectExportAssignmentCallable(
   return [
     createCallable({
       sourceFile,
+      importAliases,
       kind: "function",
       displayName: "default",
       containerPath,
@@ -448,6 +522,7 @@ function collectExportAssignmentCallable(
 
 function collectClassMemberCallables(
   sourceFile: ts.SourceFile,
+  importAliases: ImportAliasContext,
   classDeclaration: ts.ClassDeclaration,
   containerPath: string[],
 ): ParsedCallable[] {
@@ -458,6 +533,7 @@ function collectClassMemberCallables(
       callables.push(
         createCallable({
           sourceFile,
+          importAliases,
           kind: "method",
           displayName: "constructor",
           containerPath,
@@ -482,6 +558,7 @@ function collectClassMemberCallables(
       callables.push(
         createCallable({
           sourceFile,
+          importAliases,
           kind: "method",
           displayName,
           containerPath,
@@ -511,6 +588,7 @@ function collectClassMemberCallables(
       callables.push(
         createCallable({
           sourceFile,
+          importAliases,
           kind: "method",
           displayName,
           containerPath,
@@ -529,6 +607,7 @@ function collectClassMemberCallables(
 
 function collectCallablesFromStatement(
   sourceFile: ts.SourceFile,
+  importAliases: ImportAliasContext,
   statement: ts.Statement | ts.ModuleDeclaration,
   containerPath: string[],
 ): ParsedCallable[] {
@@ -540,7 +619,7 @@ function collectCallablesFromStatement(
     }
 
     const classContainerPath = [...containerPath, classContainerName];
-    return collectClassMemberCallables(sourceFile, statement, classContainerPath);
+    return collectClassMemberCallables(sourceFile, importAliases, statement, classContainerPath);
   }
 
   if (ts.isFunctionDeclaration(statement)) {
@@ -553,6 +632,7 @@ function collectCallablesFromStatement(
     return [
       createCallable({
         sourceFile,
+        importAliases,
         kind: "function",
         displayName,
         containerPath,
@@ -565,11 +645,11 @@ function collectCallablesFromStatement(
   }
 
   if (ts.isVariableStatement(statement)) {
-    return collectVariableCallableDeclarations(sourceFile, statement, containerPath);
+    return collectVariableCallableDeclarations(sourceFile, importAliases, statement, containerPath);
   }
 
   if (ts.isExportAssignment(statement)) {
-    return collectExportAssignmentCallable(sourceFile, statement, containerPath);
+    return collectExportAssignmentCallable(sourceFile, importAliases, statement, containerPath);
   }
 
   if (ts.isModuleDeclaration(statement)) {
@@ -582,18 +662,45 @@ function collectCallablesFromStatement(
 
     if (ts.isModuleBlock(statement.body)) {
       return statement.body.statements.flatMap((nestedStatement) =>
-        collectCallablesFromStatement(sourceFile, nestedStatement, nextContainerPath),
+        collectCallablesFromStatement(sourceFile, importAliases, nestedStatement, nextContainerPath),
       );
     }
 
     if (ts.isModuleDeclaration(statement.body)) {
-      return collectCallablesFromStatement(sourceFile, statement.body, nextContainerPath);
+      return collectCallablesFromStatement(sourceFile, importAliases, statement.body, nextContainerPath);
     }
 
     return [];
   }
 
   return [];
+}
+
+function collectImportAliases(sourceFile: ts.SourceFile): ImportAliasContext {
+  const namedImportAliases = new Map<string, string>();
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) {
+      continue;
+    }
+
+    const importClause = statement.importClause;
+    const namedBindings = importClause?.namedBindings;
+
+    if (!namedBindings || !ts.isNamedImports(namedBindings)) {
+      continue;
+    }
+
+    for (const element of namedBindings.elements) {
+      const localName = element.name.text;
+      const importedName = element.propertyName?.text ?? element.name.text;
+      namedImportAliases.set(localName, importedName);
+    }
+  }
+
+  return {
+    namedImportAliases,
+  };
 }
 
 function collectCallables(snapshot: SourceSnapshot): ParsedCallable[] {
@@ -604,9 +711,10 @@ function collectCallables(snapshot: SourceSnapshot): ParsedCallable[] {
     true,
     toScriptKind(snapshot.filePath),
   );
+  const importAliases = collectImportAliases(sourceFile);
 
   const callables = sourceFile.statements.flatMap((statement) =>
-    collectCallablesFromStatement(sourceFile, statement, []),
+    collectCallablesFromStatement(sourceFile, importAliases, statement, []),
   );
 
   return callables.sort((a, b) => a.symbolKey.localeCompare(b.symbolKey));
@@ -767,11 +875,27 @@ export class TypeScriptParserAdapter implements ParserAdapter {
   supports(file: SourceSnapshot): boolean {
     const language = file.language?.toLowerCase();
 
-    if (language === "typescript" || language === "tsx") {
+    if (
+      language === "typescript" ||
+      language === "tsx" ||
+      language === "javascript" ||
+      language === "jsx" ||
+      language === "typescriptreact" ||
+      language === "javascriptreact"
+    ) {
       return true;
     }
 
-    return file.filePath.endsWith(".ts") || file.filePath.endsWith(".tsx");
+    const normalizedPath = file.filePath.toLowerCase();
+
+    return (
+      normalizedPath.endsWith(".ts") ||
+      normalizedPath.endsWith(".tsx") ||
+      normalizedPath.endsWith(".js") ||
+      normalizedPath.endsWith(".jsx") ||
+      normalizedPath.endsWith(".mjs") ||
+      normalizedPath.endsWith(".cjs")
+    );
   }
 
   async parse(snapshot: SourceSnapshot): Promise<ParsedSnapshot> {
