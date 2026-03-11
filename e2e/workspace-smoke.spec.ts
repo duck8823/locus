@@ -72,6 +72,7 @@ test("persists connection state transitions in settings workspace", async ({ pag
   await openSeedWorkspace(page);
   await page.goto("/settings/connections");
 
+  await page.getByText(/Advanced: manual state override|詳細: 手動状態変更/).first().click();
   const transitionSelect = page.getByTestId("connection-transition-select-github");
   await expect(transitionSelect).toBeVisible();
   await transitionSelect.selectOption("not_connected");
@@ -96,6 +97,46 @@ test("persists connection state transitions in settings workspace", async ({ pag
   await expect(
     page.getByText(/Connected → Not connected|接続済み → 未接続/),
   ).toBeVisible();
+});
+
+test("connects GitHub via OAuth flow fallback and keeps URL clean", async ({ page }) => {
+  await openSeedWorkspace(page);
+  await page.goto("/settings/connections");
+
+  await page.getByText(/Advanced: manual state override|詳細: 手動状態変更/).first().click();
+  await page.getByTestId("connection-transition-select-github").selectOption("not_connected");
+  await page.getByTestId("connection-transition-submit-github").click();
+
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        return page.getByTestId("connection-status-github").innerText();
+      },
+      { timeout: 30_000 },
+    )
+    .toMatch(/Not connected|未接続/);
+
+  await page.getByRole("link", { name: /Connect with GitHub OAuth|GitHub OAuthで接続/ }).click();
+
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        const statusText = await page.getByTestId("connection-status-github").innerText();
+        return {
+          statusText,
+          url: page.url(),
+        };
+      },
+      { timeout: 30_000 },
+    )
+    .toMatchObject({
+      statusText: expect.stringMatching(/Status:|状態:/),
+      url: expect.stringContaining("/settings/connections"),
+    });
+  expect(page.url()).not.toContain("oauthSuccess=");
+  expect(page.url()).not.toContain("oauthError=");
 });
 
 test("keeps settings layout readable on narrow viewport", async ({ page }) => {
