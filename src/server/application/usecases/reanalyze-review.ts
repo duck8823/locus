@@ -10,6 +10,10 @@ import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 import type {
   PullRequestSnapshotProvider,
 } from "@/server/application/ports/pull-request-snapshot-provider";
+import type {
+  ConnectionTokenRepository,
+  PersistedConnectionToken,
+} from "@/server/application/ports/connection-token-repository";
 import { ReviewSession, type ReviewSessionRecord, type ReviewGroupRecord } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
 import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
@@ -27,6 +31,7 @@ export interface ReanalyzeReviewDependencies {
   reviewSessionRepository: ReviewSessionRepository;
   parserAdapters: ParserAdapter[];
   pullRequestSnapshotProvider: PullRequestSnapshotProvider;
+  connectionTokenRepository: ConnectionTokenRepository;
 }
 
 export interface ReanalyzeReviewResult {
@@ -187,9 +192,11 @@ export class ReanalyzeReviewUseCase {
 
       switch (source.provider) {
         case "github": {
+          const accessToken = await this.resolveGitHubAccessToken(previousRecord.viewerName);
           const bundle = await this.dependencies.pullRequestSnapshotProvider.fetchPullRequestSnapshots({
             reviewId,
             source,
+            accessToken,
           });
           snapshotPairCount = bundle.snapshotPairs.length;
           refreshedReviewSession = await createAnalyzedReviewSession({
@@ -319,4 +326,29 @@ export class ReanalyzeReviewUseCase {
       };
     }
   }
+
+  private async resolveGitHubAccessToken(reviewerId: string): Promise<string | null> {
+    const persistedToken =
+      await this.dependencies.connectionTokenRepository.findTokenByReviewerId(
+        reviewerId,
+        "github",
+      );
+
+    return toBearerAccessToken(persistedToken);
+  }
+}
+
+function toBearerAccessToken(token: PersistedConnectionToken | null): string | null {
+  if (!token) {
+    return null;
+  }
+
+  const tokenType = token.tokenType?.trim().toLowerCase();
+
+  if (tokenType && tokenType !== "bearer") {
+    return null;
+  }
+
+  const accessToken = token.accessToken.trim();
+  return accessToken.length > 0 ? accessToken : null;
 }

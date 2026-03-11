@@ -5,6 +5,10 @@ import {
   type PullRequestSnapshotProvider,
 } from "@/server/application/ports/pull-request-snapshot-provider";
 import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
+import type {
+  ConnectionTokenRepository,
+  PersistedConnectionToken,
+} from "@/server/application/ports/connection-token-repository";
 import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
 import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
 import { ReanalyzeReviewUseCase } from "@/server/application/usecases/reanalyze-review";
@@ -24,6 +28,7 @@ export interface RunScheduledAnalysisJobDependencies {
   reviewSessionRepository: ReviewSessionRepository;
   connectionStateRepository: ConnectionStateRepository;
   connectionStateTransitionRepository: ConnectionStateTransitionTransactionalRepository;
+  connectionTokenRepository: ConnectionTokenRepository;
   connectionProviderCatalog: ConnectionProviderCatalog;
   parserAdapters: ParserAdapter[];
   pullRequestSnapshotProvider: PullRequestSnapshotProvider;
@@ -53,6 +58,7 @@ export class RunScheduledAnalysisJobUseCase {
         parserAdapters: this.dependencies.parserAdapters,
         pullRequestSnapshotProvider: this.dependencies.pullRequestSnapshotProvider,
       });
+      const accessToken = await this.resolveGitHubAccessToken(reviewSession.viewerName);
 
       try {
         await useCase.execute({
@@ -61,6 +67,7 @@ export class RunScheduledAnalysisJobUseCase {
           owner: source.owner,
           repository: source.repository,
           pullRequestNumber: source.pullRequestNumber,
+          accessToken,
           requestedAt: input.requestedAt,
         });
       } catch (error) {
@@ -77,6 +84,7 @@ export class RunScheduledAnalysisJobUseCase {
       reviewSessionRepository: this.dependencies.reviewSessionRepository,
       parserAdapters: this.dependencies.parserAdapters,
       pullRequestSnapshotProvider: this.dependencies.pullRequestSnapshotProvider,
+      connectionTokenRepository: this.dependencies.connectionTokenRepository,
     });
 
     await useCase.execute({
@@ -144,6 +152,31 @@ export class RunScheduledAnalysisJobUseCase {
       return latest;
     }, providerStates[0]);
   }
+
+  private async resolveGitHubAccessToken(reviewerId: string): Promise<string | null> {
+    const persistedToken =
+      await this.dependencies.connectionTokenRepository.findTokenByReviewerId(
+        reviewerId,
+        "github",
+      );
+
+    return toBearerAccessToken(persistedToken);
+  }
+}
+
+function toBearerAccessToken(token: PersistedConnectionToken | null): string | null {
+  if (!token) {
+    return null;
+  }
+
+  const tokenType = token.tokenType?.trim().toLowerCase();
+
+  if (tokenType && tokenType !== "bearer") {
+    return null;
+  }
+
+  const accessToken = token.accessToken.trim();
+  return accessToken.length > 0 ? accessToken : null;
 }
 
 function toEpochMs(value: string | null): number {

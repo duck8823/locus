@@ -31,6 +31,7 @@ describe("POST /api/reviews/[reviewId]/reanalyze", () => {
       reviewSessionRepository: {},
       parserAdapters: [],
       pullRequestSnapshotProvider: {},
+      connectionTokenRepository: {},
       analysisJobScheduler: {},
     });
   });

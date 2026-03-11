@@ -29,11 +29,13 @@ class InMemoryReviewSessionRepository implements ReviewSessionRepository {
 }
 
 class StubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
-  lastInput: { reviewId: string; source: GitHubPullRequestRef } | null = null;
+  lastInput: { reviewId: string; source: GitHubPullRequestRef; accessToken?: string | null } | null =
+    null;
 
   async fetchPullRequestSnapshots(input: {
     reviewId: string;
     source: GitHubPullRequestRef;
+    accessToken?: string | null;
   }): Promise<PullRequestSnapshotBundle> {
     this.lastInput = input;
 

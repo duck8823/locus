@@ -13,11 +13,17 @@ export async function POST(
     const { reviewId } = await context.params;
     const body = await request.json().catch(() => null);
     parseReanalyzeRequest(body);
-    const { reviewSessionRepository, parserAdapters, pullRequestSnapshotProvider } = getDependencies();
+    const {
+      reviewSessionRepository,
+      parserAdapters,
+      pullRequestSnapshotProvider,
+      connectionTokenRepository,
+    } = getDependencies();
     const useCase = new ReanalyzeReviewUseCase({
       reviewSessionRepository,
       parserAdapters,
       pullRequestSnapshotProvider,
+      connectionTokenRepository,
     });
     const result = await useCase.execute({ reviewId });
 

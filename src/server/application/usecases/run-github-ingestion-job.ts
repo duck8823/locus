@@ -13,6 +13,7 @@ export interface RunGitHubIngestionJobInput {
   owner: string;
   repository: string;
   pullRequestNumber: number;
+  accessToken?: string | null;
   requestedAt?: string;
 }
 
@@ -133,6 +134,7 @@ export class RunGitHubIngestionJobUseCase {
     owner,
     repository,
     pullRequestNumber,
+    accessToken,
     requestedAt,
   }: RunGitHubIngestionJobInput): Promise<RunGitHubIngestionJobResult> {
     const timestamp = requestedAt ?? new Date().toISOString();
@@ -172,6 +174,7 @@ export class RunGitHubIngestionJobUseCase {
       const bundle = await this.dependencies.pullRequestSnapshotProvider.fetchPullRequestSnapshots({
         reviewId,
         source,
+        accessToken,
       });
       snapshotPairCount = bundle.snapshotPairs.length;
       const latestBeforeParsing = await reviewSessionRepository.findByReviewId(reviewId);

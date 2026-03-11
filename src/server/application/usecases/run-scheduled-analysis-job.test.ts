@@ -14,6 +14,11 @@ import { PullRequestProviderAuthError } from "@/server/application/ports/pull-re
 import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
 import { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
+import type {
+  ConnectionTokenRepository,
+  PersistedConnectionToken,
+  UpsertConnectionTokenInput,
+} from "@/server/application/ports/connection-token-repository";
 import type { ConnectionCatalogEntry } from "@/server/application/services/connection-catalog";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
 import type {
@@ -73,6 +78,23 @@ class InMemoryConnectionStateRepository implements ConnectionStateRepository {
     const nextStates = updater(this.recordsByReviewerId[reviewerId] ?? []);
     this.recordsByReviewerId[reviewerId] = nextStates;
     return nextStates;
+  }
+}
+
+class InMemoryConnectionTokenRepository implements ConnectionTokenRepository {
+  private readonly tokens = new Map<string, PersistedConnectionToken>();
+
+  async upsertToken(input: UpsertConnectionTokenInput): Promise<PersistedConnectionToken> {
+    const token: PersistedConnectionToken = { ...input };
+    this.tokens.set(`${input.reviewerId}:${input.provider}`, token);
+    return token;
+  }
+
+  async findTokenByReviewerId(
+    reviewerId: string,
+    provider: "github",
+  ): Promise<PersistedConnectionToken | null> {
+    return this.tokens.get(`${reviewerId}:${provider}`) ?? null;
   }
 }
 
@@ -214,12 +236,16 @@ class InMemoryConnectionProviderCatalog implements ConnectionProviderCatalog {
 
 class StubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
   calls = 0;
+  lastInput: { reviewId: string; source: GitHubPullRequestRef; accessToken?: string | null } | null =
+    null;
 
   async fetchPullRequestSnapshots(input: {
     reviewId: string;
     source: GitHubPullRequestRef;
+    accessToken?: string | null;
   }): Promise<PullRequestSnapshotBundle> {
     this.calls += 1;
+    this.lastInput = input;
 
     return {
       title: "PR #12: Improve updateProfile validation",
@@ -345,6 +371,7 @@ describe("RunScheduledAnalysisJobUseCase", () => {
       }),
     );
     const snapshotProvider = new StubPullRequestSnapshotProvider();
+    const connectionTokenRepository = new InMemoryConnectionTokenRepository();
     const connectionStateRepository = new InMemoryConnectionStateRepository();
     const connectionStateTransitionRepository =
       new InMemoryConnectionStateTransitionRepository(connectionStateRepository);
@@ -352,6 +379,7 @@ describe("RunScheduledAnalysisJobUseCase", () => {
       reviewSessionRepository,
       connectionStateRepository,
       connectionStateTransitionRepository,
+      connectionTokenRepository,
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
@@ -366,8 +394,64 @@ describe("RunScheduledAnalysisJobUseCase", () => {
 
     const persisted = await reviewSessionRepository.findByReviewId("github-octocat-locus-pr-12");
     expect(snapshotProvider.calls).toBe(1);
+    expect(snapshotProvider.lastInput?.accessToken).toBeNull();
     expect(persisted?.toRecord().analysisStatus).toBe("ready");
     expect(persisted?.toRecord().groups.length).toBeGreaterThan(0);
+  });
+
+  it("passes persisted bearer token to ingestion fetches", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    reviewSessionRepository.seed(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-token",
+        title: "PR #55: Loading analysis...",
+        repositoryName: "octocat/locus",
+        branchLabel: "loading",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 55,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-10T00:00:00.000Z",
+        analysisStatus: "queued",
+      }),
+    );
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    const connectionTokenRepository = new InMemoryConnectionTokenRepository();
+    await connectionTokenRepository.upsertToken({
+      reviewerId: "Demo reviewer",
+      provider: "github",
+      accessToken: "oauth-bearer-token",
+      tokenType: "bearer",
+      scope: "repo",
+      refreshToken: null,
+      expiresAt: null,
+      updatedAt: "2026-03-12T00:00:00.000Z",
+    });
+    const connectionStateRepository = new InMemoryConnectionStateRepository();
+    const connectionStateTransitionRepository =
+      new InMemoryConnectionStateTransitionRepository(connectionStateRepository);
+    const useCase = new RunScheduledAnalysisJobUseCase({
+      reviewSessionRepository,
+      connectionStateRepository,
+      connectionStateTransitionRepository,
+      connectionTokenRepository,
+      connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+    });
+
+    await useCase.execute({
+      jobId: "job-token",
+      reviewId: "github-octocat-locus-pr-token",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "initial_ingestion",
+    });
+
+    expect(snapshotProvider.lastInput?.accessToken).toBe("oauth-bearer-token");
   });
 
   it("runs reanalysis for webhook jobs", async () => {
@@ -407,6 +491,7 @@ describe("RunScheduledAnalysisJobUseCase", () => {
       reviewSessionRepository,
       connectionStateRepository,
       connectionStateTransitionRepository,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
@@ -449,6 +534,7 @@ describe("RunScheduledAnalysisJobUseCase", () => {
       reviewSessionRepository,
       connectionStateRepository,
       connectionStateTransitionRepository,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
@@ -487,6 +573,7 @@ describe("RunScheduledAnalysisJobUseCase", () => {
         new InMemoryConnectionStateTransitionRepository(
           new InMemoryConnectionStateRepository(),
         ),
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: new StubPullRequestSnapshotProvider(),
@@ -538,6 +625,7 @@ describe("RunScheduledAnalysisJobUseCase", () => {
       reviewSessionRepository,
       connectionStateRepository,
       connectionStateTransitionRepository,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: new AuthFailingPullRequestSnapshotProvider(

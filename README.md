@@ -116,6 +116,15 @@ If you want to exercise the GitHub webhook route locally, set:
 export GITHUB_WEBHOOK_SECRET=your-local-webhook-secret
 ```
 
+If you want to exercise a real GitHub OAuth handshake from `/settings/connections`, set:
+
+```bash
+export GITHUB_OAUTH_CLIENT_ID=your-github-oauth-client-id
+export GITHUB_OAUTH_SCOPE="repo read:org"
+```
+
+Without `GITHUB_OAUTH_CLIENT_ID`, the connections page uses a local demo OAuth fallback so you can validate the state machine without external setup.
+
 If you want to run the live GitHub PR demo button from the marketing page, you can enter owner/repo/PR number directly in the form.
 The environment variables below are optional defaults:
 

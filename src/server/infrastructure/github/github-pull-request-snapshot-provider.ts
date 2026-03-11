@@ -200,6 +200,15 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
+function resolveAccessToken(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
   private readonly token: string | null;
   private readonly apiBaseUrl: string;
@@ -222,14 +231,17 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
   async fetchPullRequestSnapshots(input: {
     reviewId: string;
     source: GitHubPullRequestRef;
+    accessToken?: string | null;
   }): Promise<PullRequestSnapshotBundle> {
+    const accessToken = resolveAccessToken(input.accessToken) ?? this.token;
     const pullRequest = await this.requestJson<GitHubPullRequestApiResponse>(
       `/repos/${encodeURIComponent(input.source.owner)}/${encodeURIComponent(input.source.repository)}/pulls/${input.source.pullRequestNumber}`,
+      accessToken,
     );
-    const changedFiles = await this.fetchPullRequestFiles(input.source);
+    const changedFiles = await this.fetchPullRequestFiles(input.source, accessToken);
     const [baseTree, headTree] = await Promise.all([
-      this.fetchTreeMap(input.source, pullRequest.base.sha),
-      this.fetchTreeMap(input.source, pullRequest.head.sha),
+      this.fetchTreeMap(input.source, pullRequest.base.sha, accessToken),
+      this.fetchTreeMap(input.source, pullRequest.head.sha, accessToken),
     ]);
     const blobContentCache = new Map<string, Promise<string | null>>();
     const pathContentCache = new Map<string, Promise<string | null>>();
@@ -252,6 +264,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
             commitSha: pullRequest.base.sha,
             blobCache: blobContentCache,
             pathCache: pathContentCache,
+            accessToken,
           }),
           this.resolveSnapshotContent({
             source: input.source,
@@ -260,6 +273,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
             commitSha: pullRequest.head.sha,
             blobCache: blobContentCache,
             pathCache: pathContentCache,
+            accessToken,
           }),
         ]);
         const fileId = createStableId(input.reviewId, beforePath ?? "", afterPath ?? "", file.status);
@@ -352,13 +366,17 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     };
   }
 
-  private async fetchPullRequestFiles(source: GitHubPullRequestRef): Promise<GitHubPullRequestFileApiResponse[]> {
+  private async fetchPullRequestFiles(
+    source: GitHubPullRequestRef,
+    accessToken: string | null,
+  ): Promise<GitHubPullRequestFileApiResponse[]> {
     const files: GitHubPullRequestFileApiResponse[] = [];
     let page = 1;
 
     while (true) {
       const currentPageFiles = await this.requestJson<GitHubPullRequestFileApiResponse[]>(
         `/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/pulls/${source.pullRequestNumber}/files?per_page=100&page=${page}`,
+        accessToken,
       );
 
       if (currentPageFiles.length === 0) {
@@ -382,9 +400,14 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     return files;
   }
 
-  private async fetchTreeMap(source: GitHubPullRequestRef, commitSha: string): Promise<Map<string, string> | null> {
+  private async fetchTreeMap(
+    source: GitHubPullRequestRef,
+    commitSha: string,
+    accessToken: string | null,
+  ): Promise<Map<string, string> | null> {
     const treeResponse = await this.requestJson<GitHubTreeApiResponse>(
       `/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/git/trees/${commitSha}?recursive=1`,
+      accessToken,
     );
 
     if (treeResponse.truncated) {
@@ -411,9 +434,15 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     commitSha: string;
     blobCache: Map<string, Promise<string | null>>;
     pathCache: Map<string, Promise<string | null>>;
+    accessToken: string | null;
   }): Promise<string | null> {
     if (params.blobSha) {
-      return this.getBlobText(params.source, params.blobSha, params.blobCache);
+      return this.getBlobText(
+        params.source,
+        params.blobSha,
+        params.blobCache,
+        params.accessToken,
+      );
     }
 
     if (!params.filePath) {
@@ -425,6 +454,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
       filePath: params.filePath,
       commitSha: params.commitSha,
       cache: params.pathCache,
+      accessToken: params.accessToken,
     });
   }
 
@@ -433,6 +463,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     filePath: string;
     commitSha: string;
     cache: Map<string, Promise<string | null>>;
+    accessToken: string | null;
   }): Promise<string | null> {
     const cacheKey = `${params.commitSha}:${params.filePath}`;
     const cached = params.cache.get(cacheKey);
@@ -447,6 +478,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
       .join("/");
     const loader = this.requestJson<GitHubContentApiResponse>(
       `/repos/${encodeURIComponent(params.source.owner)}/${encodeURIComponent(params.source.repository)}/contents/${encodedPath}?ref=${encodeURIComponent(params.commitSha)}`,
+      params.accessToken,
     )
       .then((content) => {
         if (content.type !== "file" || content.encoding !== "base64" || typeof content.content !== "string") {
@@ -477,6 +509,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     source: GitHubPullRequestRef,
     blobSha: string,
     cache: Map<string, Promise<string | null>>,
+    accessToken: string | null,
   ): Promise<string | null> {
     const cached = cache.get(blobSha);
 
@@ -486,6 +519,7 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
 
     const loader = this.requestJson<GitHubBlobApiResponse>(
       `/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repository)}/git/blobs/${blobSha}`,
+      accessToken,
     )
       .then((blob) => {
         if (blob.encoding !== "base64" || typeof blob.content !== "string") {
@@ -512,14 +546,14 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
     return loader;
   }
 
-  private async requestJson<T>(path: string): Promise<T> {
+  private async requestJson<T>(path: string, accessToken: string | null): Promise<T> {
     const headers: Record<string, string> = {
       accept: "application/vnd.github+json",
       "x-github-api-version": "2022-11-28",
     };
 
-    if (this.token) {
-      headers.authorization = `Bearer ${this.token}`;
+    if (accessToken) {
+      headers.authorization = `Bearer ${accessToken}`;
     }
 
     const abortController = new AbortController();

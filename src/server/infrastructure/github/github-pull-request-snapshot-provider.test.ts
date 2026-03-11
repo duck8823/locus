@@ -269,6 +269,33 @@ describe("GitHubPullRequestSnapshotProvider", () => {
     expect(copiedWithoutSource?.after?.content).toContain("copiedOnly = true");
   });
 
+  it("uses per-request access token when provided", async () => {
+    const seenAuthorizationHeaders: Array<string | null> = [];
+    const provider = new GitHubPullRequestSnapshotProvider({
+      token: "configured-token",
+      apiBaseUrl: "https://api.github.com",
+      fetchImpl: async (_input, init) => {
+        seenAuthorizationHeaders.push(new Headers(init?.headers).get("authorization"));
+        return jsonResponse({ message: "Bad credentials" }, 401);
+      },
+    });
+
+    await expect(
+      provider.fetchPullRequestSnapshots({
+        reviewId: "github-pr-override-token",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 1,
+        },
+        accessToken: "request-token",
+      }),
+    ).rejects.toBeInstanceOf(PullRequestProviderAuthError);
+
+    expect(seenAuthorizationHeaders[0]).toBe("Bearer request-token");
+  });
+
   it("fails fast when a GitHub API request times out", async () => {
     const fetchImpl: typeof fetch = (_input, init) =>
       new Promise<Response>((_resolve, reject) => {
