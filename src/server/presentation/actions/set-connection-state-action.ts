@@ -63,6 +63,9 @@ export async function setConnectionStateAction(formData: FormData): Promise<void
     provider,
     nextStatus,
     connectedAccountLabel,
+    transitionReason: "manual",
+    transitionActorType: "reviewer",
+    transitionActorId: reviewerId,
   });
 
   revalidatePath(redirectPath);

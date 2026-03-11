@@ -27,7 +27,11 @@ function readOptionalNonNegativeIntegerEnv(name: string): number | undefined {
 }
 
 const reviewSessionRepository = new FileReviewSessionRepository();
-const connectionStateRepository = new SqliteConnectionStateRepository();
+const connectionStateRepository = new SqliteConnectionStateRepository({
+  maxTransitionsPerReviewer: readOptionalNonNegativeIntegerEnv(
+    "LOCUS_CONNECTION_TRANSITION_MAX_RETAINED",
+  ),
+});
 const connectionStateTransitionRepository = connectionStateRepository;
 const connectionProviderCatalog = new PrototypeConnectionProviderCatalog();
 const parserAdapters = [new TypeScriptParserAdapter()];

@@ -7,13 +7,20 @@ import {
   type WritableConnectionStatus,
 } from "@/server/domain/value-objects/connection-lifecycle-status";
 import type { PersistedConnectionState } from "@/server/domain/value-objects/connection-state";
-import type { PersistedConnectionStateTransitionDraft } from "@/server/domain/value-objects/connection-state-transition";
+import type {
+  ConnectionStateTransitionActorType,
+  ConnectionStateTransitionReason,
+  PersistedConnectionStateTransitionDraft,
+} from "@/server/domain/value-objects/connection-state-transition";
 
 export interface SetConnectionStateInput {
   reviewerId: string;
   provider: string;
   nextStatus: WritableConnectionStatus;
   connectedAccountLabel: string | null;
+  transitionReason?: ConnectionStateTransitionReason;
+  transitionActorType?: ConnectionStateTransitionActorType;
+  transitionActorId?: string | null;
 }
 
 export interface SetConnectionStateDependencies {
@@ -73,6 +80,13 @@ export class SetConnectionStateUseCase {
           previousStatus: currentStatus,
           nextStatus: nextState.status,
           changedAt: statusUpdatedAt,
+          reason: normalizeTransitionReason(input.transitionReason),
+          actorType: normalizeTransitionActorType(input.transitionActorType),
+          actorId: normalizeTransitionActorId({
+            reviewerId: input.reviewerId,
+            actorType: input.transitionActorType,
+            actorId: input.transitionActorId,
+          }),
           connectedAccountLabel: nextState.connectedAccountLabel,
         },
       };
@@ -162,4 +176,57 @@ function normalizeConnectedAccountLabel(input: {
   }
 
   return input.current;
+}
+
+function normalizeTransitionReason(
+  value: ConnectionStateTransitionReason | undefined,
+): ConnectionStateTransitionReason {
+  if (value === "token-expired" || value === "webhook") {
+    return value;
+  }
+
+  return "manual";
+}
+
+function normalizeTransitionActorType(
+  value: ConnectionStateTransitionActorType | undefined,
+): ConnectionStateTransitionActorType {
+  if (value === "system") {
+    return value;
+  }
+
+  return "reviewer";
+}
+
+function normalizeTransitionActorId(input: {
+  reviewerId: string;
+  actorType: ConnectionStateTransitionActorType | undefined;
+  actorId: string | null | undefined;
+}): string | null {
+  const normalizedActorType = normalizeTransitionActorType(input.actorType);
+  const normalizedActorId = normalizeActorId(input.actorId);
+
+  if (normalizedActorType === "reviewer") {
+    return normalizedActorId ?? input.reviewerId;
+  }
+
+  return normalizedActorId;
+}
+
+function normalizeActorId(value: string | null | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (trimmed.length > 200) {
+    return trimmed.slice(0, 200);
+  }
+
+  return trimmed;
 }

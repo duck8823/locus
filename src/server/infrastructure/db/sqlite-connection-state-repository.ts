@@ -12,8 +12,14 @@ import type {
 } from "@/server/domain/repositories/connection-state-transition-repository";
 import type { PersistedConnectionState } from "@/server/domain/value-objects/connection-state";
 import type {
+  ConnectionStateTransitionActorType,
+  ConnectionStateTransitionReason,
   PersistedConnectionStateTransition,
   PersistedConnectionStateTransitionDraft,
+} from "@/server/domain/value-objects/connection-state-transition";
+import {
+  CONNECTION_STATE_TRANSITION_ACTOR_TYPES,
+  CONNECTION_STATE_TRANSITION_REASONS,
 } from "@/server/domain/value-objects/connection-state-transition";
 
 interface ConnectionStateRow {
@@ -31,12 +37,15 @@ interface ConnectionStateFileRecord {
 export interface SqliteConnectionStateRepositoryOptions {
   databasePath?: string;
   legacyDataDirectory?: string;
+  maxTransitionsPerReviewer?: number;
 }
 
 const DEFAULT_TRANSITION_LIMIT = 20;
-const MAX_TRANSITION_LIMIT = 100;
+const MAX_TRANSITION_LIMIT = 200;
 const MAX_CONNECTED_ACCOUNT_LABEL_LENGTH = 200;
 const SQLITE_BUSY_TIMEOUT_MS = 5_000;
+const DEFAULT_MAX_TRANSITIONS_PER_REVIEWER = 200;
+const MAX_MAX_TRANSITIONS_PER_REVIEWER = 5_000;
 
 export class SqliteConnectionStateRepository
   implements
@@ -46,6 +55,7 @@ export class SqliteConnectionStateRepository
 {
   private readonly databasePath: string;
   private readonly legacyDataDirectory: string;
+  private readonly maxTransitionsPerReviewer: number;
   private database: DatabaseSync | null = null;
   private readonly writeQueues = new Map<string, Promise<void>>();
   private readonly migrationQueues = new Map<string, Promise<void>>();
@@ -58,6 +68,9 @@ export class SqliteConnectionStateRepository
     this.legacyDataDirectory =
       options.legacyDataDirectory ??
       path.join(process.cwd(), ".locus-data", "connection-states");
+    this.maxTransitionsPerReviewer = normalizeMaxTransitionsPerReviewer(
+      options.maxTransitionsPerReviewer,
+    );
 
     // Intentionally lazy-initialize SQLite handles so that build-time module
     // evaluation does not race on schema setup across worker processes.
@@ -116,6 +129,7 @@ export class SqliteConnectionStateRepository
 
         if (normalizedTransition) {
           this.insertTransitionInTransaction(normalizedTransition);
+          this.pruneTransitionsForReviewerIdInTransaction(reviewerId);
         }
 
         database.exec("COMMIT");
@@ -140,7 +154,17 @@ export class SqliteConnectionStateRepository
 
     await this.enqueueWrite(normalizedTransition.reviewerId, async () => {
       await this.ensureLegacyReviewerMigrated(normalizedTransition.reviewerId);
-      this.insertTransitionInTransaction(normalizedTransition);
+      const database = this.databaseHandle;
+      database.exec("BEGIN IMMEDIATE TRANSACTION");
+
+      try {
+        this.insertTransitionInTransaction(normalizedTransition);
+        this.pruneTransitionsForReviewerIdInTransaction(normalizedTransition.reviewerId);
+        database.exec("COMMIT");
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
     });
 
     return normalizedTransition;
@@ -166,6 +190,9 @@ export class SqliteConnectionStateRepository
               previous_status,
               next_status,
               changed_at,
+              reason,
+              actor_type,
+              actor_id,
               connected_account_label
              FROM connection_state_transitions
              WHERE reviewer_id = ?
@@ -183,6 +210,9 @@ export class SqliteConnectionStateRepository
               previous_status,
               next_status,
               changed_at,
+              reason,
+              actor_type,
+              actor_id,
               connected_account_label
              FROM connection_state_transitions
              WHERE reviewer_id = ?
@@ -276,8 +306,11 @@ export class SqliteConnectionStateRepository
           previous_status,
           next_status,
           changed_at,
+          reason,
+          actor_type,
+          actor_id,
           connected_account_label
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         transition.transitionId,
@@ -286,8 +319,28 @@ export class SqliteConnectionStateRepository
         transition.previousStatus,
         transition.nextStatus,
         transition.changedAt,
+        transition.reason,
+        transition.actorType,
+        transition.actorId,
         transition.connectedAccountLabel,
       );
+  }
+
+  private pruneTransitionsForReviewerIdInTransaction(reviewerId: string): void {
+    const database = this.databaseHandle;
+    database
+      .prepare(
+        `DELETE FROM connection_state_transitions
+         WHERE reviewer_id = ?
+           AND transition_id NOT IN (
+             SELECT transition_id
+             FROM connection_state_transitions
+             WHERE reviewer_id = ?
+             ORDER BY changed_at DESC, transition_id DESC
+             LIMIT ?
+           )`
+      )
+      .run(reviewerId, reviewerId, this.maxTransitionsPerReviewer);
   }
 
   private countStatesForReviewerId(reviewerId: string): number {
@@ -427,6 +480,9 @@ function initializeDatabaseSchema(database: DatabaseSync): void {
       previous_status TEXT NOT NULL,
       next_status TEXT NOT NULL,
       changed_at TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT 'manual',
+      actor_type TEXT NOT NULL DEFAULT 'reviewer',
+      actor_id TEXT,
       connected_account_label TEXT
     );
 
@@ -436,6 +492,41 @@ function initializeDatabaseSchema(database: DatabaseSync): void {
     CREATE INDEX IF NOT EXISTS idx_connection_state_transitions_reviewer_provider_changed
       ON connection_state_transitions (reviewer_id, provider, changed_at DESC, transition_id DESC);
   `);
+
+  ensureTransitionAuditColumns(database);
+  database.exec(`
+    CREATE INDEX IF NOT EXISTS idx_connection_state_transitions_reviewer_reason_changed
+      ON connection_state_transitions (reviewer_id, reason, changed_at DESC, transition_id DESC);
+  `);
+}
+
+function ensureTransitionAuditColumns(database: DatabaseSync): void {
+  const columns = database
+    .prepare("PRAGMA table_info(connection_state_transitions)")
+    .all() as Array<{ name?: unknown }>;
+  const columnNames = new Set(
+    columns
+      .map((column) =>
+        typeof column.name === "string" ? column.name : null,
+      )
+      .filter((column): column is string => column !== null),
+  );
+
+  if (!columnNames.has("reason")) {
+    database.exec(
+      "ALTER TABLE connection_state_transitions ADD COLUMN reason TEXT NOT NULL DEFAULT 'manual'",
+    );
+  }
+
+  if (!columnNames.has("actor_type")) {
+    database.exec(
+      "ALTER TABLE connection_state_transitions ADD COLUMN actor_type TEXT NOT NULL DEFAULT 'reviewer'",
+    );
+  }
+
+  if (!columnNames.has("actor_id")) {
+    database.exec("ALTER TABLE connection_state_transitions ADD COLUMN actor_id TEXT");
+  }
 }
 
 function normalizeStateRow(row: ConnectionStateRow): PersistedConnectionState | null {
@@ -518,6 +609,13 @@ function normalizeTransitionDraft(
     throw new Error(`Invalid changedAt for connection transition: ${String(draft.changedAt)}`);
   }
 
+  const actorType = normalizeTransitionActorType(draft.actorType);
+  const actorId = normalizeTransitionActorId({
+    reviewerId,
+    actorType,
+    actorId: draft.actorId,
+  });
+
   return {
     transitionId: randomUUID(),
     reviewerId,
@@ -525,6 +623,9 @@ function normalizeTransitionDraft(
     previousStatus: normalizeStatus(draft.previousStatus),
     nextStatus: normalizeStatus(draft.nextStatus),
     changedAt,
+    reason: normalizeTransitionReason(draft.reason),
+    actorType,
+    actorId,
     connectedAccountLabel: normalizeConnectedAccountLabel(draft.connectedAccountLabel),
   };
 }
@@ -538,6 +639,7 @@ function normalizeTransitionRow(row: unknown): PersistedConnectionStateTransitio
   const reviewerId = normalizeReviewerId(row.reviewer_id);
   const provider = normalizeProvider(row.provider);
   const changedAt = normalizeStatusUpdatedAt(row.changed_at);
+  const actorType = normalizeTransitionActorType(row.actor_type);
 
   if (!transitionId || !reviewerId || !provider || !changedAt) {
     return null;
@@ -550,6 +652,13 @@ function normalizeTransitionRow(row: unknown): PersistedConnectionStateTransitio
     previousStatus: normalizeStatus(row.previous_status),
     nextStatus: normalizeStatus(row.next_status),
     changedAt,
+    reason: normalizeTransitionReason(row.reason),
+    actorType,
+    actorId: normalizeTransitionActorId({
+      reviewerId,
+      actorType,
+      actorId: row.actor_id,
+    }),
     connectedAccountLabel: normalizeConnectedAccountLabel(row.connected_account_label),
   };
 }
@@ -584,6 +693,14 @@ function normalizeTransitionLimit(value: number | undefined): number {
   return Math.min(value, MAX_TRANSITION_LIMIT);
 }
 
+function normalizeMaxTransitionsPerReviewer(value: number | undefined): number {
+  if (!value || !Number.isSafeInteger(value) || value <= 0) {
+    return DEFAULT_MAX_TRANSITIONS_PER_REVIEWER;
+  }
+
+  return Math.min(value, MAX_MAX_TRANSITIONS_PER_REVIEWER);
+}
+
 function normalizeProvider(provider: unknown): string | null {
   if (!isNonEmptyString(provider)) {
     return null;
@@ -604,6 +721,42 @@ function normalizeStatus(status: unknown): string {
   }
 
   return status.trim();
+}
+
+function normalizeTransitionReason(value: unknown): ConnectionStateTransitionReason {
+  if (
+    typeof value === "string" &&
+    (CONNECTION_STATE_TRANSITION_REASONS as readonly string[]).includes(value)
+  ) {
+    return value as ConnectionStateTransitionReason;
+  }
+
+  return "manual";
+}
+
+function normalizeTransitionActorType(value: unknown): ConnectionStateTransitionActorType {
+  if (
+    typeof value === "string" &&
+    (CONNECTION_STATE_TRANSITION_ACTOR_TYPES as readonly string[]).includes(value)
+  ) {
+    return value as ConnectionStateTransitionActorType;
+  }
+
+  return "reviewer";
+}
+
+function normalizeTransitionActorId(input: {
+  reviewerId: string;
+  actorType: ConnectionStateTransitionActorType;
+  actorId: unknown;
+}): string | null {
+  const normalizedActorId = normalizeActorId(input.actorId);
+
+  if (input.actorType === "reviewer") {
+    return normalizedActorId ?? input.reviewerId;
+  }
+
+  return normalizedActorId;
 }
 
 function normalizeStatusUpdatedAt(statusUpdatedAt: unknown): string | null {
@@ -633,6 +786,24 @@ function normalizeConnectedAccountLabel(connectedAccountLabel: unknown): string 
 
   if (trimmed.length > MAX_CONNECTED_ACCOUNT_LABEL_LENGTH) {
     return trimmed.slice(0, MAX_CONNECTED_ACCOUNT_LABEL_LENGTH);
+  }
+
+  return trimmed;
+}
+
+function normalizeActorId(actorId: unknown): string | null {
+  if (typeof actorId !== "string") {
+    return null;
+  }
+
+  const trimmed = actorId.trim();
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (trimmed.length > 200) {
+    return trimmed.slice(0, 200);
   }
 
   return trimmed;

@@ -135,6 +135,9 @@ describe("SetConnectionStateUseCase", () => {
         previousStatus: "not_connected",
         nextStatus: "connected",
         changedAt: result.statusUpdatedAt,
+        reason: "manual",
+        actorType: "reviewer",
+        actorId: "demo-reviewer",
         connectedAccountLabel: "duck8823",
       },
     ]);
@@ -239,6 +242,49 @@ describe("SetConnectionStateUseCase", () => {
         status: "not_connected",
         statusUpdatedAt: result.statusUpdatedAt,
         connectedAccountLabel: null,
+      },
+    ]);
+  });
+
+  it("persists explicit transition reason and actor metadata", async () => {
+    const transitionRepository = new InMemoryTransactionalConnectionStateTransitionRepository({
+      "demo-reviewer": [
+        {
+          provider: "github",
+          status: "connected",
+          statusUpdatedAt: "2026-03-11T01:00:00.000Z",
+          connectedAccountLabel: "duck8823",
+        },
+      ],
+    });
+    const useCase = new SetConnectionStateUseCase({
+      connectionStateTransitionRepository: transitionRepository,
+      connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
+    });
+
+    const result = await useCase.execute({
+      reviewerId: "demo-reviewer",
+      provider: "github",
+      nextStatus: "reauth_required",
+      connectedAccountLabel: null,
+      transitionReason: "token-expired",
+      transitionActorType: "system",
+      transitionActorId: "oauth-token-monitor",
+    });
+
+    expect(result.status).toBe("reauth_required");
+    await expect(transitionRepository.listRecentByReviewerId("demo-reviewer")).resolves.toEqual([
+      {
+        transitionId: "transition-1",
+        reviewerId: "demo-reviewer",
+        provider: "github",
+        previousStatus: "connected",
+        nextStatus: "reauth_required",
+        changedAt: result.statusUpdatedAt,
+        reason: "token-expired",
+        actorType: "system",
+        actorId: "oauth-token-monitor",
+        connectedAccountLabel: "duck8823",
       },
     ]);
   });

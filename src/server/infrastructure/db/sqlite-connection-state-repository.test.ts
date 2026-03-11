@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { SqliteConnectionStateRepository } from "@/server/infrastructure/db/sqlite-connection-state-repository";
 
@@ -14,7 +15,9 @@ afterEach(async () => {
   );
 });
 
-async function createRepository() {
+async function createRepository(
+  options: { maxTransitionsPerReviewer?: number } = {},
+) {
   const root = await mkdtemp(path.join(os.tmpdir(), "locus-sqlite-connection-state-"));
   temporaryDirectories.push(root);
 
@@ -28,6 +31,7 @@ async function createRepository() {
     repository: new SqliteConnectionStateRepository({
       databasePath,
       legacyDataDirectory,
+      maxTransitionsPerReviewer: options.maxTransitionsPerReviewer,
     }),
   };
 }
@@ -184,6 +188,9 @@ describe("SqliteConnectionStateRepository", () => {
           previousStatus: "not_connected",
           nextStatus: "connected",
           changedAt: "2026-03-11T00:00:00.000Z",
+          reason: "manual",
+          actorType: "reviewer",
+          actorId: "demo-reviewer",
           connectedAccountLabel: "duck8823",
         },
       }),
@@ -202,6 +209,9 @@ describe("SqliteConnectionStateRepository", () => {
       provider: "github",
       previousStatus: "not_connected",
       nextStatus: "connected",
+      reason: "manual",
+      actorType: "reviewer",
+      actorId: "demo-reviewer",
     });
 
     const transitions = await repository.listRecentByReviewerId("demo-reviewer", {
@@ -231,6 +241,9 @@ describe("SqliteConnectionStateRepository", () => {
           previousStatus: "not_connected",
           nextStatus: "connected",
           changedAt: "invalid-date",
+          reason: "manual",
+          actorType: "reviewer",
+          actorId: "demo-reviewer",
           connectedAccountLabel: "duck8823",
         },
       })),
@@ -249,6 +262,9 @@ describe("SqliteConnectionStateRepository", () => {
       previousStatus: "not_connected",
       nextStatus: "connected",
       changedAt: "2026-03-11T00:00:00.000Z",
+      reason: "manual",
+      actorType: "reviewer",
+      actorId: "demo-reviewer",
       connectedAccountLabel: "duck8823",
     });
     await repository.appendTransition({
@@ -257,6 +273,9 @@ describe("SqliteConnectionStateRepository", () => {
       previousStatus: "connected",
       nextStatus: "reauth_required",
       changedAt: "2026-03-11T00:01:00.000Z",
+      reason: "token-expired",
+      actorType: "system",
+      actorId: "oauth-monitor",
       connectedAccountLabel: "duck8823",
     });
     await repository.appendTransition({
@@ -265,6 +284,9 @@ describe("SqliteConnectionStateRepository", () => {
       previousStatus: "planned",
       nextStatus: "planned",
       changedAt: "2026-03-11T00:02:00.000Z",
+      reason: "webhook",
+      actorType: "system",
+      actorId: "confluence-webhook",
       connectedAccountLabel: null,
     });
 
@@ -279,6 +301,11 @@ describe("SqliteConnectionStateRepository", () => {
       "github",
     ]);
     expect(allTransitions[0].nextStatus).toBe("planned");
+    expect(allTransitions[0]).toMatchObject({
+      reason: "webhook",
+      actorType: "system",
+      actorId: "confluence-webhook",
+    });
 
     const githubTransitions = await repository.listRecentByReviewerId("demo-reviewer", {
       provider: "github",
@@ -290,5 +317,128 @@ describe("SqliteConnectionStateRepository", () => {
       "reauth_required",
       "connected",
     ]);
+    expect(githubTransitions[0]).toMatchObject({
+      reason: "token-expired",
+      actorType: "system",
+      actorId: "oauth-monitor",
+    });
+  });
+
+  it("prunes older transitions when retention limit is exceeded", async () => {
+    const { repository } = await createRepository({
+      maxTransitionsPerReviewer: 3,
+    });
+
+    await repository.appendTransition({
+      reviewerId: "retention-reviewer",
+      provider: "github",
+      previousStatus: "not_connected",
+      nextStatus: "connected",
+      changedAt: "2026-03-11T00:00:00.000Z",
+      reason: "manual",
+      actorType: "reviewer",
+      actorId: "retention-reviewer",
+      connectedAccountLabel: "duck8823",
+    });
+    await repository.appendTransition({
+      reviewerId: "retention-reviewer",
+      provider: "github",
+      previousStatus: "connected",
+      nextStatus: "reauth_required",
+      changedAt: "2026-03-11T00:01:00.000Z",
+      reason: "token-expired",
+      actorType: "system",
+      actorId: "oauth-monitor",
+      connectedAccountLabel: "duck8823",
+    });
+    await repository.appendTransition({
+      reviewerId: "retention-reviewer",
+      provider: "github",
+      previousStatus: "reauth_required",
+      nextStatus: "connected",
+      changedAt: "2026-03-11T00:02:00.000Z",
+      reason: "manual",
+      actorType: "reviewer",
+      actorId: "retention-reviewer",
+      connectedAccountLabel: "duck8823",
+    });
+    await repository.appendTransition({
+      reviewerId: "retention-reviewer",
+      provider: "github",
+      previousStatus: "connected",
+      nextStatus: "reauth_required",
+      changedAt: "2026-03-11T00:03:00.000Z",
+      reason: "webhook",
+      actorType: "system",
+      actorId: "github-webhook",
+      connectedAccountLabel: "duck8823",
+    });
+
+    const transitions = await repository.listRecentByReviewerId("retention-reviewer", {
+      limit: 10,
+    });
+
+    expect(transitions).toHaveLength(3);
+    expect(transitions.map((transition) => transition.changedAt)).toEqual([
+      "2026-03-11T00:03:00.000Z",
+      "2026-03-11T00:02:00.000Z",
+      "2026-03-11T00:01:00.000Z",
+    ]);
+  });
+
+  it("adds transition audit columns for pre-existing databases and reads defaults", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "locus-sqlite-connection-state-"));
+    temporaryDirectories.push(root);
+
+    const databasePath = path.join(root, "data", "connection-state.sqlite");
+    await mkdir(path.dirname(databasePath), { recursive: true });
+
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE connection_state_transitions (
+        transition_id TEXT PRIMARY KEY,
+        reviewer_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        previous_status TEXT NOT NULL,
+        next_status TEXT NOT NULL,
+        changed_at TEXT NOT NULL,
+        connected_account_label TEXT
+      );
+      INSERT INTO connection_state_transitions (
+        transition_id,
+        reviewer_id,
+        provider,
+        previous_status,
+        next_status,
+        changed_at,
+        connected_account_label
+      ) VALUES (
+        'legacy-transition-1',
+        'legacy-reviewer',
+        'github',
+        'not_connected',
+        'connected',
+        '2026-03-11T00:00:00.000Z',
+        'duck8823'
+      );
+    `);
+    database.close();
+
+    const repository = new SqliteConnectionStateRepository({
+      databasePath,
+      legacyDataDirectory: path.join(root, "legacy"),
+    });
+
+    const transitions = await repository.listRecentByReviewerId("legacy-reviewer", {
+      limit: 10,
+    });
+
+    expect(transitions).toHaveLength(1);
+    expect(transitions[0]).toMatchObject({
+      transitionId: "legacy-transition-1",
+      reason: "manual",
+      actorType: "reviewer",
+      actorId: "legacy-reviewer",
+    });
   });
 });
