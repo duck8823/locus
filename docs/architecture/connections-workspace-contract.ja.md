@@ -24,8 +24,15 @@
 ```ts
 export interface ConnectionsWorkspaceConnectionDto {
   provider: "github" | "confluence" | "jira"
-  status: "not_connected" | "planned"
+  status: string
   authMode: "oauth" | "none"
+  statusUpdatedAt: string | null
+  connectedAccountLabel: string | null
+  stateSource: "catalog_default" | "persisted"
+  capabilities: {
+    supportsWebhook: boolean
+    supportsIssueContext: boolean
+  }
 }
 
 export interface ConnectionsWorkspaceDto {
@@ -48,11 +55,24 @@ export interface ConnectionsWorkspaceDto {
 
 - `not_connected`: モデル上は利用可能だが、まだ接続されていない
 - `planned`: このフェーズでは意図的に未提供
+- `connected`: 対象 reviewer の OAuth 接続が完了している
+- `reauth_required`: 既存接続が再認証を要求している
+- 将来の未知値はそのまま透過し、UI 側フォールバックで安全に表示する
 
 ### `authMode`
 
 - `oauth`: 本番では OAuth 接続を前提とする provider
 - `none`: 認証連携を持たない provider
+
+### `stateSource`
+
+- `catalog_default`: provider カタログ既定値から解決された状態
+- `persisted`: reviewer 単位の永続化状態（`.locus-data/connection-states`）から解決された状態
+
+### `capabilities`
+
+- `supportsWebhook`: provider からの inbound update を受け取れる
+- `supportsIssueContext`: issue/spec 文脈を review に付与できる
 
 ## 多言語化の責務境界
 
@@ -70,6 +90,6 @@ DTO 値自体は言語非依存のまま維持する。
 
 ## 次のステップ
 
-1. provider capability metadata（`supportsWebhook` / `supportsIssueContext`）を追加。
-2. reviewer/workspace 単位の接続状態を永続化。
+1. 状態遷移を制御する write-side の use case / action を追加。
+2. file-backed 実装を本番用の永続化基盤へ置き換え。
 3. prototype catalog を provider adapter 実装へ置き換え。

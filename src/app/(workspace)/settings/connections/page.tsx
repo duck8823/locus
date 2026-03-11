@@ -4,9 +4,9 @@ import { LocalizedDateTime } from "@/app/components/localized-date-time";
 import { resolveWorkspaceLocale } from "@/app/(workspace)/workspace-locale";
 import type {
   ConnectionProviderKey,
-  ConnectionStatus,
 } from "@/server/application/services/connection-catalog";
 import { loadConnectionsWorkspaceDto } from "@/server/presentation/api/load-connections-workspace";
+import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
 import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 
 const copyByLocale = {
@@ -24,9 +24,21 @@ const copyByLocale = {
     generatedAt: "Catalog generated at",
     statusLabel: "Status",
     authModeLabel: "Auth mode",
+    updatedAtLabel: "Updated at",
+    accountLabel: "Connected account",
+    stateSourceLabel: "State source",
+    capabilitiesLabel: "Capabilities",
+    supportsWebhook: "Webhook",
+    supportsIssueContext: "Issue context",
     statusByKey: {
       not_connected: "Not connected",
       planned: "Planned",
+      connected: "Connected",
+      reauth_required: "Re-auth required",
+    },
+    stateSourceByKey: {
+      catalog_default: "Catalog default",
+      persisted: "Persisted state",
     },
     providerByKey: {
       github: "GitHub",
@@ -56,9 +68,21 @@ const copyByLocale = {
     generatedAt: "カタログ生成時刻",
     statusLabel: "状態",
     authModeLabel: "認証方式",
+    updatedAtLabel: "更新時刻",
+    accountLabel: "接続アカウント",
+    stateSourceLabel: "状態ソース",
+    capabilitiesLabel: "機能",
+    supportsWebhook: "Webhook",
+    supportsIssueContext: "Issueコンテキスト",
     statusByKey: {
       not_connected: "未接続",
       planned: "計画中",
+      connected: "接続済み",
+      reauth_required: "再認証が必要",
+    },
+    stateSourceByKey: {
+      catalog_default: "カタログ既定値",
+      persisted: "永続化状態",
     },
     providerByKey: {
       github: "GitHub",
@@ -77,25 +101,68 @@ const copyByLocale = {
 } as const;
 
 function formatProvider(
-  provider: ConnectionProviderKey,
+  provider: ConnectionProviderKey | string,
   locale: keyof typeof copyByLocale,
 ): string {
-  return copyByLocale[locale].providerByKey[provider];
+  return copyByLocale[locale].providerByKey[provider as ConnectionProviderKey] ?? provider;
 }
 
 function formatStatus(
-  status: ConnectionStatus,
+  status: string,
   locale: keyof typeof copyByLocale,
 ): string {
-  return copyByLocale[locale].statusByKey[status];
+  const translated = copyByLocale[locale].statusByKey[status as keyof typeof copyByLocale.en.statusByKey];
+
+  if (translated) {
+    return translated;
+  }
+
+  return status.replaceAll("_", " ");
 }
 
 function formatAuthMode(
-  authMode: "oauth" | "none",
+  authMode: string,
   locale: keyof typeof copyByLocale,
 ): string {
   if (authMode === "oauth") {
     return "OAuth";
+  }
+
+  if (authMode === "none") {
+    return locale === "ja" ? "なし" : "None";
+  }
+
+  return authMode.replaceAll("_", " ");
+}
+
+function formatStateSource(
+  stateSource: "catalog_default" | "persisted",
+  locale: keyof typeof copyByLocale,
+): string {
+  return copyByLocale[locale].stateSourceByKey[stateSource];
+}
+
+function resolveReviewerId(viewerCookie: string | undefined): string {
+  const normalized = viewerCookie?.trim();
+
+  if (!normalized) {
+    return "anonymous";
+  }
+
+  return normalized;
+}
+
+function formatCapabilityFlag(enabled: boolean, locale: keyof typeof copyByLocale): string {
+  if (locale === "ja") {
+    return enabled ? "対応" : "未対応";
+  }
+
+  return enabled ? "Enabled" : "Disabled";
+}
+
+function formatConnectedAccountLabel(value: string | null, locale: keyof typeof copyByLocale): string {
+  if (value) {
+    return value;
   }
 
   return locale === "ja" ? "なし" : "None";
@@ -109,8 +176,11 @@ export default async function ConnectionsPage() {
     acceptLanguage: headerStore.get("accept-language"),
   });
   const copy = copyByLocale[workspaceLocale];
-  const viewerName = cookieStore.get("locus-demo-viewer")?.value ?? copy.signedOut;
-  const connectionsWorkspace = await loadConnectionsWorkspaceDto();
+  const viewerCookie = cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value;
+  const viewerName = viewerCookie ?? copy.signedOut;
+  const connectionsWorkspace = await loadConnectionsWorkspaceDto({
+    reviewerId: resolveReviewerId(viewerCookie),
+  });
 
   return (
     <main
@@ -231,8 +301,30 @@ export default async function ConnectionsPage() {
             <p style={{ color: "#9aa7d1" }}>
               {copy.authModeLabel}: {formatAuthMode(connection.authMode, workspaceLocale)}
             </p>
+            <p style={{ color: "#9aa7d1" }}>
+              {copy.stateSourceLabel}: {formatStateSource(connection.stateSource, workspaceLocale)}
+            </p>
+            <p style={{ color: "#9aa7d1" }}>
+              {copy.updatedAtLabel}:{" "}
+              {connection.statusUpdatedAt ? (
+                <LocalizedDateTime isoTimestamp={connection.statusUpdatedAt} />
+              ) : (
+                formatConnectedAccountLabel(null, workspaceLocale)
+              )}
+            </p>
+            <p style={{ color: "#9aa7d1" }}>
+              {copy.accountLabel}:{" "}
+              {formatConnectedAccountLabel(connection.connectedAccountLabel, workspaceLocale)}
+            </p>
+            <p style={{ color: "#9aa7d1" }}>
+              {copy.capabilitiesLabel}: {copy.supportsWebhook} (
+              {formatCapabilityFlag(connection.capabilities.supportsWebhook, workspaceLocale)}),{" "}
+              {copy.supportsIssueContext} (
+              {formatCapabilityFlag(connection.capabilities.supportsIssueContext, workspaceLocale)})
+            </p>
             <p style={{ color: "#9aa7d1", marginBottom: "0px" }}>
-              {copy.providerDescriptionByKey[connection.provider]}
+              {copy.providerDescriptionByKey[connection.provider as ConnectionProviderKey] ??
+                formatProvider(connection.provider, workspaceLocale)}
             </p>
           </article>
         ))}

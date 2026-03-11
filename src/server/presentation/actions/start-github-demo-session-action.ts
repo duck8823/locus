@@ -11,10 +11,9 @@ import {
   toGitHubDemoErrorCode,
   type GitHubDemoErrorCode,
 } from "./github-demo-error-code";
+import { DEMO_VIEWER_COOKIE_NAME } from "./demo-viewer-cookie-name";
 import { resolveDemoViewerName } from "./demo-viewer-name";
 import { WORKSPACE_LOCALE_COOKIE_NAME } from "./workspace-locale-cookie-name";
-
-const demoViewerCookieName = "locus-demo-viewer";
 
 function readTrimmedFormValue(formData: FormData, name: string): string {
   const value = formData.get(name);
@@ -137,7 +136,7 @@ export async function startGitHubDemoSessionAction(formData: FormData): Promise<
       });
     }
 
-    cookieStore.set(demoViewerCookieName, viewerName, {
+    cookieStore.set(DEMO_VIEWER_COOKIE_NAME, viewerName, {
       httpOnly: true,
       sameSite: "lax",
       path: "/",

@@ -31,6 +31,7 @@ import { requestReanalysisAction } from "@/server/presentation/actions/request-r
 import { selectReviewGroupAction } from "@/server/presentation/actions/select-review-group-action";
 import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 import { setReviewGroupStatusAction } from "@/server/presentation/actions/set-review-group-status-action";
+import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
 import {
   groupArchitectureNodes,
   type ArchitectureNodeGroups,
@@ -110,7 +111,7 @@ export default async function ReviewWorkspacePage({
   const { reviewId } = await params;
   const headerStore = await headers();
   const cookieStore = await cookies();
-  const viewerName = cookieStore.get("locus-demo-viewer")?.value;
+  const viewerName = cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value;
   const workspaceLocale = resolveWorkspaceLocale({
     preferredLocale: cookieStore.get("locus-ui-locale")?.value ?? null,
     acceptLanguage: headerStore.get("accept-language"),

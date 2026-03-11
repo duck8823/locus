@@ -24,8 +24,15 @@ Out of scope:
 ```ts
 export interface ConnectionsWorkspaceConnectionDto {
   provider: "github" | "confluence" | "jira"
-  status: "not_connected" | "planned"
+  status: string
   authMode: "oauth" | "none"
+  statusUpdatedAt: string | null
+  connectedAccountLabel: string | null
+  stateSource: "catalog_default" | "persisted"
+  capabilities: {
+    supportsWebhook: boolean
+    supportsIssueContext: boolean
+  }
 }
 
 export interface ConnectionsWorkspaceDto {
@@ -48,11 +55,24 @@ export interface ConnectionsWorkspaceDto {
 
 - `not_connected`: provider is available in the model, but not currently connected
 - `planned`: provider is intentionally not yet enabled in this phase
+- `connected`: OAuth handshake has succeeded for the current reviewer
+- `reauth_required`: a previously connected provider now requires re-authentication
+- unknown future values are passed through as-is so UI can apply fallback rendering safely
 
 ### `authMode`
 
 - `oauth`: provider is expected to use OAuth in production
 - `none`: provider intentionally has no auth integration path
+
+### `stateSource`
+
+- `catalog_default`: value came from static provider catalog defaults
+- `persisted`: value came from reviewer-scoped persisted state (`.locus-data/connection-states`)
+
+### `capabilities`
+
+- `supportsWebhook`: provider can trigger inbound updates
+- `supportsIssueContext`: provider can enrich review context with issue/spec data
 
 ## Localization Boundary
 
@@ -70,6 +90,6 @@ When extending this contract:
 
 ## Next Steps
 
-1. Add provider capability metadata (`supportsWebhook`, `supportsIssueContext`).
-2. Introduce persisted connection state per reviewer/workspace.
+1. Add write-side use case and action for controlled state transitions.
+2. Replace file-backed state with production persistence.
 3. Replace prototype catalog entries with provider adapters.

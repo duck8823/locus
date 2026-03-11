@@ -1,9 +1,17 @@
 import { GetConnectionsWorkspaceUseCase } from "@/server/application/usecases/get-connections-workspace";
+import { getDependencies } from "@/server/composition/dependencies";
 import type { ConnectionsWorkspaceDto } from "@/server/presentation/dto/connections-workspace-dto";
 
-export async function loadConnectionsWorkspaceDto(): Promise<ConnectionsWorkspaceDto> {
-  const useCase = new GetConnectionsWorkspaceUseCase();
-  const result = await useCase.execute();
+export interface LoadConnectionsWorkspaceInput {
+  reviewerId: string;
+}
+
+export async function loadConnectionsWorkspaceDto(
+  input: LoadConnectionsWorkspaceInput,
+): Promise<ConnectionsWorkspaceDto> {
+  const { connectionStateRepository } = getDependencies();
+  const useCase = new GetConnectionsWorkspaceUseCase({ connectionStateRepository });
+  const result = await useCase.execute({ reviewerId: input.reviewerId });
 
   return {
     generatedAt: new Date().toISOString(),
@@ -11,6 +19,10 @@ export async function loadConnectionsWorkspaceDto(): Promise<ConnectionsWorkspac
       provider: connection.provider,
       status: connection.status,
       authMode: connection.authMode,
+      statusUpdatedAt: connection.statusUpdatedAt,
+      connectedAccountLabel: connection.connectedAccountLabel,
+      stateSource: connection.stateSource,
+      capabilities: connection.capabilities,
     })),
   };
 }
