@@ -27,6 +27,9 @@ export interface ConnectionsWorkspaceTransitionDto {
   previousStatus: string
   nextStatus: string
   changedAt: string
+  reason: "manual" | "token-expired" | "webhook"
+  actorType: "reviewer" | "system"
+  actorId: string | null
   connectedAccountLabel: string | null
 }
 
@@ -42,6 +45,8 @@ export interface ConnectionsWorkspaceConnectionDto {
     supportsIssueContext: boolean
   }
   recentTransitions: ConnectionsWorkspaceTransitionDto[]
+  recentTransitionsTotalCount: number
+  recentTransitionsHasMore: boolean
 }
 
 export interface ConnectionsWorkspaceDto {
@@ -89,6 +94,24 @@ export interface ConnectionsWorkspaceDto {
 - 状態の変化と、その時点で有効だった接続アカウント名を保持する
 - prototype 段階のトラブルシュートと観測性向上を目的とする
 
+### `reason`
+
+- `manual`: 設定画面からの手動変更で発生した遷移
+- `token-expired`: トークン有効性チェックにより発生した遷移
+- `webhook`: provider の Webhook 入力により発生した遷移
+
+### `actorType` / `actorId`
+
+- `actorType` は遷移主体（`reviewer` / `system`）を表す
+- `actorId` はレビュアー識別子またはシステムソース識別子を保持する
+- `actorType=reviewer` では、未指定時に reviewerId を補完する
+
+### `recentTransitionsTotalCount` / `recentTransitionsHasMore`
+
+- `recentTransitions` は UI 可読性のためページングされる
+- `recentTransitionsTotalCount` は provider 単位・フィルター適用後の総件数
+- `recentTransitionsHasMore` は次ページの有無を示す
+
 ## 多言語化の責務境界
 
 provider/status/auth の表示ラベルは presentation (`src/app/**`) 側でローカライズする。
@@ -107,12 +130,12 @@ DTO 値自体は言語非依存のまま維持する。
 
 - read path は provider の既定値と reviewer 単位の永続化状態をマージして返す。
 - write path は `SetConnectionStateUseCase` + `setConnectionStateAction` で制御された状態遷移を扱う。
-- 状態遷移は reviewer 単位の監査履歴として追加保存する。
+- 状態遷移は reason / actor 付きで reviewer 単位の監査履歴として保存する。
+- 遷移履歴は SQLite 側で保持件数を圧縮する（`LOCUS_CONNECTION_TRANSITION_MAX_RETAINED`, 既定 200）。
 - provider metadata は `ConnectionProviderCatalog` port と prototype adapter 経由で解決する。
 - 接続状態の永続化は SQLite ベースに移行し、legacy の file record は遅延移行で読み込む。
 
 ## 次のステップ
 
-1. 遷移履歴に reason（`manual` / `token-expired` / `webhook`）と actor 情報を追加する。
-2. 遷移履歴の保持期間・圧縮ポリシーを定義する。
-3. prototype 前提の OAuth 表現を実トークン/コールバックフローに置き換える。
+1. `token-expired` / `webhook` の遷移を実ランタイムイベントから発火させる（現状は手動経路のみ）。
+2. prototype 前提の OAuth 表現を実トークン/コールバックフローに置き換える。

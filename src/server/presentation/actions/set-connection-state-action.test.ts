@@ -31,6 +31,9 @@ vi.mock("@/server/application/usecases/set-connection-state", () => ({
       provider: string;
       nextStatus: string;
       connectedAccountLabel: string | null;
+      transitionReason: "manual";
+      transitionActorType: "reviewer";
+      transitionActorId: string;
     }) {
       return executeMock(input);
     }
@@ -67,6 +70,9 @@ describe("setConnectionStateAction", () => {
       provider: "github",
       nextStatus: "connected",
       connectedAccountLabel: "duck8823",
+      transitionReason: "manual",
+      transitionActorType: "reviewer",
+      transitionActorId: "demo-reviewer",
     });
     expect(revalidatePathMock).toHaveBeenCalledWith("/settings/connections");
     expect(redirectMock).toHaveBeenCalledWith("/settings/connections");
@@ -87,6 +93,9 @@ describe("setConnectionStateAction", () => {
       provider: "github",
       nextStatus: "reauth_required",
       connectedAccountLabel: null,
+      transitionReason: "manual",
+      transitionActorType: "reviewer",
+      transitionActorId: "demo-reviewer",
     });
   });
 

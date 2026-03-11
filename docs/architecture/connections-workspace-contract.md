@@ -27,6 +27,9 @@ export interface ConnectionsWorkspaceTransitionDto {
   previousStatus: string
   nextStatus: string
   changedAt: string
+  reason: "manual" | "token-expired" | "webhook"
+  actorType: "reviewer" | "system"
+  actorId: string | null
   connectedAccountLabel: string | null
 }
 
@@ -42,6 +45,8 @@ export interface ConnectionsWorkspaceConnectionDto {
     supportsIssueContext: boolean
   }
   recentTransitions: ConnectionsWorkspaceTransitionDto[]
+  recentTransitionsTotalCount: number
+  recentTransitionsHasMore: boolean
 }
 
 export interface ConnectionsWorkspaceDto {
@@ -89,6 +94,24 @@ export interface ConnectionsWorkspaceDto {
 - Records status movement plus effective account label at transition time
 - Intended for troubleshooting and local observability in prototype mode
 
+### `reason`
+
+- `manual`: transition was requested from settings UI
+- `token-expired`: transition was produced by token health checks
+- `webhook`: transition was produced by an inbound provider webhook
+
+### `actorType` / `actorId`
+
+- `actorType` identifies who initiated the transition (`reviewer` or `system`)
+- `actorId` stores reviewer identity or system source identifier when available
+- For `reviewer`, `actorId` defaults to reviewerId if caller omits it
+
+### `recentTransitionsTotalCount` / `recentTransitionsHasMore`
+
+- `recentTransitions` is paged for UI readability
+- `recentTransitionsTotalCount` reports the provider-level filtered total
+- `recentTransitionsHasMore` indicates whether the next page exists
+
 ## Localization Boundary
 
 Provider/status/auth labels are localized in presentation (`src/app/**`), not in DTO values.
@@ -107,12 +130,12 @@ When extending this contract:
 
 - Read path merges static provider defaults with reviewer-scoped persisted states.
 - Write path supports controlled transitions via `SetConnectionStateUseCase` + `setConnectionStateAction`.
-- State transitions are now appended to reviewer-scoped transition audit history.
+- State transitions are appended to reviewer-scoped audit history with reason/actor metadata.
+- Transition history is retained with SQLite-side pruning (`LOCUS_CONNECTION_TRANSITION_MAX_RETAINED`, default: 200).
 - Provider metadata now goes through a `ConnectionProviderCatalog` port with a prototype adapter implementation.
 - Connection state persistence now uses a SQLite-backed repository with lazy migration from legacy file records.
 
 ## Next Steps
 
-1. Add transition audit reason fields (`manual` / `token-expired` / `webhook`) and actor attribution.
-2. Define retention policy and pruning strategy for transition history.
-3. Replace prototype OAuth assumptions with real token/callback flows.
+1. Emit `token-expired` / `webhook` transitions from real runtime events (currently manual path is wired).
+2. Replace prototype OAuth assumptions with real token/callback flows.

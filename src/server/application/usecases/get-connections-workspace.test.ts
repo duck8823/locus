@@ -80,8 +80,60 @@ class InMemoryConnectionStateTransitionRepository
 
   async listRecentByReviewerId(
     reviewerId: string,
+    options: {
+      provider?: string;
+      reason?: "manual" | "token-expired" | "webhook";
+      limit?: number;
+      offset?: number;
+    } = {},
   ): Promise<PersistedConnectionStateTransition[]> {
-    return this.recordsByReviewerId[reviewerId] ?? [];
+    const providerFilter = options.provider?.trim() || null;
+    const reasonFilter = options.reason ?? null;
+    const offset =
+      typeof options.offset === "number" && options.offset > 0
+        ? Math.floor(options.offset)
+        : 0;
+    const limit =
+      typeof options.limit === "number" && options.limit > 0
+        ? Math.floor(options.limit)
+        : 20;
+
+    const transitions = (this.recordsByReviewerId[reviewerId] ?? []).filter((transition) => {
+      if (providerFilter && transition.provider !== providerFilter) {
+        return false;
+      }
+
+      if (reasonFilter && transition.reason !== reasonFilter) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return transitions.slice(offset, offset + limit);
+  }
+
+  async countByReviewerId(
+    reviewerId: string,
+    options: {
+      provider?: string;
+      reason?: "manual" | "token-expired" | "webhook";
+    } = {},
+  ): Promise<number> {
+    const providerFilter = options.provider?.trim() || null;
+    const reasonFilter = options.reason ?? null;
+
+    return (this.recordsByReviewerId[reviewerId] ?? []).filter((transition) => {
+      if (providerFilter && transition.provider !== providerFilter) {
+        return false;
+      }
+
+      if (reasonFilter && transition.reason !== reasonFilter) {
+        return false;
+      }
+
+      return true;
+    }).length;
   }
 }
 
@@ -109,6 +161,9 @@ describe("GetConnectionsWorkspaceUseCase", () => {
             previousStatus: "not_connected",
             nextStatus: "connected",
             changedAt: "2026-03-11T00:00:00.000Z",
+            reason: "manual",
+            actorType: "reviewer",
+            actorId: "demo-reviewer",
             connectedAccountLabel: "duck8823",
           },
         ],
@@ -136,9 +191,14 @@ describe("GetConnectionsWorkspaceUseCase", () => {
             previousStatus: "not_connected",
             nextStatus: "connected",
             changedAt: "2026-03-11T00:00:00.000Z",
+            reason: "manual",
+            actorType: "reviewer",
+            actorId: "demo-reviewer",
             connectedAccountLabel: "duck8823",
           },
         ],
+        recentTransitionsTotalCount: 1,
+        recentTransitionsHasMore: false,
       },
       {
         provider: "confluence",
@@ -152,6 +212,8 @@ describe("GetConnectionsWorkspaceUseCase", () => {
           supportsIssueContext: true,
         },
         recentTransitions: [],
+        recentTransitionsTotalCount: 0,
+        recentTransitionsHasMore: false,
       },
       {
         provider: "jira",
@@ -165,6 +227,8 @@ describe("GetConnectionsWorkspaceUseCase", () => {
           supportsIssueContext: true,
         },
         recentTransitions: [],
+        recentTransitionsTotalCount: 0,
+        recentTransitionsHasMore: false,
       },
     ]);
   });
@@ -191,6 +255,8 @@ describe("GetConnectionsWorkspaceUseCase", () => {
       provider: "github",
       status: "temporarily_locked",
       stateSource: "persisted",
+      recentTransitionsTotalCount: 0,
+      recentTransitionsHasMore: false,
     });
   });
 
@@ -222,6 +288,8 @@ describe("GetConnectionsWorkspaceUseCase", () => {
       provider: "github",
       status: "reauth_required",
       statusUpdatedAt: "2026-03-11T01:00:00.000Z",
+      recentTransitionsTotalCount: 0,
+      recentTransitionsHasMore: false,
     });
   });
 
@@ -235,6 +303,9 @@ describe("GetConnectionsWorkspaceUseCase", () => {
         previousStatus: "connected",
         nextStatus: "reauth_required",
         changedAt: `2026-03-11T00:00:0${index}.000Z`,
+        reason: index % 2 === 0 ? "manual" : "webhook",
+        actorType: index % 2 === 0 ? "reviewer" : "system",
+        actorId: index % 2 === 0 ? "history-reviewer" : "github-webhook",
         connectedAccountLabel: "duck8823",
       }),
     );
@@ -266,5 +337,150 @@ describe("GetConnectionsWorkspaceUseCase", () => {
       "transition-3",
       "transition-4",
     ]);
+    expect(result.connections[0].recentTransitionsTotalCount).toBe(7);
+    expect(result.connections[0].recentTransitionsHasMore).toBe(true);
+  });
+
+  it("filters transitions by reason and paginates per provider", async () => {
+    const transitions: PersistedConnectionStateTransition[] = [
+      {
+        transitionId: "transition-1",
+        reviewerId: "filter-reviewer",
+        provider: "github",
+        previousStatus: "not_connected",
+        nextStatus: "connected",
+        changedAt: "2026-03-11T00:04:00.000Z",
+        reason: "manual",
+        actorType: "reviewer",
+        actorId: "filter-reviewer",
+        connectedAccountLabel: "duck8823",
+      },
+      {
+        transitionId: "transition-2",
+        reviewerId: "filter-reviewer",
+        provider: "github",
+        previousStatus: "connected",
+        nextStatus: "reauth_required",
+        changedAt: "2026-03-11T00:03:00.000Z",
+        reason: "webhook",
+        actorType: "system",
+        actorId: "github-webhook",
+        connectedAccountLabel: "duck8823",
+      },
+      {
+        transitionId: "transition-3",
+        reviewerId: "filter-reviewer",
+        provider: "github",
+        previousStatus: "reauth_required",
+        nextStatus: "connected",
+        changedAt: "2026-03-11T00:02:00.000Z",
+        reason: "manual",
+        actorType: "reviewer",
+        actorId: "filter-reviewer",
+        connectedAccountLabel: "duck8823",
+      },
+      {
+        transitionId: "transition-4",
+        reviewerId: "filter-reviewer",
+        provider: "github",
+        previousStatus: "connected",
+        nextStatus: "reauth_required",
+        changedAt: "2026-03-11T00:01:00.000Z",
+        reason: "webhook",
+        actorType: "system",
+        actorId: "github-webhook",
+        connectedAccountLabel: "duck8823",
+      },
+    ];
+
+    const useCase = new GetConnectionsWorkspaceUseCase({
+      connectionStateRepository: new InMemoryConnectionStateRepository({
+        "filter-reviewer": [
+          {
+            provider: "github",
+            status: "reauth_required",
+            statusUpdatedAt: "2026-03-11T00:04:00.000Z",
+            connectedAccountLabel: "duck8823",
+          },
+        ],
+      }),
+      connectionStateTransitionRepository: new InMemoryConnectionStateTransitionRepository({
+        "filter-reviewer": transitions,
+      }),
+      connectionProviderCatalog,
+    });
+
+    const result = await useCase.execute({
+      reviewerId: "filter-reviewer",
+      transitionReason: "webhook",
+      transitionPage: 1,
+      transitionPageSize: 1,
+    });
+
+    expect(result.connections[0].recentTransitions).toHaveLength(1);
+    expect(result.connections[0].recentTransitions[0]).toMatchObject({
+      transitionId: "transition-2",
+      reason: "webhook",
+      actorType: "system",
+      actorId: "github-webhook",
+    });
+    expect(result.connections[0].recentTransitionsTotalCount).toBe(2);
+    expect(result.connections[0].recentTransitionsHasMore).toBe(true);
+
+    const secondPage = await useCase.execute({
+      reviewerId: "filter-reviewer",
+      transitionReason: "webhook",
+      transitionPage: 2,
+      transitionPageSize: 1,
+    });
+
+    expect(secondPage.connections[0].recentTransitions).toHaveLength(1);
+    expect(secondPage.connections[0].recentTransitions[0]?.transitionId).toBe("transition-4");
+    expect(secondPage.connections[0].recentTransitionsHasMore).toBe(false);
+  });
+
+  it("does not expose next-page when request is clamped to max transition page", async () => {
+    const transitions: PersistedConnectionStateTransition[] = Array.from(
+      { length: 200 },
+      (_, index) => ({
+        transitionId: `transition-${index}`,
+        reviewerId: "clamp-reviewer",
+        provider: "github",
+        previousStatus: "connected",
+        nextStatus: "reauth_required",
+        changedAt: `2026-03-11T00:00:${String(200 - index).padStart(2, "0")}.000Z`,
+        reason: "manual",
+        actorType: "reviewer",
+        actorId: "clamp-reviewer",
+        connectedAccountLabel: "duck8823",
+      }),
+    );
+
+    const useCase = new GetConnectionsWorkspaceUseCase({
+      connectionStateRepository: new InMemoryConnectionStateRepository({
+        "clamp-reviewer": [
+          {
+            provider: "github",
+            status: "reauth_required",
+            statusUpdatedAt: "2026-03-11T00:00:59.000Z",
+            connectedAccountLabel: "duck8823",
+          },
+        ],
+      }),
+      connectionStateTransitionRepository: new InMemoryConnectionStateTransitionRepository({
+        "clamp-reviewer": transitions,
+      }),
+      connectionProviderCatalog,
+    });
+
+    const result = await useCase.execute({
+      reviewerId: "clamp-reviewer",
+      transitionPage: 999,
+      transitionPageSize: 5,
+    });
+
+    expect(result.connections[0].recentTransitions).toHaveLength(5);
+    expect(result.connections[0].recentTransitionsTotalCount).toBe(200);
+    expect(result.connections[0].recentTransitionsHasMore).toBe(false);
   });
 });

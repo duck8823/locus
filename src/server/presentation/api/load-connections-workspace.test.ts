@@ -47,9 +47,14 @@ describe("loadConnectionsWorkspaceDto", () => {
               previousStatus: "not_connected",
               nextStatus: "connected",
               changedAt: "2026-03-11T00:00:00.000Z",
+              reason: "manual",
+              actorType: "reviewer",
+              actorId: "demo-reviewer",
               connectedAccountLabel: "duck8823",
             },
           ],
+          recentTransitionsTotalCount: 1,
+          recentTransitionsHasMore: false,
         },
       ],
     });
@@ -58,7 +63,12 @@ describe("loadConnectionsWorkspaceDto", () => {
   it("loads connection workspace dto with persisted fields", async () => {
     const dto = await loadConnectionsWorkspaceDto({ reviewerId: "demo-reviewer" });
 
-    expect(executeMock).toHaveBeenCalledWith({ reviewerId: "demo-reviewer" });
+    expect(executeMock).toHaveBeenCalledWith({
+      reviewerId: "demo-reviewer",
+      transitionReason: undefined,
+      transitionPage: undefined,
+      transitionPageSize: undefined,
+    });
     expect(dto.connections).toEqual([
       {
         provider: "github",
@@ -77,11 +87,32 @@ describe("loadConnectionsWorkspaceDto", () => {
             previousStatus: "not_connected",
             nextStatus: "connected",
             changedAt: "2026-03-11T00:00:00.000Z",
+            reason: "manual",
+            actorType: "reviewer",
+            actorId: "demo-reviewer",
             connectedAccountLabel: "duck8823",
           },
         ],
+        recentTransitionsTotalCount: 1,
+        recentTransitionsHasMore: false,
       },
     ]);
     expect(Number.isNaN(Date.parse(dto.generatedAt))).toBe(false);
+  });
+
+  it("forwards transition history filter and paging inputs", async () => {
+    await loadConnectionsWorkspaceDto({
+      reviewerId: "demo-reviewer",
+      transitionReason: "webhook",
+      transitionPage: 2,
+      transitionPageSize: 10,
+    });
+
+    expect(executeMock).toHaveBeenLastCalledWith({
+      reviewerId: "demo-reviewer",
+      transitionReason: "webhook",
+      transitionPage: 2,
+      transitionPageSize: 10,
+    });
   });
 });

@@ -8,6 +8,9 @@ export interface ConnectionsWorkspaceTransitionDto {
   previousStatus: string;
   nextStatus: string;
   changedAt: string;
+  reason: "manual" | "token-expired" | "webhook";
+  actorType: "reviewer" | "system";
+  actorId: string | null;
   connectedAccountLabel: string | null;
 }
 
@@ -20,6 +23,8 @@ export interface ConnectionsWorkspaceConnectionDto {
   stateSource: "catalog_default" | "persisted";
   capabilities: ConnectionCapabilities;
   recentTransitions: ConnectionsWorkspaceTransitionDto[];
+  recentTransitionsTotalCount: number;
+  recentTransitionsHasMore: boolean;
 }
 
 export interface ConnectionsWorkspaceDto {
