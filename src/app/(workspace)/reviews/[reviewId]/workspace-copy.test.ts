@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   workspaceCopyByLocale,
   formatArchitectureColumnLabel,
+  formatBusinessContextConfidence,
+  formatBusinessContextInferenceSource,
   formatBusinessContextSourceType,
   formatBusinessContextStatus,
   formatReviewGroupStatus,
@@ -19,7 +21,10 @@ describe("workspace-copy", () => {
     expect(formatArchitectureColumnLabel("upstream", "ja")).toBe("上流");
     expect(formatBusinessContextSourceType("github_issue", "ja")).toBe("GitHub Issue");
     expect(formatBusinessContextStatus("candidate", "ja")).toBe("候補");
+    expect(formatBusinessContextConfidence("high", "ja")).toBe("高");
+    expect(formatBusinessContextInferenceSource("branch_pattern", "ja")).toBe("ブランチ規約");
     expect(workspaceCopyByLocale.ja.text.semanticFocus).toBe("注目点");
     expect(workspaceCopyByLocale.en.text.semanticSpanDelta).toBe("span delta");
+    expect(workspaceCopyByLocale.ja.text.semanticLocationDetails).toBe("位置情報");
   });
 });

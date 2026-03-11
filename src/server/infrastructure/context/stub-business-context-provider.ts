@@ -225,6 +225,22 @@ function createIssueHref(reference: ExtractedIssueReference): string {
   return `https://github.com/${reference.owner}/${reference.repository}/issues/${reference.issueNumber}`;
 }
 
+function toIssueConfidence(reference: ExtractedIssueReference): "high" | "medium" | "low" {
+  if (
+    reference.source === "issue_url" ||
+    reference.source === "repo_shorthand" ||
+    reference.source === "same_repo_closing_keyword"
+  ) {
+    return "high";
+  }
+
+  if (reference.source === "same_repo_shorthand" || reference.source === "branch_pattern") {
+    return "medium";
+  }
+
+  return "low";
+}
+
 export class StubBusinessContextProvider implements BusinessContextProvider {
   async loadSnapshotForReview(input: {
     reviewId: string;
@@ -269,6 +285,8 @@ export class StubBusinessContextProvider implements BusinessContextProvider {
           contextId: `ctx-gh-issue-${issueHash}`,
           sourceType: "github_issue",
           status: issueReference.status,
+          confidence: toIssueConfidence(issueReference),
+          inferenceSource: issueReference.source,
           title: createIssueTitle(issueReference),
           summary: toIssueSummary(issueReference),
           href: createIssueHref(issueReference),
@@ -279,6 +297,8 @@ export class StubBusinessContextProvider implements BusinessContextProvider {
         contextId: `ctx-gh-issue-${sharedSuffix}`,
         sourceType: "github_issue",
         status: "unavailable",
+        confidence: "low",
+        inferenceSource: "none",
         title: "No GitHub issue context is linked yet",
         summary: "Issue context requires a GitHub-hosted review source.",
         href: null,
@@ -289,6 +309,8 @@ export class StubBusinessContextProvider implements BusinessContextProvider {
       contextId: `ctx-confluence-${sharedSuffix}`,
       sourceType: "confluence_page",
       status: "unavailable",
+      confidence: "low",
+      inferenceSource: "none",
       title: "No Confluence page linked",
       summary:
         "Confluence linking is intentionally deferred; this panel defines the future contract.",

@@ -10,6 +10,15 @@ type UnsupportedFileReason = "unsupported_language" | "parser_failed" | "binary_
 type AnalysisJobReason = "initial_ingestion" | "code_host_webhook";
 type BusinessContextSourceType = "github_issue" | "confluence_page";
 type BusinessContextStatus = "linked" | "candidate" | "unavailable";
+type BusinessContextConfidence = "high" | "medium" | "low";
+type BusinessContextInferenceSource =
+  | "issue_url"
+  | "repo_shorthand"
+  | "same_repo_shorthand"
+  | "same_repo_closing_keyword"
+  | "branch_pattern"
+  | "pull_request_fallback"
+  | "none";
 
 export const workspaceCopyByLocale = {
   en: {
@@ -85,6 +94,8 @@ export const workspaceCopyByLocale = {
       noBusinessContextItems: "No requirement links were found.",
       businessContextStatus: "Status",
       businessContextSource: "Source",
+      businessContextConfidence: "Confidence",
+      businessContextInferenceSource: "Inference",
       architectureScopeHint: "MVP v0 shows only immediate neighbors.",
       noRelatedNodes: "No related nodes.",
       switchToRelatedGroup: "Switch to related change group",
@@ -98,6 +109,7 @@ export const workspaceCopyByLocale = {
       semanticAfter: "after",
       semanticFocus: "focus",
       semanticSpanDelta: "span delta",
+      semanticLocationDetails: "location details",
     },
     actions: {
       markStatusPrefix: "Mark",
@@ -165,6 +177,20 @@ export const workspaceCopyByLocale = {
       linked: "Linked",
       candidate: "Candidate",
       unavailable: "Unavailable",
+    },
+    businessContextConfidence: {
+      high: "High",
+      medium: "Medium",
+      low: "Low",
+    },
+    businessContextInferenceSource: {
+      issue_url: "Issue URL",
+      repo_shorthand: "owner/repo#issue",
+      same_repo_shorthand: "#issue shorthand",
+      same_repo_closing_keyword: "closing keyword",
+      branch_pattern: "branch pattern",
+      pull_request_fallback: "PR fallback",
+      none: "none",
     },
   },
   ja: {
@@ -239,6 +265,8 @@ export const workspaceCopyByLocale = {
       noBusinessContextItems: "関連する要件リンクは見つかりませんでした。",
       businessContextStatus: "状態",
       businessContextSource: "ソース",
+      businessContextConfidence: "確信度",
+      businessContextInferenceSource: "推定根拠",
       architectureScopeHint: "MVP v0 は直接の隣接ノードのみ表示します。",
       noRelatedNodes: "関連ノードはありません。",
       switchToRelatedGroup: "関連する変更グループに切り替える",
@@ -252,6 +280,7 @@ export const workspaceCopyByLocale = {
       semanticAfter: "変更後",
       semanticFocus: "注目点",
       semanticSpanDelta: "行数差分",
+      semanticLocationDetails: "位置情報",
     },
     actions: {
       markStatusPrefix: "状態を",
@@ -319,6 +348,20 @@ export const workspaceCopyByLocale = {
       linked: "連携済み",
       candidate: "候補",
       unavailable: "未連携",
+    },
+    businessContextConfidence: {
+      high: "高",
+      medium: "中",
+      low: "低",
+    },
+    businessContextInferenceSource: {
+      issue_url: "Issue URL",
+      repo_shorthand: "owner/repo#issue",
+      same_repo_shorthand: "#issue 形式",
+      same_repo_closing_keyword: "close/fix/resolve 形式",
+      branch_pattern: "ブランチ規約",
+      pull_request_fallback: "PR番号フォールバック",
+      none: "なし",
     },
   },
 } as const;
@@ -436,5 +479,27 @@ export function formatBusinessContextStatus(
   return (
     copy.businessContextStatus[status as BusinessContextStatus] ??
     status.replaceAll("_", " ")
+  );
+}
+
+export function formatBusinessContextConfidence(
+  confidence: string,
+  locale: WorkspaceLocale,
+): string {
+  const copy = workspaceCopyByLocale[locale];
+  return (
+    copy.businessContextConfidence[confidence as BusinessContextConfidence] ??
+    confidence.replaceAll("_", " ")
+  );
+}
+
+export function formatBusinessContextInferenceSource(
+  inferenceSource: string,
+  locale: WorkspaceLocale,
+): string {
+  const copy = workspaceCopyByLocale[locale];
+  return (
+    copy.businessContextInferenceSource[inferenceSource as BusinessContextInferenceSource] ??
+    inferenceSource.replaceAll("_", " ")
   );
 }

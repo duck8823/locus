@@ -27,6 +27,15 @@ export interface ReviewWorkspaceBusinessContextItemDto {
   contextId: string
   sourceType: "github_issue" | "confluence_page"
   status: "linked" | "candidate" | "unavailable"
+  confidence: "high" | "medium" | "low"
+  inferenceSource:
+    | "issue_url"
+    | "repo_shorthand"
+    | "same_repo_shorthand"
+    | "same_repo_closing_keyword"
+    | "branch_pattern"
+    | "pull_request_fallback"
+    | "none"
   title: string
   summary: string | null
   href: string | null
@@ -48,6 +57,13 @@ export interface ReviewWorkspaceBusinessContextDto {
   - `linked`: confirmed requirement link
   - `candidate`: plausible context candidate (needs user confirmation)
   - `unavailable`: no linked context currently available
+- `confidence`
+  - `high`: explicit signals (issue URL, owner/repo shorthand, closing keywords)
+  - `medium`: inferred but plausible signals (same-repo shorthand, branch pattern)
+  - `low`: weak fallback or unavailable placeholder
+- `inferenceSource`
+  - deterministic reason code for why the row exists (`issue_url`, `branch_pattern`, etc.)
+  - `none` is reserved for unavailable placeholder rows
 
 ## Prototype Behavior
 

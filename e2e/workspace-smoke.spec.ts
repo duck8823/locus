@@ -29,6 +29,9 @@ test("opens the seed workspace without external integrations", async ({ page }) 
   await expect(
     page.getByRole("heading", { level: 2, name: /Detail pane|詳細/ }),
   ).toBeVisible();
+  await expect(
+    page.getByText(/location details|位置情報/).first(),
+  ).toBeVisible();
 });
 
 test("switches locale on marketing and workspace pages", async ({ page }) => {

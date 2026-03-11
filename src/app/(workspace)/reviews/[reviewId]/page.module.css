@@ -296,6 +296,40 @@
   overflow-wrap: break-word;
 }
 
+.semanticLocationDetails {
+  border: 1px solid rgba(154, 167, 209, 0.12);
+  border-radius: 10px;
+  background: rgba(18, 25, 51, 0.32);
+}
+
+.semanticLocationSummary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+}
+
+.semanticLocationSummary::-webkit-details-marker {
+  display: none;
+}
+
+.semanticLocationSummary::after {
+  content: "▾";
+  color: var(--muted);
+  margin-left: auto;
+}
+
+.semanticLocationDetails:not([open]) .semanticLocationSummary::after {
+  transform: rotate(-90deg);
+}
+
+.semanticLocationContent {
+  display: grid;
+  gap: 6px;
+  padding: 0 10px 10px;
+}
+
 .reanalysisError {
   color: #fda4af;
   overflow-wrap: break-word;

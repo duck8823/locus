@@ -4,6 +4,15 @@ export interface BusinessContextItem {
   contextId: string;
   sourceType: "github_issue" | "confluence_page";
   status: "linked" | "candidate" | "unavailable";
+  confidence: "high" | "medium" | "low";
+  inferenceSource:
+    | "issue_url"
+    | "repo_shorthand"
+    | "same_repo_shorthand"
+    | "same_repo_closing_keyword"
+    | "branch_pattern"
+    | "pull_request_fallback"
+    | "none";
   title: string;
   summary: string | null;
   href: string | null;
