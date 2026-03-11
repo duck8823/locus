@@ -98,6 +98,30 @@ async function readReviewSessionSummary(dataDir) {
   }
 }
 
+async function readConnectionStateSummary(dataDir) {
+  const connectionStatesDir = path.join(dataDir, "connection-states");
+
+  try {
+    const fileNames = await readdir(connectionStatesDir);
+
+    return {
+      connectionStatesDir,
+      exists: true,
+      total: fileNames.filter((fileName) => fileName.endsWith(".json")).length,
+    };
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return {
+        connectionStatesDir,
+        exists: false,
+        total: 0,
+      };
+    }
+
+    throw error;
+  }
+}
+
 function assertSafeDataDirectory(dataDir) {
   if (path.basename(dataDir) !== ".locus-data") {
     throw new Error(
@@ -108,9 +132,10 @@ function assertSafeDataDirectory(dataDir) {
 }
 
 async function showStatus(dataDir) {
-  const [jobsSummary, reviewSessionSummary] = await Promise.all([
+  const [jobsSummary, reviewSessionSummary, connectionStateSummary] = await Promise.all([
     readJobsSummary(dataDir),
     readReviewSessionSummary(dataDir),
+    readConnectionStateSummary(dataDir),
   ]);
 
   console.log(`Data directory: ${dataDir}`);
@@ -121,6 +146,11 @@ async function showStatus(dataDir) {
   );
   console.log(
     `Analysis jobs: ${jobsSummary.total}${jobsSummary.exists ? "" : " (jobs.json missing)"}`,
+  );
+  console.log(
+    `Connection state profiles: ${connectionStateSummary.total}${
+      connectionStateSummary.exists ? "" : " (directory missing)"
+    }`,
   );
 
   if (jobsSummary.byStatus.size > 0) {
@@ -145,9 +175,51 @@ async function reseedData(dataDir) {
 
   const reviewSessionsDir = path.join(dataDir, "review-sessions");
   const analysisJobsDir = path.join(dataDir, "analysis-jobs");
+  const connectionStatesDir = path.join(dataDir, "connection-states");
   await mkdir(reviewSessionsDir, { recursive: true });
   await mkdir(analysisJobsDir, { recursive: true });
+  await mkdir(connectionStatesDir, { recursive: true });
   await writeFile(path.join(analysisJobsDir, "jobs.json"), JSON.stringify({ jobs: [] }, null, 2));
+  const seededAt = "2026-03-11T00:00:00.000Z";
+
+  await Promise.all([
+    writeFile(
+      path.join(connectionStatesDir, `${encodeURIComponent("Demo reviewer")}.json`),
+      JSON.stringify(
+        {
+          reviewerId: "Demo reviewer",
+          connections: [
+            {
+              provider: "github",
+              status: "connected",
+              statusUpdatedAt: seededAt,
+              connectedAccountLabel: "duck8823",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    ),
+    writeFile(
+      path.join(connectionStatesDir, `${encodeURIComponent("デモレビュアー")}.json`),
+      JSON.stringify(
+        {
+          reviewerId: "デモレビュアー",
+          connections: [
+            {
+              provider: "github",
+              status: "connected",
+              statusUpdatedAt: seededAt,
+              connectedAccountLabel: "duck8823",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    ),
+  ]);
 
   console.log("Recreated baseline demo data directories.");
   console.log("Seed review session will be generated automatically after opening the seed demo.");
