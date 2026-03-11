@@ -75,7 +75,7 @@ describe("FileConnectionStateRepository", () => {
     expect(result).toEqual([]);
   });
 
-  it("normalizes invalid statusUpdatedAt into epoch fallback", async () => {
+  it("normalizes invalid statusUpdatedAt into null fallback", async () => {
     const { dataDirectory, repository } = await createRepository();
     await mkdir(dataDirectory, { recursive: true });
     await writeFile(
@@ -98,7 +98,7 @@ describe("FileConnectionStateRepository", () => {
       {
         provider: "github",
         status: "connected",
-        statusUpdatedAt: new Date(0).toISOString(),
+        statusUpdatedAt: null,
         connectedAccountLabel: "duck8823",
       },
     ]);

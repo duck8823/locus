@@ -9,7 +9,7 @@ class InMemoryConnectionStateRepository implements ConnectionStateRepository {
       {
         provider: string;
         status: string;
-        statusUpdatedAt: string;
+        statusUpdatedAt: string | null;
         connectedAccountLabel: string | null;
       }[]
     > = {},

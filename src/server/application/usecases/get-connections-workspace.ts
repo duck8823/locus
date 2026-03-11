@@ -67,7 +67,11 @@ export class GetConnectionsWorkspaceUseCase {
   }
 }
 
-function toEpochMs(value: string): number {
+function toEpochMs(value: string | null): number {
+  if (value === null) {
+    return 0;
+  }
+
   const parsed = Date.parse(value);
 
   if (Number.isNaN(parsed)) {

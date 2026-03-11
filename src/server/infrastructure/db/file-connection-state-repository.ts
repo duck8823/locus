@@ -74,15 +74,15 @@ function normalizeStatus(status: unknown): string {
   return status;
 }
 
-function normalizeStatusUpdatedAt(statusUpdatedAt: unknown): string {
+function normalizeStatusUpdatedAt(statusUpdatedAt: unknown): string | null {
   if (!isNonEmptyString(statusUpdatedAt)) {
-    return new Date(0).toISOString();
+    return null;
   }
 
   const epochMs = Date.parse(statusUpdatedAt);
 
   if (Number.isNaN(epochMs)) {
-    return new Date(0).toISOString();
+    return null;
   }
 
   return new Date(epochMs).toISOString();
