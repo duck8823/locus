@@ -17,6 +17,15 @@ class InMemoryConnectionStateRepository implements ConnectionStateRepository {
   async saveForReviewerId(reviewerId: string, states: PersistedConnectionState[]): Promise<void> {
     this.recordsByReviewerId[reviewerId] = states;
   }
+
+  async updateForReviewerId(
+    reviewerId: string,
+    updater: (states: PersistedConnectionState[]) => PersistedConnectionState[],
+  ): Promise<PersistedConnectionState[]> {
+    const nextStates = updater(this.recordsByReviewerId[reviewerId] ?? []);
+    this.recordsByReviewerId[reviewerId] = nextStates;
+    return nextStates;
+  }
 }
 
 class InMemoryConnectionProviderCatalog implements ConnectionProviderCatalog {

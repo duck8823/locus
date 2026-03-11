@@ -31,6 +31,27 @@ class InMemoryConnectionStateRepository implements ConnectionStateRepository {
   ): Promise<void> {
     this.recordsByReviewerId[reviewerId] = states;
   }
+
+  async updateForReviewerId(
+    reviewerId: string,
+    updater: (
+      states: {
+        provider: string;
+        status: string;
+        statusUpdatedAt: string | null;
+        connectedAccountLabel: string | null;
+      }[],
+    ) => {
+      provider: string;
+      status: string;
+      statusUpdatedAt: string | null;
+      connectedAccountLabel: string | null;
+    }[],
+  ) {
+    const nextStates = updater(this.recordsByReviewerId[reviewerId] ?? []);
+    this.recordsByReviewerId[reviewerId] = nextStates;
+    return nextStates;
+  }
 }
 
 const connectionProviderCatalog = new PrototypeConnectionProviderCatalog();

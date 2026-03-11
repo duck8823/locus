@@ -22,6 +22,37 @@ export class FileConnectionStateRepository implements ConnectionStateRepository 
   }
 
   async findByReviewerId(reviewerId: string): Promise<PersistedConnectionState[]> {
+    return this.readStatesForReviewerId(reviewerId);
+  }
+
+  async saveForReviewerId(
+    reviewerId: string,
+    states: PersistedConnectionState[],
+  ): Promise<void> {
+    await this.updateForReviewerId(reviewerId, () => states);
+  }
+
+  async updateForReviewerId(
+    reviewerId: string,
+    updater: (states: PersistedConnectionState[]) => PersistedConnectionState[],
+  ): Promise<PersistedConnectionState[]> {
+    let savedStates: PersistedConnectionState[] = [];
+
+    await this.enqueueWrite(reviewerId, async () => {
+      const currentStates = await this.readStatesForReviewerId(reviewerId);
+      const nextStates = updater(currentStates);
+      savedStates = normalizeStates(nextStates);
+      await this.writeStatesForReviewerId(reviewerId, savedStates);
+    });
+
+    return savedStates;
+  }
+
+  private getFilePath(reviewerId: string): string {
+    return path.join(this.dataDirectory, `${encodeURIComponent(reviewerId)}.json`);
+  }
+
+  private async readStatesForReviewerId(reviewerId: string): Promise<PersistedConnectionState[]> {
     const filePath = this.getFilePath(reviewerId);
 
     try {
@@ -32,10 +63,7 @@ export class FileConnectionStateRepository implements ConnectionStateRepository 
         return [];
       }
 
-      return parsed.connections.flatMap((record) => {
-        const normalized = normalizeConnectionStateRecord(record);
-        return normalized ? [normalized] : [];
-      });
+      return normalizeStates(parsed.connections);
     } catch (error) {
       if (isMissingFileError(error)) {
         return [];
@@ -45,36 +73,34 @@ export class FileConnectionStateRepository implements ConnectionStateRepository 
     }
   }
 
-  async saveForReviewerId(
+  private async writeStatesForReviewerId(
     reviewerId: string,
     states: PersistedConnectionState[],
   ): Promise<void> {
-    const normalizedStates = states.flatMap((record) => {
-      const normalized = normalizeConnectionStateRecord(record);
-      return normalized ? [normalized] : [];
-    });
-
     const content = JSON.stringify(
       {
         reviewerId,
-        connections: normalizedStates,
+        connections: states,
       },
       null,
       2,
     );
 
+    await mkdir(this.dataDirectory, { recursive: true });
+
+    const filePath = this.getFilePath(reviewerId);
+    const tempFilePath = `${filePath}.${randomUUID()}.tmp`;
+
+    await writeFile(tempFilePath, content);
+    await rename(tempFilePath, filePath);
+  }
+
+  private async enqueueWrite(
+    reviewerId: string,
+    action: () => Promise<void>,
+  ): Promise<void> {
     const previousWrite = this.writeQueues.get(reviewerId) ?? Promise.resolve();
-    const nextWrite = previousWrite
-      .catch(() => undefined)
-      .then(async () => {
-        await mkdir(this.dataDirectory, { recursive: true });
-
-        const filePath = this.getFilePath(reviewerId);
-        const tempFilePath = `${filePath}.${randomUUID()}.tmp`;
-
-        await writeFile(tempFilePath, content);
-        await rename(tempFilePath, filePath);
-      });
+    const nextWrite = previousWrite.catch(() => undefined).then(action);
 
     this.writeQueues.set(reviewerId, nextWrite);
 
@@ -85,10 +111,6 @@ export class FileConnectionStateRepository implements ConnectionStateRepository 
         this.writeQueues.delete(reviewerId);
       }
     }
-  }
-
-  private getFilePath(reviewerId: string): string {
-    return path.join(this.dataDirectory, `${encodeURIComponent(reviewerId)}.json`);
   }
 }
 
@@ -127,6 +149,13 @@ function normalizeConnectionStateRecord(record: unknown): PersistedConnectionSta
     statusUpdatedAt: normalizeStatusUpdatedAt(record.statusUpdatedAt),
     connectedAccountLabel: normalizeConnectedAccountLabel(record.connectedAccountLabel),
   };
+}
+
+function normalizeStates(records: unknown[]): PersistedConnectionState[] {
+  return records.flatMap((record) => {
+    const normalized = normalizeConnectionStateRecord(record);
+    return normalized ? [normalized] : [];
+  });
 }
 
 function normalizeProvider(provider: unknown): string | null {

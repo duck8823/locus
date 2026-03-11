@@ -166,4 +166,48 @@ describe("FileConnectionStateRepository", () => {
 
     await expect(repository.findByReviewerId("saved-reviewer")).resolves.toEqual(parsed.connections);
   });
+
+  it("serializes updateForReviewerId calls and preserves concurrent provider updates", async () => {
+    const { repository } = await createRepository();
+
+    await Promise.all([
+      repository.updateForReviewerId("demo-reviewer", (states) => [
+        ...states.filter((state) => state.provider !== "github"),
+        {
+          provider: "github",
+          status: "connected",
+          statusUpdatedAt: "2026-03-11T00:00:00.000Z",
+          connectedAccountLabel: "duck8823",
+        },
+      ]),
+      repository.updateForReviewerId("demo-reviewer", (states) => [
+        ...states.filter((state) => state.provider !== "jira"),
+        {
+          provider: "jira",
+          status: "not_connected",
+          statusUpdatedAt: "2026-03-11T00:00:01.000Z",
+          connectedAccountLabel: null,
+        },
+      ]),
+    ]);
+
+    const result = await repository.findByReviewerId("demo-reviewer");
+    expect(result).toHaveLength(2);
+    expect(result).toEqual(
+      expect.arrayContaining([
+        {
+          provider: "github",
+          status: "connected",
+          statusUpdatedAt: "2026-03-11T00:00:00.000Z",
+          connectedAccountLabel: "duck8823",
+        },
+        {
+          provider: "jira",
+          status: "not_connected",
+          statusUpdatedAt: "2026-03-11T00:00:01.000Z",
+          connectedAccountLabel: null,
+        },
+      ]),
+    );
+  });
 });

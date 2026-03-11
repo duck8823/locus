@@ -37,34 +37,40 @@ export class SetConnectionStateUseCase {
       throw new Error(`Unsupported connection provider: ${input.provider}`);
     }
 
-    const states = await this.dependencies.connectionStateRepository.findByReviewerId(input.reviewerId);
-    const currentState = selectLatestProviderState(states, input.provider);
-    const currentStatus = currentState?.status ?? providerEntry.status;
+    const savedStates = await this.dependencies.connectionStateRepository.updateForReviewerId(
+      input.reviewerId,
+      (states) => {
+        const currentState = selectLatestProviderState(states, input.provider);
+        const currentStatus = currentState?.status ?? providerEntry.status;
 
-    assertConnectionStatusTransition(currentStatus, input.nextStatus);
+        assertConnectionStatusTransition(currentStatus, input.nextStatus);
 
-    const statusUpdatedAt = new Date().toISOString();
-    const nextState: PersistedConnectionState = {
-      provider: input.provider,
-      status: input.nextStatus,
-      statusUpdatedAt,
-      connectedAccountLabel: normalizeConnectedAccountLabel({
-        current: currentState?.connectedAccountLabel ?? null,
-        nextStatus: input.nextStatus,
-        requested: input.connectedAccountLabel,
-      }),
-    };
+        const nextState: PersistedConnectionState = {
+          provider: input.provider,
+          status: input.nextStatus,
+          statusUpdatedAt: new Date().toISOString(),
+          connectedAccountLabel: normalizeConnectedAccountLabel({
+            current: currentState?.connectedAccountLabel ?? null,
+            nextStatus: input.nextStatus,
+            requested: input.connectedAccountLabel,
+          }),
+        };
 
-    const remainingStates = states.filter((state) => state.provider !== input.provider);
-    await this.dependencies.connectionStateRepository.saveForReviewerId(input.reviewerId, [
-      ...remainingStates,
-      nextState,
-    ]);
+        const remainingStates = states.filter((state) => state.provider !== input.provider);
+        return [...remainingStates, nextState];
+      },
+    );
+
+    const nextState = selectLatestProviderState(savedStates, input.provider);
+
+    if (!nextState) {
+      throw new Error(`Failed to persist connection state for provider: ${input.provider}`);
+    }
 
     return {
       provider: nextState.provider,
       status: nextState.status as WritableConnectionStatus,
-      statusUpdatedAt,
+      statusUpdatedAt: nextState.statusUpdatedAt ?? new Date(0).toISOString(),
       connectedAccountLabel: nextState.connectedAccountLabel,
     };
   }
