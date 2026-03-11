@@ -438,4 +438,49 @@ describe("GetConnectionsWorkspaceUseCase", () => {
     expect(secondPage.connections[0].recentTransitions[0]?.transitionId).toBe("transition-4");
     expect(secondPage.connections[0].recentTransitionsHasMore).toBe(false);
   });
+
+  it("does not expose next-page when request is clamped to max transition page", async () => {
+    const transitions: PersistedConnectionStateTransition[] = Array.from(
+      { length: 200 },
+      (_, index) => ({
+        transitionId: `transition-${index}`,
+        reviewerId: "clamp-reviewer",
+        provider: "github",
+        previousStatus: "connected",
+        nextStatus: "reauth_required",
+        changedAt: `2026-03-11T00:00:${String(200 - index).padStart(2, "0")}.000Z`,
+        reason: "manual",
+        actorType: "reviewer",
+        actorId: "clamp-reviewer",
+        connectedAccountLabel: "duck8823",
+      }),
+    );
+
+    const useCase = new GetConnectionsWorkspaceUseCase({
+      connectionStateRepository: new InMemoryConnectionStateRepository({
+        "clamp-reviewer": [
+          {
+            provider: "github",
+            status: "reauth_required",
+            statusUpdatedAt: "2026-03-11T00:00:59.000Z",
+            connectedAccountLabel: "duck8823",
+          },
+        ],
+      }),
+      connectionStateTransitionRepository: new InMemoryConnectionStateTransitionRepository({
+        "clamp-reviewer": transitions,
+      }),
+      connectionProviderCatalog,
+    });
+
+    const result = await useCase.execute({
+      reviewerId: "clamp-reviewer",
+      transitionPage: 999,
+      transitionPageSize: 5,
+    });
+
+    expect(result.connections[0].recentTransitions).toHaveLength(5);
+    expect(result.connections[0].recentTransitionsTotalCount).toBe(200);
+    expect(result.connections[0].recentTransitionsHasMore).toBe(false);
+  });
 });

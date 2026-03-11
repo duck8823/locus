@@ -63,6 +63,7 @@ export class GetConnectionsWorkspaceUseCase {
     const transitionReason = normalizeTransitionReasonFilter(input.transitionReason);
     const transitionPage = normalizeTransitionPage(input.transitionPage);
     const transitionPageSize = normalizeTransitionPageSize(input.transitionPageSize);
+    const canAdvanceTransitionPage = transitionPage < MAX_TRANSITION_PAGE;
     const transitionStartIndex = (transitionPage - 1) * transitionPageSize;
     const transitionEndIndex = transitionStartIndex + transitionPageSize;
     const catalogConnections = this.dependencies.connectionProviderCatalog.listProviders();
@@ -141,7 +142,7 @@ export class GetConnectionsWorkspaceUseCase {
           capabilities: catalogConnection.capabilities,
           recentTransitions,
           recentTransitionsTotalCount: totalCount,
-          recentTransitionsHasMore: totalCount > transitionEndIndex,
+          recentTransitionsHasMore: canAdvanceTransitionPage && totalCount > transitionEndIndex,
         };
       }),
     };
