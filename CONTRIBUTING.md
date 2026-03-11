@@ -44,3 +44,11 @@ Open or update an ADR before making one of these changes:
 - [ ] English and Japanese docs stay consistent when both are affected
 - [ ] Cross-links between language variants are updated if needed
 - [ ] README / docs updated when the documented direction changes
+- [ ] AI review loop completed (Gemini + Codex) or blocking reason documented
+
+## AI Review Workflow
+
+See:
+
+- [`docs/operations/ai-review-workflow.md`](docs/operations/ai-review-workflow.md)
+- [`docs/operations/ai-review-workflow.ja.md`](docs/operations/ai-review-workflow.ja.md)
