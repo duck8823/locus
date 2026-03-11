@@ -6,7 +6,9 @@ import type {
   ConnectionProviderKey,
 } from "@/server/application/services/connection-catalog";
 import { loadConnectionsWorkspaceDto } from "@/server/presentation/api/load-connections-workspace";
+import { listConnectionStateTransitions } from "@/server/presentation/api/list-connection-state-transitions";
 import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
+import { setConnectionStateAction } from "@/server/presentation/actions/set-connection-state-action";
 import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 
 const copyByLocale = {
@@ -30,6 +32,11 @@ const copyByLocale = {
     capabilitiesLabel: "Capabilities",
     supportsWebhook: "Webhook",
     supportsIssueContext: "Issue context",
+    transitionLabel: "Change state",
+    transitionButton: "Apply",
+    transitionUnavailable: "State transition is not available for this provider in current status.",
+    connectedAccountInputLabel: "Account label (optional)",
+    connectedAccountPlaceholder: "e.g. duck8823",
     statusByKey: {
       not_connected: "Not connected",
       planned: "Planned",
@@ -74,6 +81,11 @@ const copyByLocale = {
     capabilitiesLabel: "機能",
     supportsWebhook: "Webhook",
     supportsIssueContext: "Issueコンテキスト",
+    transitionLabel: "状態変更",
+    transitionButton: "適用",
+    transitionUnavailable: "現在の状態では、この provider の状態変更はできません。",
+    connectedAccountInputLabel: "接続アカウント名（任意）",
+    connectedAccountPlaceholder: "例: duck8823",
     statusByKey: {
       not_connected: "未接続",
       planned: "計画中",
@@ -118,6 +130,13 @@ function formatStatus(
   }
 
   return status.replaceAll("_", " ");
+}
+
+function formatTransitionOption(
+  status: string,
+  locale: keyof typeof copyByLocale,
+): string {
+  return formatStatus(status, locale);
 }
 
 function formatAuthMode(
@@ -178,8 +197,9 @@ export default async function ConnectionsPage() {
   const copy = copyByLocale[workspaceLocale];
   const viewerCookie = cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value;
   const viewerName = viewerCookie ?? copy.signedOut;
+  const reviewerId = resolveReviewerId(viewerCookie);
   const connectionsWorkspace = await loadConnectionsWorkspaceDto({
-    reviewerId: resolveReviewerId(viewerCookie),
+    reviewerId,
   });
 
   return (
@@ -280,22 +300,28 @@ export default async function ConnectionsPage() {
           gap: "16px",
         }}
       >
-        {connectionsWorkspace.connections.map((connection) => (
-          <article
-            key={connection.provider}
-            style={{
-              border: "1px solid rgba(154, 167, 209, 0.16)",
-              borderRadius: "18px",
-              background: "rgba(18, 25, 51, 0.78)",
-              padding: "20px",
-              display: "grid",
-              gap: "8px",
-            }}
-          >
+        {connectionsWorkspace.connections.map((connection) => {
+          const availableTransitions = listConnectionStateTransitions(connection.status);
+
+          return (
+            <article
+              key={connection.provider}
+              style={{
+                border: "1px solid rgba(154, 167, 209, 0.16)",
+                borderRadius: "18px",
+                background: "rgba(18, 25, 51, 0.78)",
+                padding: "20px",
+                display: "grid",
+                gap: "8px",
+              }}
+            >
             <h2 style={{ marginBottom: "0px" }}>
               {formatProvider(connection.provider, workspaceLocale)}
             </h2>
-            <p style={{ color: "#9aa7d1" }}>
+            <p
+              data-testid={`connection-status-${connection.provider}`}
+              style={{ color: "#9aa7d1" }}
+            >
               {copy.statusLabel}: {formatStatus(connection.status, workspaceLocale)}
             </p>
             <p style={{ color: "#9aa7d1" }}>
@@ -326,8 +352,76 @@ export default async function ConnectionsPage() {
               {copy.providerDescriptionByKey[connection.provider as ConnectionProviderKey] ??
                 formatProvider(connection.provider, workspaceLocale)}
             </p>
-          </article>
-        ))}
+            {availableTransitions.length > 0 ? (
+              <form action={setConnectionStateAction} style={{ display: "grid", gap: "8px", marginTop: "4px" }}>
+                <input type="hidden" name="reviewerId" value={reviewerId} />
+                <input type="hidden" name="provider" value={connection.provider} />
+                <input type="hidden" name="redirectPath" value="/settings/connections" />
+                <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
+                  {copy.transitionLabel}
+                  <select
+                    name="nextStatus"
+                    defaultValue={availableTransitions[0]}
+                    data-testid={`connection-transition-select-${connection.provider}`}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      marginTop: "4px",
+                      background: "rgba(14, 21, 43, 0.96)",
+                      color: "white",
+                      border: "1px solid rgba(154, 167, 209, 0.24)",
+                      borderRadius: "10px",
+                      padding: "8px 10px",
+                    }}
+                  >
+                    {availableTransitions.map((status) => (
+                      <option key={status} value={status}>
+                        {formatTransitionOption(status, workspaceLocale)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
+                  {copy.connectedAccountInputLabel}
+                  <input
+                    name="connectedAccountLabel"
+                    defaultValue={connection.connectedAccountLabel ?? ""}
+                    placeholder={copy.connectedAccountPlaceholder}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      marginTop: "4px",
+                      background: "rgba(14, 21, 43, 0.96)",
+                      color: "white",
+                      border: "1px solid rgba(154, 167, 209, 0.24)",
+                      borderRadius: "10px",
+                      padding: "8px 10px",
+                    }}
+                  />
+                </label>
+                <button
+                  type="submit"
+                  data-testid={`connection-transition-submit-${connection.provider}`}
+                  style={{
+                    border: "1px solid rgba(124, 156, 255, 0.65)",
+                    borderRadius: "10px",
+                    background: "rgba(94, 123, 255, 0.16)",
+                    color: "white",
+                    minHeight: "34px",
+                    cursor: "pointer",
+                  }}
+                >
+                  {copy.transitionButton}
+                </button>
+              </form>
+            ) : (
+              <p style={{ color: "#9aa7d1", marginBottom: "0px" }}>
+                {copy.transitionUnavailable}
+              </p>
+            )}
+            </article>
+          );
+        })}
       </section>
     </main>
   );
