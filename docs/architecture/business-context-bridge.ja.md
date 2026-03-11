@@ -52,7 +52,10 @@ export interface ReviewWorkspaceBusinessContextDto {
 ## 現行プロトタイプ挙動
 
 - `StubBusinessContextProvider` が決定的な placeholder コンテキストを返す。
-- GitHub ソースのレビューでは「GitHub Issue候補 1件 + Confluence未連携 1件」を返す。
+- GitHub ソースのレビューでは PR タイトルから Issue 参照を推定する。
+  - `owner/repo#123` と GitHub Issue URL は `linked` として返す
+  - 同一リポジトリの `#123` は `candidate` として返す
+  - 明示参照がない場合は PR 番号を使った deterministic な候補を返す
 - GitHub 以外のソースでは unavailable のみ返す。
 
 ## 拡張ポリシー

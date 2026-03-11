@@ -52,7 +52,10 @@ export interface ReviewWorkspaceBusinessContextDto {
 ## Prototype Behavior
 
 - A `StubBusinessContextProvider` emits deterministic placeholder context.
-- GitHub-backed reviews receive one candidate GitHub issue link and one unavailable Confluence row.
+- GitHub-backed reviews parse PR title metadata to infer issue links:
+  - explicit `owner/repo#123` and GitHub issue URLs are surfaced as `linked`
+  - same-repository `#123` shorthand is surfaced as `candidate`
+  - when no reference exists, a deterministic fallback candidate (PR number) is emitted
 - Non-GitHub sources receive unavailable rows only.
 
 ## Evolution Rules

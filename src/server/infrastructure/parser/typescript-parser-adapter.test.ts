@@ -129,11 +129,13 @@ export function compute(a: number, b: number): number {
     expect(diff.items[0]?.bodySummary).toBe("Body changed");
   });
 
-  it("supports only TypeScript snapshots", () => {
+  it("supports TypeScript and JavaScript snapshots", () => {
     const adapter = new TypeScriptParserAdapter();
 
     expect(adapter.supports(createSnapshot({ language: "typescript" }))).toBe(true);
     expect(adapter.supports(createSnapshot({ language: "tsx", filePath: "src/demo.tsx" }))).toBe(true);
+    expect(adapter.supports(createSnapshot({ language: "javascript", filePath: "src/demo.js" }))).toBe(true);
+    expect(adapter.supports(createSnapshot({ language: "jsx", filePath: "src/demo.jsx" }))).toBe(true);
     expect(
       adapter.supports(
         createSnapshot({
@@ -142,6 +144,66 @@ export function compute(a: number, b: number): number {
         }),
       ),
     ).toBe(false);
+  });
+
+  it("detects callable changes in JavaScript and JSX files", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const beforeJavaScript = createSnapshot({
+      filePath: "src/run-workflow.js",
+      language: "javascript",
+      revision: "before",
+      content: `
+export function runWorkflow(value) {
+  return normalize(value);
+}
+`.trim(),
+    });
+    const afterJavaScript = createSnapshot({
+      filePath: "src/run-workflow.js",
+      language: "javascript",
+      revision: "after",
+      content: `
+export function runWorkflow(value) {
+  return normalize(value.trim());
+}
+`.trim(),
+    });
+    const beforeJsx = createSnapshot({
+      filePath: "src/header.jsx",
+      language: "jsx",
+      revision: "before",
+      content: `
+export function Header() {
+  return <h1>Locus</h1>;
+}
+`.trim(),
+    });
+    const afterJsx = createSnapshot({
+      filePath: "src/header.jsx",
+      language: "jsx",
+      revision: "after",
+      content: `
+export function Header() {
+  return <h1 data-locale="ja">Locus</h1>;
+}
+`.trim(),
+    });
+
+    const jsDiff = await adapter.diff({
+      before: await adapter.parse(beforeJavaScript),
+      after: await adapter.parse(afterJavaScript),
+    });
+    const jsxDiff = await adapter.diff({
+      before: await adapter.parse(beforeJsx),
+      after: await adapter.parse(afterJsx),
+    });
+
+    expect(jsDiff.items).toHaveLength(1);
+    expect(jsDiff.items[0]?.symbolKey).toBe("function::<root>::runWorkflow");
+    expect(jsDiff.items[0]?.changeType).toBe("modified");
+    expect(jsxDiff.items).toHaveLength(1);
+    expect(jsxDiff.items[0]?.symbolKey).toBe("function::<root>::Header");
+    expect(jsxDiff.items[0]?.changeType).toBe("modified");
   });
 
   it("does not create standalone diffs for nested local callables", async () => {
@@ -708,6 +770,43 @@ export function runValidation(value: string): boolean {
 
     expect(diff.items).toHaveLength(1);
     expect(diff.items[0]?.references).toContain("function::<root>::validateInput");
+    expect(diff.items[0]?.references).toContain("function::<root>::validateEmail");
+  });
+
+  it("normalizes imported owner aliases for static method references", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const before = createSnapshot({
+      revision: "before",
+      content: `
+import { UserService as Service } from "./user-service";
+
+export function runTasks(): void {
+  Service.updateProfile();
+}
+`.trim(),
+    });
+    const after = createSnapshot({
+      revision: "after",
+      content: `
+import { UserService as Service } from "./user-service";
+
+export function runTasks(): void {
+  Service.updateProfile();
+  Service.cleanup();
+}
+`.trim(),
+    });
+
+    const diff = await adapter.diff({
+      before: await adapter.parse(before),
+      after: await adapter.parse(after),
+    });
+    const references = diff.items[0]?.references ?? [];
+
+    expect(diff.items).toHaveLength(1);
+    expect(references).toContain("method::Service::static::cleanup");
+    expect(references).toContain("method::UserService::static::cleanup");
+    expect(references).toContain("function::<root>::cleanup");
   });
 
   it("tracks namespace-qualified static call references", async () => {
