@@ -67,10 +67,14 @@ export class SetConnectionStateUseCase {
       throw new Error(`Failed to persist connection state for provider: ${input.provider}`);
     }
 
+    if (!nextState.statusUpdatedAt) {
+      throw new Error(`Persisted state is missing statusUpdatedAt for provider: ${input.provider}`);
+    }
+
     return {
       provider: nextState.provider,
       status: nextState.status as WritableConnectionStatus,
-      statusUpdatedAt: nextState.statusUpdatedAt ?? new Date(0).toISOString(),
+      statusUpdatedAt: nextState.statusUpdatedAt,
       connectedAccountLabel: nextState.connectedAccountLabel,
     };
   }
