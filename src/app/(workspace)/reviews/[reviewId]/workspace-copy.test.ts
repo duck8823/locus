@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   formatArchitectureColumnLabel,
+  formatBusinessContextSourceType,
+  formatBusinessContextStatus,
   formatReviewGroupStatus,
   formatSemanticChangeType,
   formatSemanticSymbolKind,
@@ -14,5 +16,7 @@ describe("workspace-copy", () => {
     expect(formatSemanticSymbolKind("method", "ja")).toBe("メソッド");
     expect(formatUnsupportedReason("parser_failed", "ja")).toBe("パーサー失敗");
     expect(formatArchitectureColumnLabel("upstream", "ja")).toBe("上流");
+    expect(formatBusinessContextSourceType("github_issue", "ja")).toBe("GitHub Issue");
+    expect(formatBusinessContextStatus("candidate", "ja")).toBe("候補");
   });
 });

@@ -120,7 +120,12 @@ If you want to exercise a real GitHub OAuth handshake from `/settings/connection
 
 ```bash
 export GITHUB_OAUTH_CLIENT_ID=your-github-oauth-client-id
+export GITHUB_OAUTH_CLIENT_SECRET=your-github-oauth-client-secret
 export GITHUB_OAUTH_SCOPE="repo read:org"
+
+# Optional but recommended: connection-token encryption key
+# format: base64:<32-byte-key>  or  64-char hex
+export LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEY=base64:...
 ```
 
 Without `GITHUB_OAUTH_CLIENT_ID`, the connections page uses a local demo OAuth fallback so you can validate the state machine without external setup.
@@ -173,6 +178,7 @@ npm run demo:data:reseed   # recreate baseline directories + empty job queue
 - [`docs/architecture/web-application-blueprint.md`](docs/architecture/web-application-blueprint.md) / [`docs/architecture/web-application-blueprint.ja.md`](docs/architecture/web-application-blueprint.ja.md)
 - [`docs/architecture/semantic-analysis-pipeline.md`](docs/architecture/semantic-analysis-pipeline.md) / [`docs/architecture/semantic-analysis-pipeline.ja.md`](docs/architecture/semantic-analysis-pipeline.ja.md)
 - [`docs/architecture/connections-workspace-contract.md`](docs/architecture/connections-workspace-contract.md) / [`docs/architecture/connections-workspace-contract.ja.md`](docs/architecture/connections-workspace-contract.ja.md)
+- [`docs/architecture/business-context-bridge.md`](docs/architecture/business-context-bridge.md) / [`docs/architecture/business-context-bridge.ja.md`](docs/architecture/business-context-bridge.ja.md)
 - [`docs/performance/analysis-benchmark-baseline.md`](docs/performance/analysis-benchmark-baseline.md) / [`docs/performance/analysis-benchmark-baseline.ja.md`](docs/performance/analysis-benchmark-baseline.ja.md)
 - [`docs/testing/exploratory-test-playbook.md`](docs/testing/exploratory-test-playbook.md) / [`docs/testing/exploratory-test-playbook.ja.md`](docs/testing/exploratory-test-playbook.ja.md)
 - [`docs/testing/exploratory-test-session-2026-03-11.md`](docs/testing/exploratory-test-session-2026-03-11.md) / [`docs/testing/exploratory-test-session-2026-03-11.ja.md`](docs/testing/exploratory-test-session-2026-03-11.ja.md)

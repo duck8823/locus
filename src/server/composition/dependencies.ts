@@ -3,7 +3,9 @@ import { SqliteConnectionStateRepository } from "@/server/infrastructure/db/sqli
 import { FileConnectionTokenRepository } from "@/server/infrastructure/db/file-connection-token-repository";
 import { FileOAuthStateRepository } from "@/server/infrastructure/db/file-oauth-state-repository";
 import { PrototypeConnectionProviderCatalog } from "@/server/application/services/connection-catalog";
+import { StubBusinessContextProvider } from "@/server/infrastructure/context/stub-business-context-provider";
 import { GitHubPullRequestSnapshotProvider } from "@/server/infrastructure/github/github-pull-request-snapshot-provider";
+import { GitHubOAuthCodeExchangeProvider } from "@/server/infrastructure/github/github-oauth-code-exchange-provider";
 import { TypeScriptParserAdapter } from "@/server/infrastructure/parser/typescript-parser-adapter";
 import { RunScheduledAnalysisJobUseCase } from "@/server/application/usecases/run-scheduled-analysis-job";
 import { FileAnalysisJobScheduler } from "@/server/infrastructure/queue/file-analysis-job-scheduler";
@@ -38,6 +40,8 @@ const connectionStateTransitionRepository = connectionStateRepository;
 const connectionProviderCatalog = new PrototypeConnectionProviderCatalog();
 const connectionTokenRepository = new FileConnectionTokenRepository();
 const oauthStateRepository = new FileOAuthStateRepository();
+const oauthCodeExchangeProvider = new GitHubOAuthCodeExchangeProvider();
+const businessContextProvider = new StubBusinessContextProvider();
 const parserAdapters = [new TypeScriptParserAdapter()];
 const pullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
 const runScheduledAnalysisJobUseCase = new RunScheduledAnalysisJobUseCase({
@@ -73,6 +77,8 @@ export function getDependencies() {
     connectionStateTransitionRepository,
     connectionTokenRepository,
     oauthStateRepository,
+    oauthCodeExchangeProvider,
+    businessContextProvider,
     analysisJobScheduler,
     parserAdapters,
     pullRequestSnapshotProvider,

@@ -134,9 +134,10 @@ When extending this contract:
 - Transition history is retained with SQLite-side pruning (`LOCUS_CONNECTION_TRANSITION_MAX_RETAINED`, default: 200).
 - Provider metadata now goes through a `ConnectionProviderCatalog` port with a prototype adapter implementation.
 - Connection state persistence now uses a SQLite-backed repository with lazy migration from legacy file records.
-- GitHub OAuth start/callback routes now persist pending state + token records in file-backed repositories, with a local demo fallback when OAuth client configuration is absent.
+- GitHub OAuth start/callback routes persist pending state + token records in file-backed repositories, with a local demo fallback when OAuth client configuration is absent.
+- Connection-token persistence now encrypts sensitive token fields at rest (AES-256-GCM), with environment-key override support.
 
 ## Next Steps
 
-1. Upgrade OAuth token storage from local file persistence to encrypted-at-rest storage.
+1. Add managed key rotation / secure key distribution for production deployments.
 2. Add refresh-token lifecycle handling and automatic token-expiry recovery.

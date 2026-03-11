@@ -12,6 +12,8 @@ import {
   formatArchitectureCategoryLabel,
   formatArchitectureColumnLabel,
   formatArchitectureRelation,
+  formatBusinessContextSourceType,
+  formatBusinessContextStatus,
   formatMarkStatusAction,
   formatReviewGroupStatus,
   formatSemanticChangeType,
@@ -645,6 +647,60 @@ export default async function ReviewWorkspacePage({
                   </p>
                 ) : null}
               </>
+            )}
+          </CollapsibleDetails>
+
+          <CollapsibleDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            defaultOpen={workspace.businessContext.items.length > 0}
+            summary={<span className={styles.muted}>{copy.section.businessContext}</span>}
+          >
+            <p className={styles.muted}>{copy.text.businessContextHint}</p>
+            {workspace.businessContext.items.length > 0 ? (
+              <ul className={styles.businessContextList}>
+                {workspace.businessContext.items.map((contextItem) => (
+                  <li key={contextItem.contextId} className={styles.businessContextItem}>
+                    <div className={styles.businessContextHeader}>
+                      {contextItem.href ? (
+                        <a
+                          href={contextItem.href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={styles.actionButton}
+                          style={{
+                            minHeight: "auto",
+                            padding: "6px 10px",
+                            width: "100%",
+                            textAlign: "left",
+                            textDecoration: "none",
+                            borderRadius: "10px",
+                          }}
+                        >
+                          {contextItem.title}
+                        </a>
+                      ) : (
+                        <span className={styles.groupSummary}>{contextItem.title}</span>
+                      )}
+                    </div>
+                    <p className={styles.muted}>
+                      {copy.text.businessContextSource}:{" "}
+                      {formatBusinessContextSourceType(
+                        contextItem.sourceType,
+                        workspaceLocale,
+                      )}{" "}
+                      · {copy.text.businessContextStatus}:{" "}
+                      {formatBusinessContextStatus(contextItem.status, workspaceLocale)}
+                    </p>
+                    {contextItem.summary ? (
+                      <p className={styles.muted}>{contextItem.summary}</p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>{copy.text.noBusinessContextItems}</p>
             )}
           </CollapsibleDetails>
         </section>

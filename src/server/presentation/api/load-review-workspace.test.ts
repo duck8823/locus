@@ -57,12 +57,32 @@ describe("loadReviewWorkspaceDto", () => {
     getDependenciesMock.mockReturnValue({
       reviewSessionRepository: {},
       analysisJobScheduler: {},
+      businessContextProvider: {
+        loadSnapshotForReview: vi.fn().mockResolvedValue({
+          generatedAt: "2026-03-12T00:00:00.000Z",
+          provider: "stub",
+          items: [],
+        }),
+      },
     });
-    executeMock.mockResolvedValue({ id: "review-session" });
+    executeMock.mockResolvedValue({
+      id: "review-session",
+      toRecord: () => ({
+        reviewId: "review-1",
+        repositoryName: "duck8823/locus",
+        title: "Demo workspace",
+        source: null,
+      }),
+    });
     toReviewWorkspaceDtoMock.mockReturnValue({
       reviewId: "review-1",
       reanalysisStatus: "idle",
       lastReanalyzeRequestedAt: null,
+      businessContext: {
+        generatedAt: "2026-03-12T00:00:00.000Z",
+        provider: "stub",
+        items: [],
+      },
     });
     loadActiveManualReanalysisJobMock.mockResolvedValue(null);
     resolveEffectiveReanalysisStateMock.mockReturnValue({
@@ -91,6 +111,11 @@ describe("loadReviewWorkspaceDto", () => {
       requestedAt: "2026-03-11T00:00:00.000Z",
       queuedAt: "2026-03-11T00:00:00.000Z",
       startedAt: "2026-03-11T00:00:01.000Z",
+    });
+    expect(dto.businessContext).toEqual({
+      generatedAt: "2026-03-12T00:00:00.000Z",
+      provider: "stub",
+      items: [],
     });
   });
 

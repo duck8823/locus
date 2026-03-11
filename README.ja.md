@@ -125,7 +125,12 @@ export GITHUB_WEBHOOK_SECRET=your-local-webhook-secret
 
 ```bash
 export GITHUB_OAUTH_CLIENT_ID=your-github-oauth-client-id
+export GITHUB_OAUTH_CLIENT_SECRET=your-github-oauth-client-secret
 export GITHUB_OAUTH_SCOPE="repo read:org"
+
+# 任意（推奨）: 接続トークン暗号化キー
+# 形式: base64:<32バイト鍵> または 64文字hex
+export LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEY=base64:...
 ```
 
 `GITHUB_OAUTH_CLIENT_ID` を設定しない場合は、外部連携なしで状態遷移を検証できるようローカル demo OAuth fallback が使われます。
@@ -178,6 +183,7 @@ npm run demo:data:reseed   # 基本ディレクトリと空のジョブキュー
 - [`docs/architecture/web-application-blueprint.ja.md`](docs/architecture/web-application-blueprint.ja.md) / [`docs/architecture/web-application-blueprint.md`](docs/architecture/web-application-blueprint.md)
 - [`docs/architecture/semantic-analysis-pipeline.ja.md`](docs/architecture/semantic-analysis-pipeline.ja.md) / [`docs/architecture/semantic-analysis-pipeline.md`](docs/architecture/semantic-analysis-pipeline.md)
 - [`docs/architecture/connections-workspace-contract.ja.md`](docs/architecture/connections-workspace-contract.ja.md) / [`docs/architecture/connections-workspace-contract.md`](docs/architecture/connections-workspace-contract.md)
+- [`docs/architecture/business-context-bridge.ja.md`](docs/architecture/business-context-bridge.ja.md) / [`docs/architecture/business-context-bridge.md`](docs/architecture/business-context-bridge.md)
 - [`docs/performance/analysis-benchmark-baseline.ja.md`](docs/performance/analysis-benchmark-baseline.ja.md) / [`docs/performance/analysis-benchmark-baseline.md`](docs/performance/analysis-benchmark-baseline.md)
 - [`docs/testing/exploratory-test-playbook.ja.md`](docs/testing/exploratory-test-playbook.ja.md) / [`docs/testing/exploratory-test-playbook.md`](docs/testing/exploratory-test-playbook.md)
 - [`docs/testing/exploratory-test-session-2026-03-11.ja.md`](docs/testing/exploratory-test-session-2026-03-11.ja.md) / [`docs/testing/exploratory-test-session-2026-03-11.md`](docs/testing/exploratory-test-session-2026-03-11.md)

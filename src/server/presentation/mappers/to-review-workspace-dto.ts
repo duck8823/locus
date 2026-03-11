@@ -297,6 +297,11 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     availableStatuses: [...reviewGroupStatuses],
     unsupportedSummary,
     unsupportedFiles,
+    businessContext: {
+      generatedAt: new Date().toISOString(),
+      provider: "stub",
+      items: [],
+    },
     groups: record.groups.map((group) => ({
       groupId: group.groupId,
       title: group.title,

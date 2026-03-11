@@ -8,6 +8,8 @@ type ReviewGroupStatus = "unread" | "in_progress" | "reviewed";
 type SemanticChangeType = "added" | "removed" | "modified" | "moved" | "renamed";
 type UnsupportedFileReason = "unsupported_language" | "parser_failed" | "binary_file";
 type AnalysisJobReason = "initial_ingestion" | "code_host_webhook";
+type BusinessContextSourceType = "github_issue" | "confluence_page";
+type BusinessContextStatus = "linked" | "candidate" | "unavailable";
 
 export const workspaceCopyByLocale = {
   en: {
@@ -29,6 +31,7 @@ export const workspaceCopyByLocale = {
       initialAnalysis: "Initial analysis",
       reanalysisStatus: "Reanalysis status",
       analysisCoverage: "Analysis coverage",
+      businessContext: "Business context",
       architecturePane: "Architecture pane",
     },
     text: {
@@ -77,6 +80,11 @@ export const workspaceCopyByLocale = {
       showingFirstEntriesPrefix: "Showing first",
       showingFirstEntriesSuffix: "entries.",
       hiddenEntriesSuffix: "additional file(s) were omitted.",
+      businessContextHint:
+        "Phase 2 bridge: this panel shows requirement/spec links related to the current review.",
+      noBusinessContextItems: "No requirement links were found.",
+      businessContextStatus: "Status",
+      businessContextSource: "Source",
       architectureScopeHint: "MVP v0 shows only immediate neighbors.",
       noRelatedNodes: "No related nodes.",
       switchToRelatedGroup: "Switch to related change group",
@@ -147,6 +155,15 @@ export const workspaceCopyByLocale = {
       initial_ingestion: "Initial ingestion",
       code_host_webhook: "Webhook ingestion",
     },
+    businessContextSourceType: {
+      github_issue: "GitHub Issue",
+      confluence_page: "Confluence Page",
+    },
+    businessContextStatus: {
+      linked: "Linked",
+      candidate: "Candidate",
+      unavailable: "Unavailable",
+    },
   },
   ja: {
     links: {
@@ -167,6 +184,7 @@ export const workspaceCopyByLocale = {
       initialAnalysis: "初回解析",
       reanalysisStatus: "再解析ステータス",
       analysisCoverage: "解析カバレッジ",
+      businessContext: "ビジネスコンテキスト",
       architecturePane: "アーキテクチャ",
     },
     text: {
@@ -214,6 +232,11 @@ export const workspaceCopyByLocale = {
       showingFirstEntriesPrefix: "先頭",
       showingFirstEntriesSuffix: "件を表示中。",
       hiddenEntriesSuffix: "件は省略しています。",
+      businessContextHint:
+        "Phase 2 ブリッジとして、このレビューに関連する要件/仕様リンクを表示します。",
+      noBusinessContextItems: "関連する要件リンクは見つかりませんでした。",
+      businessContextStatus: "状態",
+      businessContextSource: "ソース",
       architectureScopeHint: "MVP v0 は直接の隣接ノードのみ表示します。",
       noRelatedNodes: "関連ノードはありません。",
       switchToRelatedGroup: "関連する変更グループに切り替える",
@@ -283,6 +306,15 @@ export const workspaceCopyByLocale = {
     analysisJobReason: {
       initial_ingestion: "初回取り込み",
       code_host_webhook: "Webhook 取り込み",
+    },
+    businessContextSourceType: {
+      github_issue: "GitHub Issue",
+      confluence_page: "Confluence ページ",
+    },
+    businessContextStatus: {
+      linked: "連携済み",
+      candidate: "候補",
+      unavailable: "未連携",
     },
   },
 } as const;
@@ -378,5 +410,27 @@ export function formatAnalysisJobReason(
   return (
     copy.analysisJobReason[reason as AnalysisJobReason] ??
     reason.replaceAll("_", " ")
+  );
+}
+
+export function formatBusinessContextSourceType(
+  sourceType: string,
+  locale: WorkspaceLocale,
+): string {
+  const copy = workspaceCopyByLocale[locale];
+  return (
+    copy.businessContextSourceType[sourceType as BusinessContextSourceType] ??
+    sourceType.replaceAll("_", " ")
+  );
+}
+
+export function formatBusinessContextStatus(
+  status: string,
+  locale: WorkspaceLocale,
+): string {
+  const copy = workspaceCopyByLocale[locale];
+  return (
+    copy.businessContextStatus[status as BusinessContextStatus] ??
+    status.replaceAll("_", " ")
   );
 }

@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers";
 import Link from "next/link";
 import { LocalizedDateTime } from "@/app/components/localized-date-time";
+import { OAuthFeedbackCleanup } from "@/app/(workspace)/settings/connections/oauth-feedback-cleanup";
 import { resolveWorkspaceLocale } from "@/app/(workspace)/workspace-locale";
 import type { ConnectionProviderKey } from "@/server/application/services/connection-catalog";
 import { loadConnectionsWorkspaceDto } from "@/server/presentation/api/load-connections-workspace";
@@ -35,6 +36,9 @@ const copyByLocale = {
     transitionButton: "Apply",
     oauthConnectButton: "Connect with GitHub OAuth",
     oauthReconnectButton: "Reconnect GitHub OAuth",
+    manualOverrideSummary: "Advanced: manual state override",
+    manualOverrideDescription:
+      "Use only for prototype diagnostics. OAuth flow should be the default path.",
     transitionUnavailable:
       "State transition is not available for this provider in current status.",
     connectedAccountInputLabel: "Account label (optional)",
@@ -59,6 +63,8 @@ const copyByLocale = {
       oauth_start_failed: "Failed to start OAuth flow. Please try again.",
       oauth_provider_rejected: "GitHub canceled or rejected the OAuth request.",
       oauth_callback_invalid: "OAuth callback payload is incomplete.",
+      oauth_callback_retryable:
+        "OAuth callback failed due to a temporary upstream error. Please retry.",
       oauth_callback_failed: "OAuth callback processing failed. Please retry.",
     },
     statusByKey: {
@@ -118,6 +124,9 @@ const copyByLocale = {
     transitionButton: "適用",
     oauthConnectButton: "GitHub OAuthで接続",
     oauthReconnectButton: "GitHub OAuthで再接続",
+    manualOverrideSummary: "詳細: 手動状態変更（上級者向け）",
+    manualOverrideDescription:
+      "プロトタイプ検証用です。通常は OAuth フローを優先してください。",
     transitionUnavailable: "現在の状態では、この provider の状態変更はできません。",
     connectedAccountInputLabel: "接続アカウント名（任意）",
     connectedAccountPlaceholder: "例: duck8823",
@@ -141,6 +150,8 @@ const copyByLocale = {
       oauth_start_failed: "OAuth 開始に失敗しました。もう一度お試しください。",
       oauth_provider_rejected: "GitHub 側で OAuth 要求が拒否またはキャンセルされました。",
       oauth_callback_invalid: "OAuth コールバックのパラメータが不足しています。",
+      oauth_callback_retryable:
+        "OAuth コールバックが一時的な上流エラーで失敗しました。再試行してください。",
       oauth_callback_failed: "OAuth コールバック処理に失敗しました。再試行してください。",
     },
     statusByKey: {
@@ -476,6 +487,7 @@ export default async function ConnectionsPage({
 
   return (
     <main style={pageShellStyle}>
+      {oauthFeedback ? <OAuthFeedbackCleanup /> : null}
       <Link href="/" style={{ color: "#9aa7d1" }}>
         {copy.backToHome}
       </Link>
@@ -849,69 +861,139 @@ export default async function ConnectionsPage({
               </details>
 
               {availableTransitions.length > 0 ? (
-                <form
-                  action={setConnectionStateAction}
-                  style={{ display: "grid", gap: "8px", marginTop: "4px" }}
-                >
-                  <input type="hidden" name="provider" value={connection.provider} />
-                  <input type="hidden" name="redirectPath" value="/settings/connections" />
-                  <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
-                    {copy.transitionLabel}
-                    <select
-                      name="nextStatus"
-                      defaultValue={availableTransitions[0]}
-                      data-testid={`connection-transition-select-${connection.provider}`}
+                canUseGitHubOAuth ? (
+                  <details style={detailCardStyle}>
+                    <summary style={detailSummaryStyle}>{copy.manualOverrideSummary}</summary>
+                    <p style={detailParagraphStyle}>{copy.manualOverrideDescription}</p>
+                    <form
+                      action={setConnectionStateAction}
+                      style={{ display: "grid", gap: "8px", marginTop: "8px" }}
+                    >
+                      <input type="hidden" name="provider" value={connection.provider} />
+                      <input type="hidden" name="redirectPath" value="/settings/connections" />
+                      <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
+                        {copy.transitionLabel}
+                        <select
+                          name="nextStatus"
+                          defaultValue={availableTransitions[0]}
+                          data-testid={`connection-transition-select-${connection.provider}`}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            marginTop: "4px",
+                            background: "rgba(14, 21, 43, 0.96)",
+                            color: "white",
+                            border: "1px solid rgba(154, 167, 209, 0.24)",
+                            borderRadius: "10px",
+                            padding: "8px 10px",
+                          }}
+                        >
+                          {availableTransitions.map((status) => (
+                            <option key={status} value={status}>
+                              {formatTransitionOption(status, workspaceLocale)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
+                        {copy.connectedAccountInputLabel}
+                        <input
+                          name="connectedAccountLabel"
+                          defaultValue={connection.connectedAccountLabel ?? ""}
+                          placeholder={copy.connectedAccountPlaceholder}
+                          style={{
+                            display: "block",
+                            width: "100%",
+                            marginTop: "4px",
+                            background: "rgba(14, 21, 43, 0.96)",
+                            color: "white",
+                            border: "1px solid rgba(154, 167, 209, 0.24)",
+                            borderRadius: "10px",
+                            padding: "8px 10px",
+                          }}
+                        />
+                      </label>
+                      <button
+                        type="submit"
+                        data-testid={`connection-transition-submit-${connection.provider}`}
+                        style={{
+                          border: "1px solid rgba(124, 156, 255, 0.65)",
+                          borderRadius: "10px",
+                          background: "rgba(94, 123, 255, 0.16)",
+                          color: "white",
+                          minHeight: "34px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {copy.transitionButton}
+                      </button>
+                    </form>
+                  </details>
+                ) : (
+                  <form
+                    action={setConnectionStateAction}
+                    style={{ display: "grid", gap: "8px", marginTop: "4px" }}
+                  >
+                    <input type="hidden" name="provider" value={connection.provider} />
+                    <input type="hidden" name="redirectPath" value="/settings/connections" />
+                    <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
+                      {copy.transitionLabel}
+                      <select
+                        name="nextStatus"
+                        defaultValue={availableTransitions[0]}
+                        data-testid={`connection-transition-select-${connection.provider}`}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          marginTop: "4px",
+                          background: "rgba(14, 21, 43, 0.96)",
+                          color: "white",
+                          border: "1px solid rgba(154, 167, 209, 0.24)",
+                          borderRadius: "10px",
+                          padding: "8px 10px",
+                        }}
+                      >
+                        {availableTransitions.map((status) => (
+                          <option key={status} value={status}>
+                            {formatTransitionOption(status, workspaceLocale)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
+                      {copy.connectedAccountInputLabel}
+                      <input
+                        name="connectedAccountLabel"
+                        defaultValue={connection.connectedAccountLabel ?? ""}
+                        placeholder={copy.connectedAccountPlaceholder}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          marginTop: "4px",
+                          background: "rgba(14, 21, 43, 0.96)",
+                          color: "white",
+                          border: "1px solid rgba(154, 167, 209, 0.24)",
+                          borderRadius: "10px",
+                          padding: "8px 10px",
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      data-testid={`connection-transition-submit-${connection.provider}`}
                       style={{
-                        display: "block",
-                        width: "100%",
-                        marginTop: "4px",
-                        background: "rgba(14, 21, 43, 0.96)",
-                        color: "white",
-                        border: "1px solid rgba(154, 167, 209, 0.24)",
+                        border: "1px solid rgba(124, 156, 255, 0.65)",
                         borderRadius: "10px",
-                        padding: "8px 10px",
+                        background: "rgba(94, 123, 255, 0.16)",
+                        color: "white",
+                        minHeight: "34px",
+                        cursor: "pointer",
                       }}
                     >
-                      {availableTransitions.map((status) => (
-                        <option key={status} value={status}>
-                          {formatTransitionOption(status, workspaceLocale)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
-                    {copy.connectedAccountInputLabel}
-                    <input
-                      name="connectedAccountLabel"
-                      defaultValue={connection.connectedAccountLabel ?? ""}
-                      placeholder={copy.connectedAccountPlaceholder}
-                      style={{
-                        display: "block",
-                        width: "100%",
-                        marginTop: "4px",
-                        background: "rgba(14, 21, 43, 0.96)",
-                        color: "white",
-                        border: "1px solid rgba(154, 167, 209, 0.24)",
-                        borderRadius: "10px",
-                        padding: "8px 10px",
-                      }}
-                    />
-                  </label>
-                  <button
-                    type="submit"
-                    data-testid={`connection-transition-submit-${connection.provider}`}
-                    style={{
-                      border: "1px solid rgba(124, 156, 255, 0.65)",
-                      borderRadius: "10px",
-                      background: "rgba(94, 123, 255, 0.16)",
-                      color: "white",
-                      minHeight: "34px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {copy.transitionButton}
-                  </button>
-                </form>
+                      {copy.transitionButton}
+                    </button>
+                  </form>
+                )
               ) : (
                 <p style={{ color: "#9aa7d1", marginBottom: "0px" }}>
                   {copy.transitionUnavailable}
