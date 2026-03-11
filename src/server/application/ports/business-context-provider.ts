@@ -19,6 +19,7 @@ export interface BusinessContextProvider {
   loadSnapshotForReview(input: {
     reviewId: string;
     repositoryName: string;
+    branchLabel: string;
     title: string;
     source: ReviewSessionSource | null;
   }): Promise<BusinessContextSnapshot>;

@@ -54,7 +54,9 @@ export interface ReviewWorkspaceBusinessContextDto {
 - A `StubBusinessContextProvider` emits deterministic placeholder context.
 - GitHub-backed reviews parse PR title metadata to infer issue links:
   - explicit `owner/repo#123` and GitHub issue URLs are surfaced as `linked`
-  - same-repository `#123` shorthand is surfaced as `candidate`
+  - same-repository `fixes #123` / `closes #123` style phrases are surfaced as `linked`
+  - plain same-repository `#123` shorthand is surfaced as `candidate`
+  - branch conventions (`feature/123-*`, `issue-456`, etc.) provide additional `candidate` links
   - when no reference exists, a deterministic fallback candidate (PR number) is emitted
 - Non-GitHub sources receive unavailable rows only.
 
