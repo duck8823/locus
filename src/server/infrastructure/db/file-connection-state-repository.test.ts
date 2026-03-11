@@ -65,4 +65,42 @@ describe("FileConnectionStateRepository", () => {
     const result = await repository.findByReviewerId("missing-reviewer");
     expect(result).toEqual([]);
   });
+
+  it("returns empty array when file contains malformed JSON", async () => {
+    const { dataDirectory, repository } = await createRepository();
+    await mkdir(dataDirectory, { recursive: true });
+    await writeFile(path.join(dataDirectory, "broken-reviewer.json"), "{ invalid json");
+
+    const result = await repository.findByReviewerId("broken-reviewer");
+    expect(result).toEqual([]);
+  });
+
+  it("normalizes invalid statusUpdatedAt into epoch fallback", async () => {
+    const { dataDirectory, repository } = await createRepository();
+    await mkdir(dataDirectory, { recursive: true });
+    await writeFile(
+      path.join(dataDirectory, "invalid-date-reviewer.json"),
+      JSON.stringify({
+        reviewerId: "invalid-date-reviewer",
+        connections: [
+          {
+            provider: "github",
+            status: "connected",
+            statusUpdatedAt: "not-a-date",
+            connectedAccountLabel: "duck8823",
+          },
+        ],
+      }),
+    );
+
+    const result = await repository.findByReviewerId("invalid-date-reviewer");
+    expect(result).toEqual([
+      {
+        provider: "github",
+        status: "connected",
+        statusUpdatedAt: new Date(0).toISOString(),
+        connectedAccountLabel: "duck8823",
+      },
+    ]);
+  });
 });

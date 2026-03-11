@@ -24,7 +24,12 @@ export class FileConnectionStateRepository implements ConnectionStateRepository 
 
     try {
       const raw = await readFile(filePath, "utf8");
-      const parsed = JSON.parse(raw) as ConnectionStateFileRecord;
+      const parsed = parseConnectionStateFile(raw);
+
+      if (!parsed) {
+        return [];
+      }
+
       const connections = parsed.connections;
 
       if (!Array.isArray(connections)) {
@@ -49,6 +54,18 @@ export class FileConnectionStateRepository implements ConnectionStateRepository 
   }
 }
 
+function parseConnectionStateFile(raw: string): ConnectionStateFileRecord | null {
+  try {
+    return JSON.parse(raw) as ConnectionStateFileRecord;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
 function normalizeStatus(status: unknown): string {
   if (!isNonEmptyString(status)) {
     return "not_connected";
@@ -62,7 +79,13 @@ function normalizeStatusUpdatedAt(statusUpdatedAt: unknown): string {
     return new Date(0).toISOString();
   }
 
-  return statusUpdatedAt;
+  const epochMs = Date.parse(statusUpdatedAt);
+
+  if (Number.isNaN(epochMs)) {
+    return new Date(0).toISOString();
+  }
+
+  return new Date(epochMs).toISOString();
 }
 
 function normalizeConnectedAccountLabel(connectedAccountLabel: unknown): string | null {
