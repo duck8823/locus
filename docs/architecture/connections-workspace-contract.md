@@ -22,6 +22,14 @@ Out of scope:
 ## Current DTO Contract
 
 ```ts
+export interface ConnectionsWorkspaceTransitionDto {
+  transitionId: string
+  previousStatus: string
+  nextStatus: string
+  changedAt: string
+  connectedAccountLabel: string | null
+}
+
 export interface ConnectionsWorkspaceConnectionDto {
   provider: "github" | "confluence" | "jira"
   status: string
@@ -33,6 +41,7 @@ export interface ConnectionsWorkspaceConnectionDto {
     supportsWebhook: boolean
     supportsIssueContext: boolean
   }
+  recentTransitions: ConnectionsWorkspaceTransitionDto[]
 }
 
 export interface ConnectionsWorkspaceDto {
@@ -67,12 +76,18 @@ export interface ConnectionsWorkspaceDto {
 ### `stateSource`
 
 - `catalog_default`: value came from static provider catalog defaults
-- `persisted`: value came from reviewer-scoped persisted state (`.locus-data/connection-states`)
+- `persisted`: value came from reviewer-scoped persisted state
 
 ### `capabilities`
 
 - `supportsWebhook`: provider can trigger inbound updates
 - `supportsIssueContext`: provider can enrich review context with issue/spec data
+
+### `recentTransitions`
+
+- Most recent provider transitions in descending timestamp order
+- Records status movement plus effective account label at transition time
+- Intended for troubleshooting and local observability in prototype mode
 
 ## Localization Boundary
 
@@ -92,11 +107,12 @@ When extending this contract:
 
 - Read path merges static provider defaults with reviewer-scoped persisted states.
 - Write path supports controlled transitions via `SetConnectionStateUseCase` + `setConnectionStateAction`.
+- State transitions are now appended to reviewer-scoped transition audit history.
 - Provider metadata now goes through a `ConnectionProviderCatalog` port with a prototype adapter implementation.
-- File-backed persisted-state loading validates record shape and safely skips malformed entries.
+- Connection state persistence now uses a SQLite-backed repository with lazy migration from legacy file records.
 
 ## Next Steps
 
-1. Add transition audit history (who/when/why) for troubleshooting and observability.
-2. Replace file-backed state with production persistence.
+1. Add transition audit reason fields (`manual` / `token-expired` / `webhook`) and actor attribution.
+2. Define retention policy and pruning strategy for transition history.
 3. Replace prototype OAuth assumptions with real token/callback flows.

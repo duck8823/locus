@@ -22,6 +22,14 @@
 ## 現行 DTO 契約
 
 ```ts
+export interface ConnectionsWorkspaceTransitionDto {
+  transitionId: string
+  previousStatus: string
+  nextStatus: string
+  changedAt: string
+  connectedAccountLabel: string | null
+}
+
 export interface ConnectionsWorkspaceConnectionDto {
   provider: "github" | "confluence" | "jira"
   status: string
@@ -33,6 +41,7 @@ export interface ConnectionsWorkspaceConnectionDto {
     supportsWebhook: boolean
     supportsIssueContext: boolean
   }
+  recentTransitions: ConnectionsWorkspaceTransitionDto[]
 }
 
 export interface ConnectionsWorkspaceDto {
@@ -67,12 +76,18 @@ export interface ConnectionsWorkspaceDto {
 ### `stateSource`
 
 - `catalog_default`: provider カタログ既定値から解決された状態
-- `persisted`: reviewer 単位の永続化状態（`.locus-data/connection-states`）から解決された状態
+- `persisted`: reviewer 単位の永続化状態から解決された状態
 
 ### `capabilities`
 
 - `supportsWebhook`: provider からの inbound update を受け取れる
 - `supportsIssueContext`: issue/spec 文脈を review に付与できる
+
+### `recentTransitions`
+
+- provider ごとの最新状態遷移を時刻降順で返す
+- 状態の変化と、その時点で有効だった接続アカウント名を保持する
+- prototype 段階のトラブルシュートと観測性向上を目的とする
 
 ## 多言語化の責務境界
 
@@ -92,11 +107,12 @@ DTO 値自体は言語非依存のまま維持する。
 
 - read path は provider の既定値と reviewer 単位の永続化状態をマージして返す。
 - write path は `SetConnectionStateUseCase` + `setConnectionStateAction` で制御された状態遷移を扱う。
+- 状態遷移は reviewer 単位の監査履歴として追加保存する。
 - provider metadata は `ConnectionProviderCatalog` port と prototype adapter 経由で解決する。
-- file-backed の状態ロードは record 形状を検証し、壊れた entry は安全にスキップする。
+- 接続状態の永続化は SQLite ベースに移行し、legacy の file record は遅延移行で読み込む。
 
 ## 次のステップ
 
-1. 状態遷移の監査履歴（誰が・いつ・なぜ）を追加し、運用時の追跡性を上げる。
-2. file-backed 実装を本番用の永続化基盤へ置き換える。
+1. 遷移履歴に reason（`manual` / `token-expired` / `webhook`）と actor 情報を追加する。
+2. 遷移履歴の保持期間・圧縮ポリシーを定義する。
 3. prototype 前提の OAuth 表現を実トークン/コールバックフローに置き換える。

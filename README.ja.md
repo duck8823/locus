@@ -107,6 +107,9 @@ Locusは最初から拡張可能な設計で作られています：
 
 ### ローカル開発
 
+前提: **Node.js 22.5+**（`node:sqlite` の利用に必要）
+実行環境で実験的APIが無効化されている場合は、起動前に `NODE_OPTIONS=--experimental-sqlite` を設定してください。
+
 ```bash
 npm install
 npm run dev

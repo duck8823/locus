@@ -25,6 +25,7 @@ describe("loadConnectionsWorkspaceDto", () => {
     executeMock.mockReset();
     getDependenciesMock.mockReturnValue({
       connectionStateRepository: {},
+      connectionStateTransitionRepository: {},
       connectionProviderCatalog: {},
     });
     executeMock.mockResolvedValue({
@@ -40,6 +41,15 @@ describe("loadConnectionsWorkspaceDto", () => {
             supportsWebhook: true,
             supportsIssueContext: true,
           },
+          recentTransitions: [
+            {
+              transitionId: "transition-1",
+              previousStatus: "not_connected",
+              nextStatus: "connected",
+              changedAt: "2026-03-11T00:00:00.000Z",
+              connectedAccountLabel: "duck8823",
+            },
+          ],
         },
       ],
     });
@@ -61,6 +71,15 @@ describe("loadConnectionsWorkspaceDto", () => {
           supportsWebhook: true,
           supportsIssueContext: true,
         },
+        recentTransitions: [
+          {
+            transitionId: "transition-1",
+            previousStatus: "not_connected",
+            nextStatus: "connected",
+            changedAt: "2026-03-11T00:00:00.000Z",
+            connectedAccountLabel: "duck8823",
+          },
+        ],
       },
     ]);
     expect(Number.isNaN(Date.parse(dto.generatedAt))).toBe(false);

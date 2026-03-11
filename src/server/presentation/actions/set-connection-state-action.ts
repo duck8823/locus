@@ -7,6 +7,8 @@ import { getDependencies } from "@/server/composition/dependencies";
 import { assertWritableConnectionStatus } from "@/server/domain/value-objects/connection-lifecycle-status";
 import { readRequiredString } from "@/server/presentation/actions/read-required-string";
 
+const MAX_CONNECTED_ACCOUNT_LABEL_LENGTH = 200;
+
 function readOptionalString(formData: FormData, name: string): string | null {
   const value = formData.get(name);
 
@@ -15,7 +17,16 @@ function readOptionalString(formData: FormData, name: string): string | null {
   }
 
   const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (trimmed.length > MAX_CONNECTED_ACCOUNT_LABEL_LENGTH) {
+    throw new Error(`connectedAccountLabel must be at most ${MAX_CONNECTED_ACCOUNT_LABEL_LENGTH} characters`);
+  }
+
+  return trimmed;
 }
 
 function assertRelativeRedirectPath(value: string): string {
@@ -40,10 +51,12 @@ export async function setConnectionStateAction(formData: FormData): Promise<void
   const connectedAccountLabel = readOptionalString(formData, "connectedAccountLabel");
   const {
     connectionStateRepository,
+    connectionStateTransitionRepository,
     connectionProviderCatalog,
   } = getDependencies();
   const useCase = new SetConnectionStateUseCase({
     connectionStateRepository,
+    connectionStateTransitionRepository,
     connectionProviderCatalog,
   });
 
