@@ -49,5 +49,8 @@ const prototypeConnectionCatalog: ConnectionCatalogEntry[] = [
 ];
 
 export function listPrototypeConnectionCatalog(): ConnectionCatalogEntry[] {
-  return prototypeConnectionCatalog.map((entry) => ({ ...entry }));
+  return prototypeConnectionCatalog.map((entry) => ({
+    ...entry,
+    capabilities: { ...entry.capabilities },
+  }));
 }
