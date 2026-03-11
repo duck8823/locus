@@ -15,6 +15,20 @@ export interface PullRequestSnapshotBundle {
   source: GitHubPullRequestRef;
 }
 
+export class PullRequestProviderAuthError extends Error {
+  constructor(
+    readonly provider: "github",
+    readonly statusCode: number,
+    readonly path: string,
+    readonly responseBody: string,
+  ) {
+    super(
+      `Pull request provider authentication failed (${statusCode}): ${path}\n${responseBody}`,
+    );
+    this.name = "PullRequestProviderAuthError";
+  }
+}
+
 export interface PullRequestSnapshotProvider {
   fetchPullRequestSnapshots(input: {
     reviewId: string;

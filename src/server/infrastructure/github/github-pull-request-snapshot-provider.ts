@@ -4,6 +4,7 @@ import type {
   GitHubPullRequestRef,
   PullRequestSnapshotBundle,
 } from "@/server/application/ports/pull-request-snapshot-provider";
+import { PullRequestProviderAuthError } from "@/server/application/ports/pull-request-snapshot-provider";
 import type { SourceSnapshot, SourceSnapshotPair } from "@/server/domain/value-objects/source-snapshot";
 
 interface GitHubPullRequestApiResponse {
@@ -542,6 +543,11 @@ export class GitHubPullRequestSnapshotProvider implements PullRequestSnapshotPro
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
+
+      if (response.status === 401 || response.status === 403) {
+        throw new PullRequestProviderAuthError("github", response.status, path, body);
+      }
+
       throw new GitHubApiError(response.status, path, body);
     }
 

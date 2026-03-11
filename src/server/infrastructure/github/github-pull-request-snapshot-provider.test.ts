@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PullRequestProviderAuthError } from "@/server/application/ports/pull-request-snapshot-provider";
 import { GitHubPullRequestSnapshotProvider } from "@/server/infrastructure/github/github-pull-request-snapshot-provider";
 
 function toBase64(text: string): string {
@@ -312,6 +313,25 @@ describe("GitHubPullRequestSnapshotProvider", () => {
         },
       }),
     ).rejects.toThrow("/repos/octocat/locus/pulls/500");
+  });
+
+  it("throws PullRequestProviderAuthError on GitHub auth failures", async () => {
+    const provider = new GitHubPullRequestSnapshotProvider({
+      apiBaseUrl: "https://api.github.com",
+      fetchImpl: async () => jsonResponse({ message: "Bad credentials" }, 401),
+    });
+
+    await expect(
+      provider.fetchPullRequestSnapshots({
+        reviewId: "github-pr-auth",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 401,
+        },
+      }),
+    ).rejects.toBeInstanceOf(PullRequestProviderAuthError);
   });
 
   it("falls back to content API when recursive trees are truncated", async () => {
