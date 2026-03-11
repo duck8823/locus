@@ -27,6 +27,15 @@ export interface ReviewWorkspaceBusinessContextItemDto {
   contextId: string
   sourceType: "github_issue" | "confluence_page"
   status: "linked" | "candidate" | "unavailable"
+  confidence: "high" | "medium" | "low"
+  inferenceSource:
+    | "issue_url"
+    | "repo_shorthand"
+    | "same_repo_shorthand"
+    | "same_repo_closing_keyword"
+    | "branch_pattern"
+    | "pull_request_fallback"
+    | "none"
   title: string
   summary: string | null
   href: string | null
@@ -48,6 +57,13 @@ export interface ReviewWorkspaceBusinessContextDto {
   - `linked`: 要件リンクが確定している
   - `candidate`: 候補リンク（ユーザー確認が必要）
   - `unavailable`: 現在リンク可能な情報がない
+- `confidence`
+  - `high`: 明示的な手がかり（Issue URL、owner/repo表記、closing keyword）
+  - `medium`: 推定だが妥当性のある手がかり（同一repo `#123`、branch pattern）
+  - `low`: 弱いフォールバック、または unavailable placeholder
+- `inferenceSource`
+  - 行が生成された決定的な理由コード（`issue_url`, `branch_pattern` など）
+  - unavailable placeholder では `none` を使う
 
 ## 現行プロトタイプ挙動
 

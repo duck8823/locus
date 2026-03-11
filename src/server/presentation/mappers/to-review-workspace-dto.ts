@@ -31,6 +31,34 @@ function toSemanticChangeDto(change: SemanticChange): ReviewWorkspaceSemanticCha
   };
 }
 
+const SEMANTIC_CHANGE_IMPACT_PRIORITY: Record<ReviewWorkspaceSemanticChangeDto["changeType"], number> = {
+  modified: 0,
+  added: 1,
+  removed: 2,
+  moved: 3,
+  renamed: 4,
+};
+
+function compareSemanticChangeDtos(
+  left: ReviewWorkspaceSemanticChangeDto,
+  right: ReviewWorkspaceSemanticChangeDto,
+): number {
+  const leftPriority = SEMANTIC_CHANGE_IMPACT_PRIORITY[left.changeType] ?? Number.MAX_SAFE_INTEGER;
+  const rightPriority = SEMANTIC_CHANGE_IMPACT_PRIORITY[right.changeType] ?? Number.MAX_SAFE_INTEGER;
+
+  if (leftPriority !== rightPriority) {
+    return leftPriority - rightPriority;
+  }
+
+  const symbolNameComparison = left.symbolDisplayName.localeCompare(right.symbolDisplayName);
+
+  if (symbolNameComparison !== 0) {
+    return symbolNameComparison;
+  }
+
+  return left.semanticChangeId.localeCompare(right.semanticChangeId);
+}
+
 function toUnsupportedSummary(
   unsupportedFileAnalyses: UnsupportedFileAnalysis[],
 ): ReviewWorkspaceUnsupportedSummaryDto {
@@ -321,7 +349,8 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
       semanticChanges: (group.semanticChangeIds ?? [])
         .map((semanticChangeId) => semanticChangeMap.get(semanticChangeId))
         .filter((semanticChange): semanticChange is SemanticChange => !!semanticChange)
-        .map(toSemanticChangeDto),
+        .map(toSemanticChangeDto)
+        .sort(compareSemanticChangeDtos),
     })),
   };
 }

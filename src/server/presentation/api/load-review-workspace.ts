@@ -58,6 +58,8 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
         contextId: item.contextId,
         sourceType: item.sourceType,
         status: item.status,
+        confidence: item.confidence,
+        inferenceSource: item.inferenceSource,
         title: item.title,
         summary: item.summary,
         href: item.href,

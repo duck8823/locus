@@ -137,4 +137,45 @@ describe("loadReviewWorkspaceDto", () => {
 
     expect(dto.activeAnalysisJob).toBeNull();
   });
+
+  it("maps business-context confidence and inference-source fields", async () => {
+    const loadSnapshotForReviewMock = vi.fn().mockResolvedValue({
+      generatedAt: "2026-03-12T00:00:00.000Z",
+      provider: "stub",
+      items: [
+        {
+          contextId: "ctx-1",
+          sourceType: "github_issue",
+          status: "candidate",
+          confidence: "medium",
+          inferenceSource: "branch_pattern",
+          title: "Candidate issue: octocat/locus#451",
+          summary: "Detected from branch naming convention.",
+          href: "https://github.com/octocat/locus/issues/451",
+        },
+      ],
+    });
+    getDependenciesMock.mockReturnValueOnce({
+      reviewSessionRepository: {},
+      analysisJobScheduler: {},
+      businessContextProvider: {
+        loadSnapshotForReview: loadSnapshotForReviewMock,
+      },
+    });
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.businessContext.items).toEqual([
+      {
+        contextId: "ctx-1",
+        sourceType: "github_issue",
+        status: "candidate",
+        confidence: "medium",
+        inferenceSource: "branch_pattern",
+        title: "Candidate issue: octocat/locus#451",
+        summary: "Detected from branch naming convention.",
+        href: "https://github.com/octocat/locus/issues/451",
+      },
+    ]);
+  });
 });

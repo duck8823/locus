@@ -12,6 +12,8 @@ import {
   formatAnalysisJobReason,
   formatArchitectureCategoryLabel,
   formatArchitectureColumnLabel,
+  formatBusinessContextConfidence,
+  formatBusinessContextInferenceSource,
   formatArchitectureRelation,
   formatBusinessContextSourceType,
   formatBusinessContextStatus,
@@ -390,12 +392,23 @@ export default async function ReviewWorkspacePage({
                               ? ` · ${copy.text.semanticSpanDelta}: ${focusView.spanDeltaLabel}`
                               : ""}
                           </p>
-                          <p className={styles.semanticChangeMeta}>
-                            {copy.text.semanticBefore}: {formatCodeRegion(change.before)}
-                          </p>
-                          <p className={styles.semanticChangeMeta}>
-                            {copy.text.semanticAfter}: {formatCodeRegion(change.after)}
-                          </p>
+                          <CollapsibleDetails
+                            className={styles.semanticLocationDetails}
+                            summaryClassName={styles.semanticLocationSummary}
+                            contentClassName={styles.semanticLocationContent}
+                            summary={
+                              <span className={styles.semanticChangeMeta}>
+                                {copy.text.semanticLocationDetails}
+                              </span>
+                            }
+                          >
+                            <p className={styles.semanticChangeMeta}>
+                              {copy.text.semanticBefore}: {formatCodeRegion(change.before)}
+                            </p>
+                            <p className={styles.semanticChangeMeta}>
+                              {copy.text.semanticAfter}: {formatCodeRegion(change.after)}
+                            </p>
+                          </CollapsibleDetails>
                         </li>
                       );
                     })}
@@ -709,6 +722,15 @@ export default async function ReviewWorkspacePage({
                       )}{" "}
                       · {copy.text.businessContextStatus}:{" "}
                       {formatBusinessContextStatus(contextItem.status, workspaceLocale)}
+                      {" · "}
+                      {copy.text.businessContextConfidence}:{" "}
+                      {formatBusinessContextConfidence(contextItem.confidence, workspaceLocale)}
+                      {" · "}
+                      {copy.text.businessContextInferenceSource}:{" "}
+                      {formatBusinessContextInferenceSource(
+                        contextItem.inferenceSource,
+                        workspaceLocale,
+                      )}
                     </p>
                     {contextItem.summary ? (
                       <p className={styles.muted}>{contextItem.summary}</p>

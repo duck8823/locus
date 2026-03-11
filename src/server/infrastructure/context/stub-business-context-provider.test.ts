@@ -24,6 +24,8 @@ describe("StubBusinessContextProvider", () => {
         expect.objectContaining({
           sourceType: "github_issue",
           status: "candidate",
+          confidence: "medium",
+          inferenceSource: "same_repo_shorthand",
           href: "https://github.com/octocat/locus/issues/128",
         }),
       ]),
@@ -52,10 +54,12 @@ describe("StubBusinessContextProvider", () => {
       expect.arrayContaining([
         expect.objectContaining({
           status: "linked",
+          confidence: "high",
           href: "https://github.com/octocat/locus/issues/91",
         }),
         expect.objectContaining({
           status: "candidate",
+          confidence: "medium",
           href: "https://github.com/octocat/locus/issues/92",
         }),
       ]),
@@ -88,6 +92,8 @@ describe("StubBusinessContextProvider", () => {
       expect.arrayContaining([
         expect.objectContaining({
           status: "linked",
+          confidence: "high",
+          inferenceSource: "same_repo_closing_keyword",
           href: "https://github.com/octocat/locus/issues/777",
         }),
       ]),
@@ -120,6 +126,8 @@ describe("StubBusinessContextProvider", () => {
       expect.arrayContaining([
         expect.objectContaining({
           status: "candidate",
+          confidence: "medium",
+          inferenceSource: "branch_pattern",
           href: "https://github.com/octocat/locus/issues/451",
         }),
       ]),
@@ -145,6 +153,8 @@ describe("StubBusinessContextProvider", () => {
         expect.objectContaining({
           sourceType: "github_issue",
           status: "unavailable",
+          confidence: "low",
+          inferenceSource: "none",
           href: null,
         }),
       ]),
