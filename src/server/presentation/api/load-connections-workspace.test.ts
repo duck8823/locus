@@ -25,6 +25,7 @@ describe("loadConnectionsWorkspaceDto", () => {
     executeMock.mockReset();
     getDependenciesMock.mockReturnValue({
       connectionStateRepository: {},
+      connectionProviderCatalog: {},
     });
     executeMock.mockResolvedValue({
       connections: [

@@ -1,8 +1,8 @@
 import {
-  listPrototypeConnectionCatalog,
   type ConnectionCapabilities,
   type ConnectionProviderKey,
 } from "@/server/application/services/connection-catalog";
+import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
 
 export interface ConnectionsWorkspaceRecord {
@@ -25,6 +25,7 @@ export interface GetConnectionsWorkspaceResult {
 
 export interface GetConnectionsWorkspaceDependencies {
   connectionStateRepository: ConnectionStateRepository;
+  connectionProviderCatalog: ConnectionProviderCatalog;
 }
 
 export class GetConnectionsWorkspaceUseCase {
@@ -50,7 +51,7 @@ export class GetConnectionsWorkspaceUseCase {
     }
 
     return {
-      connections: listPrototypeConnectionCatalog().map((catalogConnection) => {
+      connections: this.dependencies.connectionProviderCatalog.listProviders().map((catalogConnection) => {
         const persistedState = stateByProvider.get(catalogConnection.provider);
 
         return {

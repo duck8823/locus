@@ -1,3 +1,5 @@
+import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
+
 export type ConnectionProviderKey = "github" | "confluence" | "jira";
 
 export type ConnectionStatus =
@@ -18,7 +20,7 @@ export interface ConnectionCatalogEntry {
   capabilities: ConnectionCapabilities;
 }
 
-const prototypeConnectionCatalog: ConnectionCatalogEntry[] = [
+const prototypeConnectionCatalog: readonly ConnectionCatalogEntry[] = [
   {
     provider: "github",
     status: "not_connected",
@@ -48,9 +50,21 @@ const prototypeConnectionCatalog: ConnectionCatalogEntry[] = [
   },
 ];
 
-export function listPrototypeConnectionCatalog(): ConnectionCatalogEntry[] {
-  return prototypeConnectionCatalog.map((entry) => ({
+function cloneCatalogEntry(entry: ConnectionCatalogEntry): ConnectionCatalogEntry {
+  return {
     ...entry,
     capabilities: { ...entry.capabilities },
-  }));
+  };
+}
+
+export class PrototypeConnectionProviderCatalog implements ConnectionProviderCatalog {
+  listProviders(): ConnectionCatalogEntry[] {
+    return prototypeConnectionCatalog.map(cloneCatalogEntry);
+  }
+}
+
+const defaultPrototypeConnectionProviderCatalog = new PrototypeConnectionProviderCatalog();
+
+export function listPrototypeConnectionCatalog(): ConnectionCatalogEntry[] {
+  return defaultPrototypeConnectionProviderCatalog.listProviders();
 }
