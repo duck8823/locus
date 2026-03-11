@@ -40,10 +40,12 @@ export async function setConnectionStateAction(formData: FormData): Promise<void
   const connectedAccountLabel = readOptionalString(formData, "connectedAccountLabel");
   const {
     connectionStateRepository,
+    connectionStateTransitionRepository,
     connectionProviderCatalog,
   } = getDependencies();
   const useCase = new SetConnectionStateUseCase({
     connectionStateRepository,
+    connectionStateTransitionRepository,
     connectionProviderCatalog,
   });
 

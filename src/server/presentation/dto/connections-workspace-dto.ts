@@ -3,6 +3,14 @@ import type {
   ConnectionProviderKey,
 } from "@/server/application/services/connection-catalog";
 
+export interface ConnectionsWorkspaceTransitionDto {
+  transitionId: string;
+  previousStatus: string;
+  nextStatus: string;
+  changedAt: string;
+  connectedAccountLabel: string | null;
+}
+
 export interface ConnectionsWorkspaceConnectionDto {
   provider: ConnectionProviderKey | string;
   status: string;
@@ -11,6 +19,7 @@ export interface ConnectionsWorkspaceConnectionDto {
   connectedAccountLabel: string | null;
   stateSource: "catalog_default" | "persisted";
   capabilities: ConnectionCapabilities;
+  recentTransitions: ConnectionsWorkspaceTransitionDto[];
 }
 
 export interface ConnectionsWorkspaceDto {

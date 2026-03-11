@@ -47,6 +47,7 @@ describe("setConnectionStateAction", () => {
     redirectMock.mockReset();
     getDependenciesMock.mockReturnValue({
       connectionStateRepository: {},
+      connectionStateTransitionRepository: {},
       connectionProviderCatalog: {},
     });
   });

@@ -1,10 +1,12 @@
 import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
+import type { ConnectionStateTransitionRepository } from "@/server/domain/repositories/connection-state-transition-repository";
 import {
   assertConnectionStatusTransition,
   type WritableConnectionStatus,
 } from "@/server/domain/value-objects/connection-lifecycle-status";
 import type { PersistedConnectionState } from "@/server/domain/value-objects/connection-state";
+import type { PersistedConnectionStateTransitionDraft } from "@/server/domain/value-objects/connection-state-transition";
 
 export interface SetConnectionStateInput {
   reviewerId: string;
@@ -15,6 +17,7 @@ export interface SetConnectionStateInput {
 
 export interface SetConnectionStateDependencies {
   connectionStateRepository: ConnectionStateRepository;
+  connectionStateTransitionRepository: ConnectionStateTransitionRepository;
   connectionProviderCatalog: ConnectionProviderCatalog;
 }
 
@@ -37,6 +40,7 @@ export class SetConnectionStateUseCase {
       throw new Error(`Unsupported connection provider: ${input.provider}`);
     }
 
+    let transitionDraft: PersistedConnectionStateTransitionDraft | null = null;
     const savedStates = await this.dependencies.connectionStateRepository.updateForReviewerId(
       input.reviewerId,
       (states) => {
@@ -45,10 +49,11 @@ export class SetConnectionStateUseCase {
 
         assertConnectionStatusTransition(currentStatus, input.nextStatus);
 
+        const statusUpdatedAt = new Date().toISOString();
         const nextState: PersistedConnectionState = {
           provider: input.provider,
           status: input.nextStatus,
-          statusUpdatedAt: new Date().toISOString(),
+          statusUpdatedAt,
           connectedAccountLabel: normalizeConnectedAccountLabel({
             current: currentState?.connectedAccountLabel ?? null,
             nextStatus: input.nextStatus,
@@ -56,10 +61,25 @@ export class SetConnectionStateUseCase {
           }),
         };
 
+        transitionDraft = {
+          reviewerId: input.reviewerId,
+          provider: input.provider,
+          previousStatus: currentStatus,
+          nextStatus: nextState.status,
+          changedAt: statusUpdatedAt,
+          connectedAccountLabel: nextState.connectedAccountLabel,
+        };
+
         const remainingStates = states.filter((state) => state.provider !== input.provider);
         return [...remainingStates, nextState];
       },
     );
+
+    if (transitionDraft) {
+      await this.dependencies.connectionStateTransitionRepository.appendTransition(
+        transitionDraft,
+      );
+    }
 
     const nextState = selectLatestProviderState(savedStates, input.provider);
 

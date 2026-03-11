@@ -9,9 +9,14 @@ export interface LoadConnectionsWorkspaceInput {
 export async function loadConnectionsWorkspaceDto(
   input: LoadConnectionsWorkspaceInput,
 ): Promise<ConnectionsWorkspaceDto> {
-  const { connectionStateRepository, connectionProviderCatalog } = getDependencies();
+  const {
+    connectionStateRepository,
+    connectionStateTransitionRepository,
+    connectionProviderCatalog,
+  } = getDependencies();
   const useCase = new GetConnectionsWorkspaceUseCase({
     connectionStateRepository,
+    connectionStateTransitionRepository,
     connectionProviderCatalog,
   });
   const result = await useCase.execute({ reviewerId: input.reviewerId });
@@ -26,6 +31,7 @@ export async function loadConnectionsWorkspaceDto(
       connectedAccountLabel: connection.connectedAccountLabel,
       stateSource: connection.stateSource,
       capabilities: connection.capabilities,
+      recentTransitions: connection.recentTransitions,
     })),
   };
 }

@@ -3,7 +3,9 @@ import type { ConnectionProviderCatalog } from "@/server/application/ports/conne
 import type { ConnectionCatalogEntry } from "@/server/application/services/connection-catalog";
 import { SetConnectionStateUseCase } from "@/server/application/usecases/set-connection-state";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
+import type { ConnectionStateTransitionRepository } from "@/server/domain/repositories/connection-state-transition-repository";
 import type { PersistedConnectionState } from "@/server/domain/value-objects/connection-state";
+import type { PersistedConnectionStateTransition } from "@/server/domain/value-objects/connection-state-transition";
 
 class InMemoryConnectionStateRepository implements ConnectionStateRepository {
   constructor(
@@ -25,6 +27,30 @@ class InMemoryConnectionStateRepository implements ConnectionStateRepository {
     const nextStates = updater(this.recordsByReviewerId[reviewerId] ?? []);
     this.recordsByReviewerId[reviewerId] = nextStates;
     return nextStates;
+  }
+}
+
+class InMemoryConnectionStateTransitionRepository
+  implements ConnectionStateTransitionRepository
+{
+  private records: PersistedConnectionStateTransition[] = [];
+
+  async appendTransition(
+    transition: Omit<PersistedConnectionStateTransition, "transitionId">,
+  ): Promise<PersistedConnectionStateTransition> {
+    const saved: PersistedConnectionStateTransition = {
+      transitionId: `transition-${this.records.length + 1}`,
+      ...transition,
+    };
+
+    this.records.push(saved);
+    return saved;
+  }
+
+  async listRecentByReviewerId(
+    reviewerId: string,
+  ): Promise<PersistedConnectionStateTransition[]> {
+    return this.records.filter((transition) => transition.reviewerId === reviewerId);
   }
 }
 
@@ -56,8 +82,10 @@ class InMemoryConnectionProviderCatalog implements ConnectionProviderCatalog {
 describe("SetConnectionStateUseCase", () => {
   it("persists state transition from catalog default not_connected to connected", async () => {
     const repository = new InMemoryConnectionStateRepository();
+    const transitionRepository = new InMemoryConnectionStateTransitionRepository();
     const useCase = new SetConnectionStateUseCase({
       connectionStateRepository: repository,
+      connectionStateTransitionRepository: transitionRepository,
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
     });
 
@@ -80,11 +108,23 @@ describe("SetConnectionStateUseCase", () => {
         connectedAccountLabel: "duck8823",
       },
     ]);
+    await expect(transitionRepository.listRecentByReviewerId("demo-reviewer")).resolves.toEqual([
+      {
+        transitionId: "transition-1",
+        reviewerId: "demo-reviewer",
+        provider: "github",
+        previousStatus: "not_connected",
+        nextStatus: "connected",
+        changedAt: result.statusUpdatedAt,
+        connectedAccountLabel: "duck8823",
+      },
+    ]);
   });
 
   it("rejects unsupported provider", async () => {
     const useCase = new SetConnectionStateUseCase({
       connectionStateRepository: new InMemoryConnectionStateRepository(),
+      connectionStateTransitionRepository: new InMemoryConnectionStateTransitionRepository(),
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
     });
 
@@ -101,6 +141,7 @@ describe("SetConnectionStateUseCase", () => {
   it("rejects invalid transition from planned provider status", async () => {
     const useCase = new SetConnectionStateUseCase({
       connectionStateRepository: new InMemoryConnectionStateRepository(),
+      connectionStateTransitionRepository: new InMemoryConnectionStateTransitionRepository(),
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
     });
 
@@ -133,6 +174,7 @@ describe("SetConnectionStateUseCase", () => {
     });
     const useCase = new SetConnectionStateUseCase({
       connectionStateRepository: repository,
+      connectionStateTransitionRepository: new InMemoryConnectionStateTransitionRepository(),
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
     });
 
@@ -160,6 +202,7 @@ describe("SetConnectionStateUseCase", () => {
     });
     const useCase = new SetConnectionStateUseCase({
       connectionStateRepository: repository,
+      connectionStateTransitionRepository: new InMemoryConnectionStateTransitionRepository(),
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
     });
 
