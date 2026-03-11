@@ -40,11 +40,29 @@ const copyByLocale = {
     transitionHistoryLabel: "Recent transitions",
     noTransitionHistory: "No transitions recorded yet.",
     changedAtLabel: "Changed at",
+    reasonLabel: "Reason",
+    actorLabel: "Actor",
+    historyReasonFilterLabel: "History filter",
+    historyReasonFilterAll: "All reasons",
+    historyPageLabel: "Page",
+    historyPageSizeLabel: "Rows",
+    historyApplyButton: "Apply",
+    previousPage: "Previous",
+    nextPage: "Next",
     statusByKey: {
       not_connected: "Not connected",
       planned: "Planned",
       connected: "Connected",
       reauth_required: "Re-auth required",
+    },
+    transitionReasonByKey: {
+      manual: "Manual",
+      "token-expired": "Token expired",
+      webhook: "Webhook",
+    },
+    transitionActorByKey: {
+      reviewer: "Reviewer",
+      system: "System",
     },
     stateSourceByKey: {
       catalog_default: "Catalog default",
@@ -93,11 +111,29 @@ const copyByLocale = {
     transitionHistoryLabel: "最近の状態変更",
     noTransitionHistory: "状態変更履歴はまだありません。",
     changedAtLabel: "変更時刻",
+    reasonLabel: "理由",
+    actorLabel: "変更主体",
+    historyReasonFilterLabel: "履歴フィルター",
+    historyReasonFilterAll: "すべての理由",
+    historyPageLabel: "ページ",
+    historyPageSizeLabel: "表示件数",
+    historyApplyButton: "適用",
+    previousPage: "前へ",
+    nextPage: "次へ",
     statusByKey: {
       not_connected: "未接続",
       planned: "計画中",
       connected: "接続済み",
       reauth_required: "再認証が必要",
+    },
+    transitionReasonByKey: {
+      manual: "手動操作",
+      "token-expired": "トークン期限切れ",
+      webhook: "Webhook",
+    },
+    transitionActorByKey: {
+      reviewer: "レビュアー",
+      system: "システム",
     },
     stateSourceByKey: {
       catalog_default: "カタログ既定値",
@@ -172,6 +208,23 @@ const detailParagraphStyle = {
   overflowWrap: "anywhere",
 } as const;
 
+interface ConnectionsPageSearchParams {
+  historyReason?: string | string[];
+  historyPage?: string | string[];
+  historyPageSize?: string | string[];
+}
+
+type TransitionHistoryReason = "manual" | "token-expired" | "webhook";
+
+const TRANSITION_HISTORY_REASON_OPTIONS = [
+  "all",
+  "manual",
+  "token-expired",
+  "webhook",
+] as const;
+
+const TRANSITION_HISTORY_PAGE_SIZE_OPTIONS = [5, 10, 20] as const;
+
 function formatProvider(
   provider: ConnectionProviderKey | string,
   locale: keyof typeof copyByLocale,
@@ -196,6 +249,27 @@ function formatTransitionOption(
   locale: keyof typeof copyByLocale,
 ): string {
   return formatStatus(status, locale);
+}
+
+function formatTransitionReason(
+  reason: TransitionHistoryReason,
+  locale: keyof typeof copyByLocale,
+): string {
+  return copyByLocale[locale].transitionReasonByKey[reason];
+}
+
+function formatTransitionActor(input: {
+  actorType: "reviewer" | "system";
+  actorId: string | null;
+  locale: keyof typeof copyByLocale;
+}): string {
+  const actorLabel = copyByLocale[input.locale].transitionActorByKey[input.actorType];
+
+  if (!input.actorId) {
+    return actorLabel;
+  }
+
+  return `${actorLabel} (${input.actorId})`;
 }
 
 function formatAuthMode(authMode: string, locale: keyof typeof copyByLocale): string {
@@ -246,7 +320,68 @@ function formatConnectedAccountLabel(
   return locale === "ja" ? "なし" : "None";
 }
 
-export default async function ConnectionsPage() {
+function resolveSearchParamValue(value: string | string[] | undefined): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return null;
+}
+
+function parseHistoryReason(
+  value: string | null,
+): TransitionHistoryReason | "all" {
+  if (!value) {
+    return "all";
+  }
+
+  return (TRANSITION_HISTORY_REASON_OPTIONS as readonly string[]).includes(value)
+    ? (value as TransitionHistoryReason | "all")
+    : "all";
+}
+
+function parsePositiveInt(value: string | null, fallback: number, max: number): number {
+  if (!value || !/^\d+$/.test(value)) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.min(parsed, max);
+}
+
+function buildHistoryPageHref(input: {
+  reason: TransitionHistoryReason | "all";
+  page: number;
+  pageSize: number;
+}): string {
+  const query = new URLSearchParams();
+
+  if (input.reason !== "all") {
+    query.set("historyReason", input.reason);
+  }
+
+  query.set("historyPage", String(input.page));
+  query.set("historyPageSize", String(input.pageSize));
+
+  const encoded = query.toString();
+  return encoded.length > 0 ? `/settings/connections?${encoded}` : "/settings/connections";
+}
+
+export default async function ConnectionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<ConnectionsPageSearchParams>;
+}) {
+  const resolvedSearchParams = await searchParams;
   const headerStore = await headers();
   const cookieStore = await cookies();
   const workspaceLocale = resolveWorkspaceLocale({
@@ -257,8 +392,24 @@ export default async function ConnectionsPage() {
   const viewerCookie = cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value;
   const viewerName = viewerCookie ?? copy.signedOut;
   const reviewerId = resolveReviewerId(viewerCookie);
+  const historyReason = parseHistoryReason(
+    resolveSearchParamValue(resolvedSearchParams.historyReason),
+  );
+  const historyPage = parsePositiveInt(
+    resolveSearchParamValue(resolvedSearchParams.historyPage),
+    1,
+    30,
+  );
+  const historyPageSize = parsePositiveInt(
+    resolveSearchParamValue(resolvedSearchParams.historyPageSize),
+    5,
+    20,
+  );
   const connectionsWorkspace = await loadConnectionsWorkspaceDto({
     reviewerId,
+    transitionReason: historyReason,
+    transitionPage: historyPage,
+    transitionPageSize: historyPageSize,
   });
 
   return (
@@ -336,6 +487,82 @@ export default async function ConnectionsPage() {
           {copy.generatedAt}:{" "}
           <LocalizedDateTime isoTimestamp={connectionsWorkspace.generatedAt} />
         </p>
+        <form
+          method="get"
+          action="/settings/connections"
+          style={{
+            marginTop: "14px",
+            display: "flex",
+            gap: "8px",
+            alignItems: "flex-end",
+            flexWrap: "wrap",
+          }}
+        >
+          <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
+            {copy.historyReasonFilterLabel}
+            <select
+              name="historyReason"
+              defaultValue={historyReason}
+              style={{
+                display: "block",
+                marginTop: "4px",
+                background: "rgba(14, 21, 43, 0.96)",
+                color: "white",
+                border: "1px solid rgba(154, 167, 209, 0.24)",
+                borderRadius: "10px",
+                padding: "8px 10px",
+              }}
+            >
+              <option value="all">{copy.historyReasonFilterAll}</option>
+              <option value="manual">
+                {formatTransitionReason("manual", workspaceLocale)}
+              </option>
+              <option value="token-expired">
+                {formatTransitionReason("token-expired", workspaceLocale)}
+              </option>
+              <option value="webhook">
+                {formatTransitionReason("webhook", workspaceLocale)}
+              </option>
+            </select>
+          </label>
+          <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
+            {copy.historyPageSizeLabel}
+            <select
+              name="historyPageSize"
+              defaultValue={String(historyPageSize)}
+              style={{
+                display: "block",
+                marginTop: "4px",
+                background: "rgba(14, 21, 43, 0.96)",
+                color: "white",
+                border: "1px solid rgba(154, 167, 209, 0.24)",
+                borderRadius: "10px",
+                padding: "8px 10px",
+              }}
+            >
+              {TRANSITION_HISTORY_PAGE_SIZE_OPTIONS.map((pageSizeOption) => (
+                <option key={pageSizeOption} value={String(pageSizeOption)}>
+                  {pageSizeOption}
+                </option>
+              ))}
+            </select>
+          </label>
+          <input type="hidden" name="historyPage" value="1" />
+          <button
+            type="submit"
+            style={{
+              border: "1px solid rgba(124, 156, 255, 0.65)",
+              borderRadius: "10px",
+              background: "rgba(94, 123, 255, 0.16)",
+              color: "white",
+              minHeight: "34px",
+              cursor: "pointer",
+              padding: "0 12px",
+            }}
+          >
+            {copy.historyApplyButton}
+          </button>
+        </form>
       </section>
       <section style={cardsLayoutStyle}>
         {connectionsWorkspace.connections.map((connection) => {
@@ -396,7 +623,8 @@ export default async function ConnectionsPage() {
 
               <details style={detailCardStyle}>
                 <summary style={detailSummaryStyle}>
-                  {copy.transitionHistoryLabel} ({connection.recentTransitions.length})
+                  {copy.transitionHistoryLabel} (
+                  {connection.recentTransitions.length}/{connection.recentTransitionsTotalCount})
                 </summary>
                 {connection.recentTransitions.length > 0 ? (
                   <ul
@@ -424,6 +652,18 @@ export default async function ConnectionsPage() {
                         <p style={{ color: "#9aa7d1", marginBottom: "2px", fontSize: "12px" }}>
                           {copy.changedAtLabel}: <LocalizedDateTime isoTimestamp={transition.changedAt} />
                         </p>
+                        <p style={{ color: "#9aa7d1", marginBottom: "2px", fontSize: "12px" }}>
+                          {copy.reasonLabel}:{" "}
+                          {formatTransitionReason(transition.reason, workspaceLocale)}
+                        </p>
+                        <p style={{ color: "#9aa7d1", marginBottom: "2px", fontSize: "12px" }}>
+                          {copy.actorLabel}:{" "}
+                          {formatTransitionActor({
+                            actorType: transition.actorType,
+                            actorId: transition.actorId,
+                            locale: workspaceLocale,
+                          })}
+                        </p>
                         {transition.connectedAccountLabel ? (
                           <p
                             style={{
@@ -442,6 +682,54 @@ export default async function ConnectionsPage() {
                 ) : (
                   <p style={detailParagraphStyle}>{copy.noTransitionHistory}</p>
                 )}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginTop: "8px",
+                    gap: "8px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ color: "#9aa7d1", fontSize: "12px" }}>
+                    {copy.historyPageLabel}: {historyPage}
+                  </span>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {historyPage > 1 ? (
+                      <Link
+                        href={buildHistoryPageHref({
+                          reason: historyReason,
+                          page: historyPage - 1,
+                          pageSize: historyPageSize,
+                        })}
+                        style={{ color: "#9aa7d1", fontSize: "12px" }}
+                      >
+                        {copy.previousPage}
+                      </Link>
+                    ) : (
+                      <span style={{ color: "#6071a9", fontSize: "12px" }}>
+                        {copy.previousPage}
+                      </span>
+                    )}
+                    {connection.recentTransitionsHasMore ? (
+                      <Link
+                        href={buildHistoryPageHref({
+                          reason: historyReason,
+                          page: historyPage + 1,
+                          pageSize: historyPageSize,
+                        })}
+                        style={{ color: "#9aa7d1", fontSize: "12px" }}
+                      >
+                        {copy.nextPage}
+                      </Link>
+                    ) : (
+                      <span style={{ color: "#6071a9", fontSize: "12px" }}>
+                        {copy.nextPage}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </details>
 
               {availableTransitions.length > 0 ? (
