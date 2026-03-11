@@ -6,6 +6,7 @@ import type {
   ConnectionProviderKey,
 } from "@/server/application/services/connection-catalog";
 import { loadConnectionsWorkspaceDto } from "@/server/presentation/api/load-connections-workspace";
+import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
 import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 
 const copyByLocale = {
@@ -175,7 +176,7 @@ export default async function ConnectionsPage() {
     acceptLanguage: headerStore.get("accept-language"),
   });
   const copy = copyByLocale[workspaceLocale];
-  const viewerCookie = cookieStore.get("locus-demo-viewer")?.value;
+  const viewerCookie = cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value;
   const viewerName = viewerCookie ?? copy.signedOut;
   const connectionsWorkspace = await loadConnectionsWorkspaceDto({
     reviewerId: resolveReviewerId(viewerCookie),

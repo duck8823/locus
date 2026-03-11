@@ -44,7 +44,7 @@ export class GetConnectionsWorkspaceUseCase {
         continue;
       }
 
-      if (Date.parse(previous.statusUpdatedAt) <= Date.parse(connectionState.statusUpdatedAt)) {
+      if (toEpochMs(previous.statusUpdatedAt) <= toEpochMs(connectionState.statusUpdatedAt)) {
         stateByProvider.set(connectionState.provider, connectionState);
       }
     }
@@ -65,4 +65,14 @@ export class GetConnectionsWorkspaceUseCase {
       }),
     };
   }
+}
+
+function toEpochMs(value: string): number {
+  const parsed = Date.parse(value);
+
+  if (Number.isNaN(parsed)) {
+    return 0;
+  }
+
+  return parsed;
 }
