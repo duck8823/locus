@@ -87,4 +87,13 @@ test("persists connection state transitions in settings workspace", async ({ pag
       { timeout: 30_000 },
     )
     .toMatch(/Not connected|未接続/);
+
+  const historySummary = page
+    .getByText(/Recent transitions|最近の状態変更/)
+    .first();
+  await expect(historySummary).toBeVisible();
+  await historySummary.click();
+  await expect(
+    page.getByText(/Connected → Not connected|接続済み → 未接続/),
+  ).toBeVisible();
 });
