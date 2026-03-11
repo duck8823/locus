@@ -107,6 +107,8 @@ Locusは最初から拡張可能な設計で作られています：
 
 ### ローカル開発
 
+前提: **Node.js 22.5+**（`node:sqlite` の利用に必要）
+
 ```bash
 npm install
 npm run dev

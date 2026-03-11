@@ -1,6 +1,9 @@
 import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
-import type { ConnectionStateTransitionRepository } from "@/server/domain/repositories/connection-state-transition-repository";
+import {
+  isConnectionStateTransitionTransactionalRepository,
+  type ConnectionStateTransitionRepository,
+} from "@/server/domain/repositories/connection-state-transition-repository";
 import {
   assertConnectionStatusTransition,
   type WritableConnectionStatus,
@@ -40,45 +43,73 @@ export class SetConnectionStateUseCase {
       throw new Error(`Unsupported connection provider: ${input.provider}`);
     }
 
-    let transitionDraft: PersistedConnectionStateTransitionDraft | null = null;
-    const savedStates = await this.dependencies.connectionStateRepository.updateForReviewerId(
-      input.reviewerId,
-      (states) => {
-        const currentState = selectLatestProviderState(states, input.provider);
-        const currentStatus = currentState?.status ?? providerEntry.status;
+    const buildMutation = (
+      states: PersistedConnectionState[],
+    ): {
+      states: PersistedConnectionState[];
+      transition: PersistedConnectionStateTransitionDraft;
+    } => {
+      const currentState = selectLatestProviderState(states, input.provider);
+      const currentStatus = currentState?.status ?? providerEntry.status;
 
-        assertConnectionStatusTransition(currentStatus, input.nextStatus);
+      assertConnectionStatusTransition(currentStatus, input.nextStatus);
 
-        const statusUpdatedAt = new Date().toISOString();
-        const nextState: PersistedConnectionState = {
-          provider: input.provider,
-          status: input.nextStatus,
-          statusUpdatedAt,
-          connectedAccountLabel: normalizeConnectedAccountLabel({
-            current: currentState?.connectedAccountLabel ?? null,
-            nextStatus: input.nextStatus,
-            requested: input.connectedAccountLabel,
-          }),
-        };
+      const statusUpdatedAt = new Date().toISOString();
+      const nextState: PersistedConnectionState = {
+        provider: input.provider,
+        status: input.nextStatus,
+        statusUpdatedAt,
+        connectedAccountLabel: normalizeConnectedAccountLabel({
+          current: currentState?.connectedAccountLabel ?? null,
+          nextStatus: input.nextStatus,
+          requested: input.connectedAccountLabel,
+        }),
+      };
 
-        transitionDraft = {
+      const remainingStates = states.filter((state) => state.provider !== input.provider);
+
+      return {
+        states: [...remainingStates, nextState],
+        transition: {
           reviewerId: input.reviewerId,
           provider: input.provider,
           previousStatus: currentStatus,
           nextStatus: nextState.status,
           changedAt: statusUpdatedAt,
           connectedAccountLabel: nextState.connectedAccountLabel,
-        };
+        },
+      };
+    };
 
-        const remainingStates = states.filter((state) => state.provider !== input.provider);
-        return [...remainingStates, nextState];
-      },
-    );
+    let savedStates: PersistedConnectionState[];
 
-    if (transitionDraft) {
-      await this.dependencies.connectionStateTransitionRepository.appendTransition(
-        transitionDraft,
+    if (
+      isConnectionStateTransitionTransactionalRepository(
+        this.dependencies.connectionStateTransitionRepository,
+      )
+    ) {
+      const result =
+        await this.dependencies.connectionStateTransitionRepository.updateStateAndAppendTransition(
+          input.reviewerId,
+          (states) => buildMutation(states),
+        );
+      savedStates = result.states;
+    } else {
+      let transitionDraft: PersistedConnectionStateTransitionDraft | null = null;
+      savedStates = await this.dependencies.connectionStateRepository.updateForReviewerId(
+        input.reviewerId,
+        (states) => {
+          const mutation = buildMutation(states);
+          transitionDraft = mutation.transition;
+          return mutation.states;
+        },
       );
+
+      if (transitionDraft) {
+        await this.dependencies.connectionStateTransitionRepository.appendTransition(
+          transitionDraft,
+        );
+      }
     }
 
     const nextState = selectLatestProviderState(savedStates, input.provider);

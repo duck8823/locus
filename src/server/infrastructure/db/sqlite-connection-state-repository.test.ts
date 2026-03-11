@@ -164,6 +164,82 @@ describe("SqliteConnectionStateRepository", () => {
     );
   });
 
+  it("updates state and transition atomically", async () => {
+    const { repository } = await createRepository();
+
+    const updated = await repository.updateStateAndAppendTransition(
+      "demo-reviewer",
+      () => ({
+        states: [
+          {
+            provider: "github",
+            status: "connected",
+            statusUpdatedAt: "2026-03-11T00:00:00.000Z",
+            connectedAccountLabel: "duck8823",
+          },
+        ],
+        transition: {
+          reviewerId: "demo-reviewer",
+          provider: "github",
+          previousStatus: "not_connected",
+          nextStatus: "connected",
+          changedAt: "2026-03-11T00:00:00.000Z",
+          connectedAccountLabel: "duck8823",
+        },
+      }),
+    );
+
+    expect(updated.states).toEqual([
+      {
+        provider: "github",
+        status: "connected",
+        statusUpdatedAt: "2026-03-11T00:00:00.000Z",
+        connectedAccountLabel: "duck8823",
+      },
+    ]);
+    expect(updated.transition).toMatchObject({
+      reviewerId: "demo-reviewer",
+      provider: "github",
+      previousStatus: "not_connected",
+      nextStatus: "connected",
+    });
+
+    const transitions = await repository.listRecentByReviewerId("demo-reviewer", {
+      limit: 10,
+    });
+
+    expect(transitions).toHaveLength(1);
+    expect(transitions[0].nextStatus).toBe("connected");
+  });
+
+  it("rolls back state changes when atomic transition insert fails", async () => {
+    const { repository } = await createRepository();
+
+    await expect(
+      repository.updateStateAndAppendTransition("demo-reviewer", () => ({
+        states: [
+          {
+            provider: "github",
+            status: "connected",
+            statusUpdatedAt: "2026-03-11T00:00:00.000Z",
+            connectedAccountLabel: "duck8823",
+          },
+        ],
+        transition: {
+          reviewerId: "demo-reviewer",
+          provider: "github",
+          previousStatus: "not_connected",
+          nextStatus: "connected",
+          changedAt: "invalid-date",
+          connectedAccountLabel: "duck8823",
+        },
+      })),
+    ).rejects.toThrow("Invalid changedAt for connection transition: invalid-date");
+
+    await expect(repository.findByReviewerId("demo-reviewer")).resolves.toEqual([]);
+    await expect(repository.listRecentByReviewerId("demo-reviewer")).resolves.toEqual([]);
+  });
+
   it("stores and lists recent transitions", async () => {
     const { repository } = await createRepository();
 

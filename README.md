@@ -102,6 +102,8 @@ What is intentionally still open:
 
 ### Local development
 
+Prerequisite: **Node.js 22.5+** (required for `node:sqlite`).
+
 ```bash
 npm install
 npm run dev

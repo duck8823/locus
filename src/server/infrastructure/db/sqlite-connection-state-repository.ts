@@ -6,7 +6,9 @@ import { DatabaseSync } from "node:sqlite";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
 import type {
   ConnectionStateTransitionRepository,
+  ConnectionStateTransitionTransactionalRepository,
   ListConnectionStateTransitionOptions,
+  UpdateConnectionStateAndTransitionResult,
 } from "@/server/domain/repositories/connection-state-transition-repository";
 import type { PersistedConnectionState } from "@/server/domain/value-objects/connection-state";
 import type {
@@ -35,10 +37,14 @@ const DEFAULT_TRANSITION_LIMIT = 20;
 const MAX_TRANSITION_LIMIT = 100;
 
 export class SqliteConnectionStateRepository
-  implements ConnectionStateRepository, ConnectionStateTransitionRepository
+  implements
+    ConnectionStateRepository,
+    ConnectionStateTransitionRepository,
+    ConnectionStateTransitionTransactionalRepository
 {
   private readonly databasePath: string;
   private readonly legacyDataDirectory: string;
+  private readonly database: DatabaseSync;
   private readonly writeQueues = new Map<string, Promise<void>>();
   private readonly migrationQueues = new Map<string, Promise<void>>();
   private readonly migratedReviewerIds = new Set<string>();
@@ -51,9 +57,9 @@ export class SqliteConnectionStateRepository
       options.legacyDataDirectory ??
       path.join(process.cwd(), ".locus-data", "connection-states");
 
-    this.withDatabase((database) => {
-      initializeDatabaseSchema(database);
-    });
+    mkdirSync(path.dirname(this.databasePath), { recursive: true });
+    this.database = new DatabaseSync(this.databasePath);
+    initializeDatabaseSchema(this.database);
   }
 
   async findByReviewerId(reviewerId: string): Promise<PersistedConnectionState[]> {
@@ -72,17 +78,57 @@ export class SqliteConnectionStateRepository
     reviewerId: string,
     updater: (states: PersistedConnectionState[]) => PersistedConnectionState[],
   ): Promise<PersistedConnectionState[]> {
-    let savedStates: PersistedConnectionState[] = [];
+    const result = await this.updateStateAndAppendTransition(reviewerId, (states) => ({
+      states: updater(states),
+      transition: null,
+    }));
+
+    return result.states;
+  }
+
+  async updateStateAndAppendTransition(
+    reviewerId: string,
+    updater: (states: PersistedConnectionState[]) => {
+      states: PersistedConnectionState[];
+      transition: PersistedConnectionStateTransitionDraft | null;
+    },
+  ): Promise<UpdateConnectionStateAndTransitionResult> {
+    let result: UpdateConnectionStateAndTransitionResult = {
+      states: [],
+      transition: null,
+    };
 
     await this.enqueueWrite(reviewerId, async () => {
       await this.ensureLegacyReviewerMigrated(reviewerId);
       const currentStates = this.selectStatesForReviewerId(reviewerId);
-      const nextStates = normalizeStates(updater(currentStates));
-      this.replaceStatesForReviewerId(reviewerId, nextStates);
-      savedStates = nextStates;
+      const next = updater(currentStates);
+      const nextStates = normalizeStates(next.states);
+      const normalizedTransition = next.transition
+        ? normalizeTransitionDraft(next.transition)
+        : null;
+
+      this.database.exec("BEGIN IMMEDIATE TRANSACTION");
+
+      try {
+        this.replaceStatesForReviewerIdInTransaction(reviewerId, nextStates);
+
+        if (normalizedTransition) {
+          this.insertTransitionInTransaction(normalizedTransition);
+        }
+
+        this.database.exec("COMMIT");
+      } catch (error) {
+        this.database.exec("ROLLBACK");
+        throw error;
+      }
+
+      result = {
+        states: nextStates,
+        transition: normalizedTransition,
+      };
     });
 
-    return savedStates;
+    return result;
   }
 
   async appendTransition(
@@ -92,29 +138,7 @@ export class SqliteConnectionStateRepository
 
     await this.enqueueWrite(normalizedTransition.reviewerId, async () => {
       await this.ensureLegacyReviewerMigrated(normalizedTransition.reviewerId);
-      this.withDatabase((database) => {
-        database
-          .prepare(
-            `INSERT INTO connection_state_transitions (
-              transition_id,
-              reviewer_id,
-              provider,
-              previous_status,
-              next_status,
-              changed_at,
-              connected_account_label
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)`
-          )
-          .run(
-            normalizedTransition.transitionId,
-            normalizedTransition.reviewerId,
-            normalizedTransition.provider,
-            normalizedTransition.previousStatus,
-            normalizedTransition.nextStatus,
-            normalizedTransition.changedAt,
-            normalizedTransition.connectedAccountLabel,
-          );
-      });
+      this.insertTransitionInTransaction(normalizedTransition);
     });
 
     return normalizedTransition;
@@ -129,9 +153,8 @@ export class SqliteConnectionStateRepository
     const limit = normalizeTransitionLimit(options.limit);
     const provider = normalizeProvider(options.provider);
 
-    const rows = this.withDatabase((database) => {
-      if (provider) {
-        return database
+    const rows = provider
+      ? this.database
           .prepare(
             `SELECT
               transition_id,
@@ -147,26 +170,23 @@ export class SqliteConnectionStateRepository
              ORDER BY changed_at DESC, transition_id DESC
              LIMIT ?`
           )
-          .all(reviewerId, provider, limit);
-      }
-
-      return database
-        .prepare(
-          `SELECT
-            transition_id,
-            reviewer_id,
-            provider,
-            previous_status,
-            next_status,
-            changed_at,
-            connected_account_label
-           FROM connection_state_transitions
-           WHERE reviewer_id = ?
-           ORDER BY changed_at DESC, transition_id DESC
-           LIMIT ?`
-        )
-        .all(reviewerId, limit);
-    });
+          .all(reviewerId, provider, limit)
+      : this.database
+          .prepare(
+            `SELECT
+              transition_id,
+              reviewer_id,
+              provider,
+              previous_status,
+              next_status,
+              changed_at,
+              connected_account_label
+             FROM connection_state_transitions
+             WHERE reviewer_id = ?
+             ORDER BY changed_at DESC, transition_id DESC
+             LIMIT ?`
+          )
+          .all(reviewerId, limit);
 
     return rows.flatMap((row) => {
       const normalized = normalizeTransitionRow(row);
@@ -175,19 +195,17 @@ export class SqliteConnectionStateRepository
   }
 
   private selectStatesForReviewerId(reviewerId: string): PersistedConnectionState[] {
-    const rows = this.withDatabase((database) =>
-      database
-        .prepare(
-          `SELECT
-            provider,
-            status,
-            status_updated_at,
-            connected_account_label
-           FROM connection_states
-           WHERE reviewer_id = ?`
-        )
-        .all(reviewerId) as ConnectionStateRow[],
-    );
+    const rows = this.database
+      .prepare(
+        `SELECT
+          provider,
+          status,
+          status_updated_at,
+          connected_account_label
+         FROM connection_states
+         WHERE reviewer_id = ?`
+      )
+      .all(reviewerId) as ConnectionStateRow[];
 
     return rows.flatMap((row) => {
       const normalized = normalizeStateRow(row);
@@ -199,48 +217,76 @@ export class SqliteConnectionStateRepository
     reviewerId: string,
     states: PersistedConnectionState[],
   ): void {
-    this.withDatabase((database) => {
-      database.exec("BEGIN IMMEDIATE TRANSACTION");
+    this.database.exec("BEGIN IMMEDIATE TRANSACTION");
 
-      try {
-        database
-          .prepare("DELETE FROM connection_states WHERE reviewer_id = ?")
-          .run(reviewerId);
+    try {
+      this.replaceStatesForReviewerIdInTransaction(reviewerId, states);
+      this.database.exec("COMMIT");
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
+  }
 
-        const insertStatement = database.prepare(
-          `INSERT INTO connection_states (
-            reviewer_id,
-            provider,
-            status,
-            status_updated_at,
-            connected_account_label
-          ) VALUES (?, ?, ?, ?, ?)`
-        );
+  private replaceStatesForReviewerIdInTransaction(
+    reviewerId: string,
+    states: PersistedConnectionState[],
+  ): void {
+    this.database
+      .prepare("DELETE FROM connection_states WHERE reviewer_id = ?")
+      .run(reviewerId);
 
-        for (const state of states) {
-          insertStatement.run(
-            reviewerId,
-            state.provider,
-            state.status,
-            state.statusUpdatedAt,
-            state.connectedAccountLabel,
-          );
-        }
+    const insertStatement = this.database.prepare(
+      `INSERT INTO connection_states (
+        reviewer_id,
+        provider,
+        status,
+        status_updated_at,
+        connected_account_label
+      ) VALUES (?, ?, ?, ?, ?)`
+    );
 
-        database.exec("COMMIT");
-      } catch (error) {
-        database.exec("ROLLBACK");
-        throw error;
-      }
-    });
+    for (const state of states) {
+      insertStatement.run(
+        reviewerId,
+        state.provider,
+        state.status,
+        state.statusUpdatedAt,
+        state.connectedAccountLabel,
+      );
+    }
+  }
+
+  private insertTransitionInTransaction(
+    transition: PersistedConnectionStateTransition,
+  ): void {
+    this.database
+      .prepare(
+        `INSERT INTO connection_state_transitions (
+          transition_id,
+          reviewer_id,
+          provider,
+          previous_status,
+          next_status,
+          changed_at,
+          connected_account_label
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        transition.transitionId,
+        transition.reviewerId,
+        transition.provider,
+        transition.previousStatus,
+        transition.nextStatus,
+        transition.changedAt,
+        transition.connectedAccountLabel,
+      );
   }
 
   private countStatesForReviewerId(reviewerId: string): number {
-    const row = this.withDatabase((database) =>
-      database
-        .prepare("SELECT COUNT(*) AS count FROM connection_states WHERE reviewer_id = ?")
-        .get(reviewerId) as { count?: unknown } | undefined,
-    );
+    const row = this.database
+      .prepare("SELECT COUNT(*) AS count FROM connection_states WHERE reviewer_id = ?")
+      .get(reviewerId) as { count?: unknown } | undefined;
 
     if (!row) {
       return 0;
@@ -334,18 +380,6 @@ export class SqliteConnectionStateRepository
       if (this.writeQueues.get(reviewerId) === nextWrite) {
         this.writeQueues.delete(reviewerId);
       }
-    }
-  }
-
-  private withDatabase<T>(action: (database: DatabaseSync) => T): T {
-    mkdirSync(path.dirname(this.databasePath), { recursive: true });
-    const database = new DatabaseSync(this.databasePath);
-
-    try {
-      initializeDatabaseSchema(database);
-      return action(database);
-    } finally {
-      database.close();
     }
   }
 }
