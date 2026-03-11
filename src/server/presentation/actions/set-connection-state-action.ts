@@ -1,11 +1,14 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SetConnectionStateUseCase } from "@/server/application/usecases/set-connection-state";
 import { getDependencies } from "@/server/composition/dependencies";
 import { assertWritableConnectionStatus } from "@/server/domain/value-objects/connection-lifecycle-status";
+import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
 import { readRequiredString } from "@/server/presentation/actions/read-required-string";
+import { resolveReviewerId } from "@/server/presentation/actions/reviewer-identity";
 
 const MAX_CONNECTED_ACCOUNT_LABEL_LENGTH = 200;
 
@@ -42,7 +45,10 @@ function assertRelativeRedirectPath(value: string): string {
 }
 
 export async function setConnectionStateAction(formData: FormData): Promise<void> {
-  const reviewerId = readRequiredString(formData, "reviewerId");
+  const cookieStore = await cookies();
+  const reviewerId = resolveReviewerId(
+    cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value,
+  );
   const provider = readRequiredString(formData, "provider");
   const nextStatus = assertWritableConnectionStatus(readRequiredString(formData, "nextStatus"));
   const redirectPath = assertRelativeRedirectPath(

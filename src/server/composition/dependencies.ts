@@ -38,6 +38,9 @@ const parserAdapters = [new TypeScriptParserAdapter()];
 const pullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
 const runScheduledAnalysisJobUseCase = new RunScheduledAnalysisJobUseCase({
   reviewSessionRepository,
+  connectionStateRepository,
+  connectionStateTransitionRepository,
+  connectionProviderCatalog,
   parserAdapters,
   pullRequestSnapshotProvider,
 });

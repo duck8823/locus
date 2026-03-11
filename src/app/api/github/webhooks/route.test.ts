@@ -7,6 +7,7 @@ import type {
 
 const {
   getDependenciesMock,
+  setConnectionStateExecuteMock,
   parseGitHubWebhookRequestMock,
   GitHubWebhookRequestErrorMock,
 } = vi.hoisted(() => {
@@ -22,6 +23,7 @@ const {
 
   return {
     getDependenciesMock: vi.fn(),
+    setConnectionStateExecuteMock: vi.fn(),
     parseGitHubWebhookRequestMock: vi.fn(),
     GitHubWebhookRequestErrorMock: MockGitHubWebhookRequestError,
   };
@@ -29,6 +31,14 @@ const {
 
 vi.mock("@/server/composition/dependencies", () => ({
   getDependencies: getDependenciesMock,
+}));
+
+vi.mock("@/server/application/usecases/set-connection-state", () => ({
+  SetConnectionStateUseCase: class {
+    async execute(input: unknown) {
+      return setConnectionStateExecuteMock(input);
+    }
+  },
 }));
 
 vi.mock("@/server/presentation/api/parse-github-webhook-request", () => ({
@@ -54,6 +64,7 @@ class SpyAnalysisJobScheduler implements AnalysisJobScheduler {
 describe("POST /api/github/webhooks", () => {
   beforeEach(() => {
     getDependenciesMock.mockReset();
+    setConnectionStateExecuteMock.mockReset();
     parseGitHubWebhookRequestMock.mockReset();
   });
 
@@ -61,7 +72,22 @@ describe("POST /api/github/webhooks", () => {
     const analysisJobScheduler = new SpyAnalysisJobScheduler();
     getDependenciesMock.mockReturnValue({
       analysisJobScheduler,
-      reviewSessionRepository: {},
+      reviewSessionRepository: {
+        findByReviewId: vi.fn().mockResolvedValue({
+          reviewId: "github-pr-42",
+          viewerName: "Demo reviewer",
+          toRecord: () => ({
+            source: {
+              provider: "github",
+              owner: "octocat",
+              repository: "locus",
+              pullRequestNumber: 42,
+            },
+          }),
+        }),
+      },
+      connectionStateTransitionRepository: {},
+      connectionProviderCatalog: {},
       parserAdapters: [],
       pullRequestSnapshotProvider: {},
     });
@@ -92,12 +118,23 @@ describe("POST /api/github/webhooks", () => {
       reviewId: "github-pr-42",
       reason: "code_host_webhook",
     });
+    expect(setConnectionStateExecuteMock).toHaveBeenCalledWith({
+      reviewerId: "Demo reviewer",
+      provider: "github",
+      nextStatus: "connected",
+      connectedAccountLabel: null,
+      transitionReason: "webhook",
+      transitionActorType: "system",
+      transitionActorId: "github-webhook:delivery-123",
+    });
   });
 
   it("maps webhook request parsing errors to their HTTP status code", async () => {
     getDependenciesMock.mockReturnValue({
       analysisJobScheduler: new SpyAnalysisJobScheduler(),
       reviewSessionRepository: {},
+      connectionStateTransitionRepository: {},
+      connectionProviderCatalog: {},
       parserAdapters: [],
       pullRequestSnapshotProvider: {},
     });
@@ -123,6 +160,8 @@ describe("POST /api/github/webhooks", () => {
     getDependenciesMock.mockReturnValue({
       analysisJobScheduler: new SpyAnalysisJobScheduler(),
       reviewSessionRepository: {},
+      connectionStateTransitionRepository: {},
+      connectionProviderCatalog: {},
       parserAdapters: [],
       pullRequestSnapshotProvider: {},
     });
@@ -140,5 +179,44 @@ describe("POST /api/github/webhooks", () => {
       code: "INVALID_WEBHOOK_REQUEST",
       message: expect.stringContaining("unexpected failure"),
     });
+  });
+
+  it("does not fail webhook acceptance when connection-state sync throws", async () => {
+    const analysisJobScheduler = new SpyAnalysisJobScheduler();
+    getDependenciesMock.mockReturnValue({
+      analysisJobScheduler,
+      reviewSessionRepository: {
+        findByReviewId: vi.fn().mockResolvedValue({
+          reviewId: "github-pr-42",
+          viewerName: "Demo reviewer",
+          toRecord: () => ({
+            source: {
+              provider: "github",
+              owner: "octocat",
+              repository: "locus",
+              pullRequestNumber: 42,
+            },
+          }),
+        }),
+      },
+      connectionStateTransitionRepository: {},
+      connectionProviderCatalog: {},
+      parserAdapters: [],
+      pullRequestSnapshotProvider: {},
+    });
+    parseGitHubWebhookRequestMock.mockResolvedValue({
+      reviewId: "github-pr-42",
+      eventName: "pull_request",
+      deliveryId: "delivery-123",
+    });
+    setConnectionStateExecuteMock.mockRejectedValue(new Error("connection sync failed"));
+
+    const response = await POST(
+      new Request("https://example.test/api/github/webhooks", {
+        method: "POST",
+      }),
+    );
+
+    expect(response.status).toBe(202);
   });
 });

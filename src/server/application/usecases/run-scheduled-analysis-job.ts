@@ -1,11 +1,20 @@
 import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 import type { ScheduleAnalysisJobInput } from "@/server/application/ports/analysis-job-scheduler";
-import type { PullRequestSnapshotProvider } from "@/server/application/ports/pull-request-snapshot-provider";
+import {
+  PullRequestProviderAuthError,
+  type PullRequestSnapshotProvider,
+} from "@/server/application/ports/pull-request-snapshot-provider";
+import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
 import { ReviewSessionNotFoundError } from "@/server/application/errors/review-session-not-found-error";
 import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
 import { ReanalyzeReviewUseCase } from "@/server/application/usecases/reanalyze-review";
 import { RunGitHubIngestionJobUseCase } from "@/server/application/usecases/run-github-ingestion-job";
+import { SetConnectionStateUseCase } from "@/server/application/usecases/set-connection-state";
+import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
+import type { ConnectionStateTransitionTransactionalRepository } from "@/server/domain/repositories/connection-state-transition-repository";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
+import type { PersistedConnectionState } from "@/server/domain/value-objects/connection-state";
+import { listAllowedConnectionTransitions } from "@/server/domain/value-objects/connection-lifecycle-status";
 
 export interface RunScheduledAnalysisJobInput extends ScheduleAnalysisJobInput {
   jobId: string;
@@ -13,6 +22,9 @@ export interface RunScheduledAnalysisJobInput extends ScheduleAnalysisJobInput {
 
 export interface RunScheduledAnalysisJobDependencies {
   reviewSessionRepository: ReviewSessionRepository;
+  connectionStateRepository: ConnectionStateRepository;
+  connectionStateTransitionRepository: ConnectionStateTransitionTransactionalRepository;
+  connectionProviderCatalog: ConnectionProviderCatalog;
   parserAdapters: ParserAdapter[];
   pullRequestSnapshotProvider: PullRequestSnapshotProvider;
 }
@@ -42,14 +54,22 @@ export class RunScheduledAnalysisJobUseCase {
         pullRequestSnapshotProvider: this.dependencies.pullRequestSnapshotProvider,
       });
 
-      await useCase.execute({
-        reviewId: input.reviewId,
-        viewerName: reviewSession.viewerName,
-        owner: source.owner,
-        repository: source.repository,
-        pullRequestNumber: source.pullRequestNumber,
-        requestedAt: input.requestedAt,
-      });
+      try {
+        await useCase.execute({
+          reviewId: input.reviewId,
+          viewerName: reviewSession.viewerName,
+          owner: source.owner,
+          repository: source.repository,
+          pullRequestNumber: source.pullRequestNumber,
+          requestedAt: input.requestedAt,
+        });
+      } catch (error) {
+        await this.markGitHubConnectionReauthRequired({
+          error,
+          reviewerId: reviewSession.viewerName,
+        });
+        throw error;
+      }
       return;
     }
 
@@ -64,4 +84,78 @@ export class RunScheduledAnalysisJobUseCase {
       requestedAt: input.requestedAt,
     });
   }
+
+  private async markGitHubConnectionReauthRequired(input: {
+    error: unknown;
+    reviewerId: string;
+  }): Promise<void> {
+    if (
+      !(input.error instanceof PullRequestProviderAuthError) ||
+      input.error.provider !== "github"
+    ) {
+      return;
+    }
+
+    const connectionState = await this.selectLatestProviderState({
+      reviewerId: input.reviewerId,
+      provider: "github",
+    });
+    const currentStatus = connectionState?.status ?? "not_connected";
+
+    if (!listAllowedConnectionTransitions(currentStatus).includes("reauth_required")) {
+      return;
+    }
+
+    const setConnectionStateUseCase = new SetConnectionStateUseCase({
+      connectionStateTransitionRepository: this.dependencies.connectionStateTransitionRepository,
+      connectionProviderCatalog: this.dependencies.connectionProviderCatalog,
+    });
+
+    await setConnectionStateUseCase.execute({
+      reviewerId: input.reviewerId,
+      provider: "github",
+      nextStatus: "reauth_required",
+      connectedAccountLabel: null,
+      transitionReason: "token-expired",
+      transitionActorType: "system",
+      transitionActorId: `github-auth:${input.error.statusCode}`,
+    });
+  }
+
+  private async selectLatestProviderState(input: {
+    reviewerId: string;
+    provider: string;
+  }): Promise<PersistedConnectionState | null> {
+    const connectionStates =
+      await this.dependencies.connectionStateRepository.findByReviewerId(input.reviewerId);
+    const providerStates = connectionStates.filter(
+      (state) => state.provider === input.provider,
+    );
+
+    if (providerStates.length === 0) {
+      return null;
+    }
+
+    return providerStates.slice(1).reduce((latest, current) => {
+      if (toEpochMs(latest.statusUpdatedAt) <= toEpochMs(current.statusUpdatedAt)) {
+        return current;
+      }
+
+      return latest;
+    }, providerStates[0]);
+  }
+}
+
+function toEpochMs(value: string | null): number {
+  if (!value) {
+    return 0;
+  }
+
+  const parsed = Date.parse(value);
+
+  if (Number.isNaN(parsed)) {
+    return 0;
+  }
+
+  return parsed;
 }

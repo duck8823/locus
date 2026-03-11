@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AcceptGitHubWebhookUseCase } from "@/server/application/usecases/accept-github-webhook";
+import { SetConnectionStateUseCase } from "@/server/application/usecases/set-connection-state";
 import { getDependencies } from "@/server/composition/dependencies";
 import { createApiErrorResponse } from "@/server/presentation/api/api-error-response";
 import {
@@ -10,13 +11,44 @@ import {
 export async function POST(request: Request) {
   try {
     const parsed = await parseGitHubWebhookRequest(request);
-    const { analysisJobScheduler } = getDependencies();
+    const {
+      analysisJobScheduler,
+      reviewSessionRepository,
+      connectionStateTransitionRepository,
+      connectionProviderCatalog,
+    } = getDependencies();
     const useCase = new AcceptGitHubWebhookUseCase({ analysisJobScheduler });
     const result = await useCase.execute({
       reviewId: parsed.reviewId,
       eventName: parsed.eventName,
       deliveryId: parsed.deliveryId,
     });
+    try {
+      const reviewSession = await reviewSessionRepository.findByReviewId(parsed.reviewId);
+
+      if (reviewSession) {
+        const source = reviewSession.toRecord().source;
+
+        if (source?.provider === "github") {
+          const setConnectionStateUseCase = new SetConnectionStateUseCase({
+            connectionStateTransitionRepository,
+            connectionProviderCatalog,
+          });
+
+          await setConnectionStateUseCase.execute({
+            reviewerId: reviewSession.viewerName,
+            provider: "github",
+            nextStatus: "connected",
+            connectedAccountLabel: null,
+            transitionReason: "webhook",
+            transitionActorType: "system",
+            transitionActorId: `github-webhook:${parsed.deliveryId}`,
+          });
+        }
+      }
+    } catch {
+      // Connection-state sync failure must not reject webhook ingestion.
+    }
 
     return NextResponse.json(
       {
