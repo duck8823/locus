@@ -7,6 +7,7 @@ import { AnalysisStatusPoller } from "./analysis-status-poller";
 import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submit-button";
 import { CollapsibleDetails } from "./collapsible-details";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
+import { toSemanticChangeFocusView } from "./semantic-change-focus";
 import {
   formatAnalysisJobReason,
   formatArchitectureCategoryLabel,
@@ -356,32 +357,48 @@ export default async function ReviewWorkspacePage({
                 </span>
                 {selectedGroup.semanticChanges.length > 0 ? (
                   <ul className={styles.semanticChangeList}>
-                    {selectedGroup.semanticChanges.map((change) => (
-                      <li key={change.semanticChangeId} className={styles.semanticChangeCard}>
-                        <div className={styles.semanticChangeHeader}>
-                          <strong>{change.symbolDisplayName}</strong>
-                          <span
-                            className={styles.changeBadge}
-                            data-change-type={change.changeType}
-                          >
-                            {formatSemanticChangeType(change.changeType, workspaceLocale)}
-                          </span>
-                        </div>
-                        <p className={styles.semanticChangeMeta}>
-                          {copy.text.semanticKind}: {formatSemanticSymbolKind(change.symbolKind, workspaceLocale)}
-                          {change.signatureSummary
-                            ? ` · ${copy.text.semanticSignature}: ${change.signatureSummary}`
-                            : ""}
-                          {change.bodySummary ? ` · ${copy.text.semanticBody}: ${change.bodySummary}` : ""}
-                        </p>
-                        <p className={styles.semanticChangeMeta}>
-                          {copy.text.semanticBefore}: {formatCodeRegion(change.before)}
-                        </p>
-                        <p className={styles.semanticChangeMeta}>
-                          {copy.text.semanticAfter}: {formatCodeRegion(change.after)}
-                        </p>
-                      </li>
-                    ))}
+                    {selectedGroup.semanticChanges.map((change) => {
+                      const focusView = toSemanticChangeFocusView({
+                        locale: workspaceLocale,
+                        changeType: change.changeType,
+                        bodySummary: change.bodySummary,
+                        before: change.before,
+                        after: change.after,
+                      });
+
+                      return (
+                        <li key={change.semanticChangeId} className={styles.semanticChangeCard}>
+                          <div className={styles.semanticChangeHeader}>
+                            <strong>{change.symbolDisplayName}</strong>
+                            <span
+                              className={styles.changeBadge}
+                              data-change-type={change.changeType}
+                            >
+                              {formatSemanticChangeType(change.changeType, workspaceLocale)}
+                            </span>
+                          </div>
+                          <p className={styles.semanticChangeMeta}>
+                            {copy.text.semanticKind}: {formatSemanticSymbolKind(change.symbolKind, workspaceLocale)}
+                            {change.signatureSummary
+                              ? ` · ${copy.text.semanticSignature}: ${change.signatureSummary}`
+                              : ""}
+                            {change.bodySummary ? ` · ${copy.text.semanticBody}: ${change.bodySummary}` : ""}
+                          </p>
+                          <p className={styles.semanticChangeMeta}>
+                            {copy.text.semanticFocus}: {focusView.focusLabel}
+                            {focusView.spanDeltaLabel
+                              ? ` · ${copy.text.semanticSpanDelta}: ${focusView.spanDeltaLabel}`
+                              : ""}
+                          </p>
+                          <p className={styles.semanticChangeMeta}>
+                            {copy.text.semanticBefore}: {formatCodeRegion(change.before)}
+                          </p>
+                          <p className={styles.semanticChangeMeta}>
+                            {copy.text.semanticAfter}: {formatCodeRegion(change.after)}
+                          </p>
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : (
                   <p className={styles.groupSummary}>

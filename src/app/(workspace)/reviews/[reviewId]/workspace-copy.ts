@@ -96,6 +96,8 @@ export const workspaceCopyByLocale = {
       semanticBody: "body",
       semanticBefore: "before",
       semanticAfter: "after",
+      semanticFocus: "focus",
+      semanticSpanDelta: "span delta",
     },
     actions: {
       markStatusPrefix: "Mark",
@@ -248,6 +250,8 @@ export const workspaceCopyByLocale = {
       semanticBody: "本文",
       semanticBefore: "変更前",
       semanticAfter: "変更後",
+      semanticFocus: "注目点",
+      semanticSpanDelta: "行数差分",
     },
     actions: {
       markStatusPrefix: "状態を",
