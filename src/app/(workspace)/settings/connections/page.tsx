@@ -33,6 +33,8 @@ const copyByLocale = {
     supportsIssueContext: "Issue context",
     transitionLabel: "Change state",
     transitionButton: "Apply",
+    oauthConnectButton: "Connect with GitHub OAuth",
+    oauthReconnectButton: "Reconnect GitHub OAuth",
     transitionUnavailable:
       "State transition is not available for this provider in current status.",
     connectedAccountInputLabel: "Account label (optional)",
@@ -50,6 +52,15 @@ const copyByLocale = {
     historyApplyButton: "Apply",
     previousPage: "Previous",
     nextPage: "Next",
+    oauthSuccessByCode: {
+      github_connected: "GitHub connection completed.",
+    },
+    oauthErrorByCode: {
+      oauth_start_failed: "Failed to start OAuth flow. Please try again.",
+      oauth_provider_rejected: "GitHub canceled or rejected the OAuth request.",
+      oauth_callback_invalid: "OAuth callback payload is incomplete.",
+      oauth_callback_failed: "OAuth callback processing failed. Please retry.",
+    },
     statusByKey: {
       not_connected: "Not connected",
       planned: "Planned",
@@ -105,6 +116,8 @@ const copyByLocale = {
     supportsIssueContext: "Issueコンテキスト",
     transitionLabel: "状態変更",
     transitionButton: "適用",
+    oauthConnectButton: "GitHub OAuthで接続",
+    oauthReconnectButton: "GitHub OAuthで再接続",
     transitionUnavailable: "現在の状態では、この provider の状態変更はできません。",
     connectedAccountInputLabel: "接続アカウント名（任意）",
     connectedAccountPlaceholder: "例: duck8823",
@@ -121,6 +134,15 @@ const copyByLocale = {
     historyApplyButton: "適用",
     previousPage: "前へ",
     nextPage: "次へ",
+    oauthSuccessByCode: {
+      github_connected: "GitHub 接続が完了しました。",
+    },
+    oauthErrorByCode: {
+      oauth_start_failed: "OAuth 開始に失敗しました。もう一度お試しください。",
+      oauth_provider_rejected: "GitHub 側で OAuth 要求が拒否またはキャンセルされました。",
+      oauth_callback_invalid: "OAuth コールバックのパラメータが不足しています。",
+      oauth_callback_failed: "OAuth コールバック処理に失敗しました。再試行してください。",
+    },
     statusByKey: {
       not_connected: "未接続",
       planned: "計画中",
@@ -214,6 +236,8 @@ interface ConnectionsPageSearchParams {
   historyReason?: string | string[];
   historyPage?: string | string[];
   historyPageSize?: string | string[];
+  oauthSuccess?: string | string[];
+  oauthError?: string | string[];
 }
 
 type TransitionHistoryReason = "manual" | "token-expired" | "webhook";
@@ -350,6 +374,47 @@ function parsePositiveInt(value: string | null, fallback: number, max: number): 
   return Math.min(parsed, max);
 }
 
+function resolveOAuthFeedback(input: {
+  successCode: string | null;
+  errorCode: string | null;
+  locale: keyof typeof copyByLocale;
+}): {
+  kind: "success" | "error";
+  message: string;
+} | null {
+  const localizedCopy = copyByLocale[input.locale];
+
+  if (input.successCode) {
+    const successMessage =
+      localizedCopy.oauthSuccessByCode[
+        input.successCode as keyof typeof localizedCopy.oauthSuccessByCode
+      ];
+
+    if (successMessage) {
+      return {
+        kind: "success",
+        message: successMessage,
+      };
+    }
+  }
+
+  if (input.errorCode) {
+    const errorMessage =
+      localizedCopy.oauthErrorByCode[
+        input.errorCode as keyof typeof localizedCopy.oauthErrorByCode
+      ];
+
+    if (errorMessage) {
+      return {
+        kind: "error",
+        message: errorMessage,
+      };
+    }
+  }
+
+  return null;
+}
+
 function buildHistoryPageHref(input: {
   reason: TransitionHistoryReason | "all";
   page: number;
@@ -397,6 +462,11 @@ export default async function ConnectionsPage({
     5,
     20,
   );
+  const oauthFeedback = resolveOAuthFeedback({
+    successCode: resolveSearchParamValue(resolvedSearchParams.oauthSuccess),
+    errorCode: resolveSearchParamValue(resolvedSearchParams.oauthError),
+    locale: workspaceLocale,
+  });
   const connectionsWorkspace = await loadConnectionsWorkspaceDto({
     reviewerId,
     transitionReason: historyReason,
@@ -479,6 +549,26 @@ export default async function ConnectionsPage({
           {copy.generatedAt}:{" "}
           <LocalizedDateTime isoTimestamp={connectionsWorkspace.generatedAt} />
         </p>
+        {oauthFeedback ? (
+          <p
+            style={{
+              marginTop: "12px",
+              marginBottom: "0px",
+              border: oauthFeedback.kind === "success"
+                ? "1px solid rgba(106, 201, 128, 0.45)"
+                : "1px solid rgba(217, 114, 114, 0.45)",
+              borderRadius: "10px",
+              background: oauthFeedback.kind === "success"
+                ? "rgba(53, 122, 74, 0.2)"
+                : "rgba(130, 51, 51, 0.2)",
+              color: oauthFeedback.kind === "success" ? "#c6f5d3" : "#ffd7d7",
+              padding: "8px 10px",
+              overflowWrap: "anywhere",
+            }}
+          >
+            {oauthFeedback.message}
+          </p>
+        ) : null}
         <form
           method="get"
           action="/settings/connections"
@@ -560,6 +650,14 @@ export default async function ConnectionsPage({
       <section style={cardsLayoutStyle}>
         {connectionsWorkspace.connections.map((connection) => {
           const availableTransitions = listConnectionStateTransitions(connection.status);
+          const canUseGitHubOAuth =
+            connection.provider === "github" && connection.authMode === "oauth";
+          const oauthStartHref =
+            `/api/integrations/github/oauth/start?redirectPath=${encodeURIComponent("/settings/connections")}`;
+          const oauthButtonLabel =
+            connection.status === "connected"
+              ? copy.oauthReconnectButton
+              : copy.oauthConnectButton;
 
           return (
             <article key={connection.provider} style={cardStyle}>
@@ -604,6 +702,28 @@ export default async function ConnectionsPage({
                 )}
                 )
               </p>
+              {canUseGitHubOAuth ? (
+                <a
+                  href={oauthStartHref}
+                  style={{
+                    border: "1px solid rgba(124, 156, 255, 0.65)",
+                    borderRadius: "10px",
+                    background: "rgba(94, 123, 255, 0.16)",
+                    color: "white",
+                    minHeight: "34px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "0 12px",
+                    textDecoration: "none",
+                    width: "fit-content",
+                    maxWidth: "100%",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {oauthButtonLabel}
+                </a>
+              ) : null}
 
               <details style={detailCardStyle}>
                 <summary style={detailSummaryStyle}>{copy.providerNotesLabel}</summary>

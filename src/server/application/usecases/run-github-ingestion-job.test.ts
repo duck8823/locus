@@ -33,11 +33,16 @@ class InMemoryReviewSessionRepository implements ReviewSessionRepository {
 
 class StubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
   onFetch: (() => Promise<void>) | null = null;
+  lastInput: { reviewId: string; source: GitHubPullRequestRef; accessToken?: string | null } | null =
+    null;
 
   async fetchPullRequestSnapshots(input: {
     reviewId: string;
     source: GitHubPullRequestRef;
+    accessToken?: string | null;
   }): Promise<PullRequestSnapshotBundle> {
+    this.lastInput = input;
+
     if (this.onFetch) {
       await this.onFetch();
     }
@@ -192,10 +197,11 @@ class TestParserAdapter implements ParserAdapter {
 describe("RunGitHubIngestionJobUseCase", () => {
   it("stores analysis phase transitions and final ready state", async () => {
     const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
     const useCase = new RunGitHubIngestionJobUseCase({
       reviewSessionRepository,
       parserAdapters: [new TestParserAdapter()],
-      pullRequestSnapshotProvider: new StubPullRequestSnapshotProvider(),
+      pullRequestSnapshotProvider: snapshotProvider,
     });
 
     const result = await useCase.execute({
@@ -209,6 +215,7 @@ describe("RunGitHubIngestionJobUseCase", () => {
 
     const record = result.reviewSession.toRecord();
     expect(result.snapshotPairCount).toBe(2);
+    expect(snapshotProvider.lastInput?.accessToken).toBeUndefined();
     expect(record.analysisStatus).toBe("ready");
     expect(record.analysisTotalFiles).toBe(2);
     expect(record.analysisProcessedFiles).toBe(2);
@@ -223,6 +230,30 @@ describe("RunGitHubIngestionJobUseCase", () => {
           savedRecord.analysisProcessedFiles > 0,
       ),
     ).toBe(true);
+  });
+
+  it("forwards reviewer access token to pull request snapshot provider", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    const useCase = new RunGitHubIngestionJobUseCase({
+      reviewSessionRepository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+    });
+
+    await useCase.execute({
+      reviewId: "github-octocat-locus-pr-13",
+      viewerName: "Demo reviewer",
+      owner: "octocat",
+      repository: "locus",
+      pullRequestNumber: 13,
+      accessToken: "oauth-access-token",
+    });
+
+    expect(snapshotProvider.lastInput).toMatchObject({
+      reviewId: "github-octocat-locus-pr-13",
+      accessToken: "oauth-access-token",
+    });
   });
 
   it("marks analysis as failed when snapshot fetch fails", async () => {

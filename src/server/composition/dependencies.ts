@@ -1,5 +1,7 @@
 import { FileReviewSessionRepository } from "@/server/infrastructure/db/file-review-session-repository";
 import { SqliteConnectionStateRepository } from "@/server/infrastructure/db/sqlite-connection-state-repository";
+import { FileConnectionTokenRepository } from "@/server/infrastructure/db/file-connection-token-repository";
+import { FileOAuthStateRepository } from "@/server/infrastructure/db/file-oauth-state-repository";
 import { PrototypeConnectionProviderCatalog } from "@/server/application/services/connection-catalog";
 import { GitHubPullRequestSnapshotProvider } from "@/server/infrastructure/github/github-pull-request-snapshot-provider";
 import { TypeScriptParserAdapter } from "@/server/infrastructure/parser/typescript-parser-adapter";
@@ -34,12 +36,15 @@ const connectionStateRepository = new SqliteConnectionStateRepository({
 });
 const connectionStateTransitionRepository = connectionStateRepository;
 const connectionProviderCatalog = new PrototypeConnectionProviderCatalog();
+const connectionTokenRepository = new FileConnectionTokenRepository();
+const oauthStateRepository = new FileOAuthStateRepository();
 const parserAdapters = [new TypeScriptParserAdapter()];
 const pullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
 const runScheduledAnalysisJobUseCase = new RunScheduledAnalysisJobUseCase({
   reviewSessionRepository,
   connectionStateRepository,
   connectionStateTransitionRepository,
+  connectionTokenRepository,
   connectionProviderCatalog,
   parserAdapters,
   pullRequestSnapshotProvider,
@@ -66,6 +71,8 @@ export function getDependencies() {
     connectionStateRepository,
     connectionProviderCatalog,
     connectionStateTransitionRepository,
+    connectionTokenRepository,
+    oauthStateRepository,
     analysisJobScheduler,
     parserAdapters,
     pullRequestSnapshotProvider,

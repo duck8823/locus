@@ -33,5 +33,6 @@ export interface PullRequestSnapshotProvider {
   fetchPullRequestSnapshots(input: {
     reviewId: string;
     source: GitHubPullRequestRef;
+    accessToken?: string | null;
   }): Promise<PullRequestSnapshotBundle>;
 }

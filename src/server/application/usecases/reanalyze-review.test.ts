@@ -11,6 +11,11 @@ import type {
   PullRequestSnapshotBundle,
   PullRequestSnapshotProvider,
 } from "@/server/application/ports/pull-request-snapshot-provider";
+import type {
+  ConnectionTokenRepository,
+  PersistedConnectionToken,
+  UpsertConnectionTokenInput,
+} from "@/server/application/ports/connection-token-repository";
 import { ReanalyzeReviewUseCase } from "@/server/application/usecases/reanalyze-review";
 import { ReviewSession } from "@/server/domain/entities/review-session";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
@@ -40,14 +45,32 @@ class InMemoryReviewSessionRepository implements ReviewSessionRepository {
   }
 }
 
+class InMemoryConnectionTokenRepository implements ConnectionTokenRepository {
+  private readonly tokens = new Map<string, PersistedConnectionToken>();
+
+  async upsertToken(input: UpsertConnectionTokenInput): Promise<PersistedConnectionToken> {
+    const token: PersistedConnectionToken = { ...input };
+    this.tokens.set(`${input.reviewerId}:${input.provider}`, token);
+    return token;
+  }
+
+  async findTokenByReviewerId(
+    reviewerId: string,
+    provider: "github",
+  ): Promise<PersistedConnectionToken | null> {
+    return this.tokens.get(`${reviewerId}:${provider}`) ?? null;
+  }
+}
+
 class StubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
-  lastInput: { reviewId: string; source: GitHubPullRequestRef } | null = null;
+  lastInput: { reviewId: string; source: GitHubPullRequestRef; accessToken?: string | null } | null = null;
   calls = 0;
   onFetch: (() => Promise<void>) | null = null;
 
   async fetchPullRequestSnapshots(input: {
     reviewId: string;
     source: GitHubPullRequestRef;
+    accessToken?: string | null;
   }): Promise<PullRequestSnapshotBundle> {
     this.lastInput = input;
     this.calls += 1;
@@ -219,6 +242,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     const result = await useCase.execute({
@@ -236,6 +260,7 @@ describe("ReanalyzeReviewUseCase", () => {
         repository: "locus",
         pullRequestNumber: 12,
       },
+      accessToken: null,
     });
     expect(result.snapshotPairCount).toBe(1);
     expect(result.reanalysisStatus).toBe("succeeded");
@@ -258,6 +283,49 @@ describe("ReanalyzeReviewUseCase", () => {
       repository: "locus",
       pullRequestNumber: 12,
     });
+  });
+
+  it("uses persisted bearer token when reanalyzing GitHub source", async () => {
+    const repository = new InMemoryReviewSessionRepository();
+    repository.seed(
+      ReviewSession.create({
+        reviewId: "github-octocat-locus-pr-33",
+        title: "PR #33: Access token routing",
+        repositoryName: "octocat/locus",
+        branchLabel: "feature/tokens → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          pullRequestNumber: 33,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-07T00:00:00.000Z",
+      }),
+    );
+    const connectionTokenRepository = new InMemoryConnectionTokenRepository();
+    await connectionTokenRepository.upsertToken({
+      reviewerId: "Demo reviewer",
+      provider: "github",
+      accessToken: "bearer-token",
+      tokenType: "bearer",
+      scope: "repo",
+      refreshToken: null,
+      expiresAt: null,
+      updatedAt: "2026-03-12T00:00:00.000Z",
+    });
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    const useCase = new ReanalyzeReviewUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+      connectionTokenRepository,
+    });
+
+    await useCase.execute({ reviewId: "github-octocat-locus-pr-33" });
+
+    expect(snapshotProvider.lastInput?.accessToken).toBe("bearer-token");
   });
 
   it("infers GitHub source from legacy records when source metadata is absent", async () => {
@@ -288,6 +356,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     await useCase.execute({ reviewId: "github-octocat-locus-pr-12" });
@@ -351,6 +420,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     await useCase.execute({ reviewId: "github-octocat-locus-pr-12" });
@@ -399,6 +469,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
     let hasSpawnedSecondRun = false;
     snapshotProvider.onFetch = async () => {
@@ -465,6 +536,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     const result = await useCase.execute({
@@ -515,6 +587,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     const result = await useCase.execute({
@@ -565,6 +638,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: snapshotProvider,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     const result = await useCase.execute({ reviewId: "demo-review" });
@@ -621,6 +695,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: new FailingPullRequestSnapshotProvider(),
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     const result = await useCase.execute({
@@ -672,6 +747,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: new FailingPullRequestSnapshotProvider(),
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     const result = await useCase.execute({ reviewId: "github-octocat-locus-pr-12" });
@@ -710,6 +786,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: new StubPullRequestSnapshotProvider(),
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     const result = await useCase.execute({
@@ -733,6 +810,7 @@ describe("ReanalyzeReviewUseCase", () => {
       reviewSessionRepository: repository,
       parserAdapters: [new TestParserAdapter()],
       pullRequestSnapshotProvider: new StubPullRequestSnapshotProvider(),
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
     });
 
     await expect(useCase.execute({ reviewId: "missing-review" })).rejects.toThrow(
