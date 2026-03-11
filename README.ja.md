@@ -166,6 +166,7 @@ npm run demo:data:reseed   # 基本ディレクトリと空のジョブキュー
 - [`docs/performance/analysis-benchmark-baseline.ja.md`](docs/performance/analysis-benchmark-baseline.ja.md) / [`docs/performance/analysis-benchmark-baseline.md`](docs/performance/analysis-benchmark-baseline.md)
 - [`docs/testing/exploratory-test-playbook.ja.md`](docs/testing/exploratory-test-playbook.ja.md) / [`docs/testing/exploratory-test-playbook.md`](docs/testing/exploratory-test-playbook.md)
 - [`docs/testing/exploratory-test-session-2026-03-11.ja.md`](docs/testing/exploratory-test-session-2026-03-11.ja.md) / [`docs/testing/exploratory-test-session-2026-03-11.md`](docs/testing/exploratory-test-session-2026-03-11.md)
+- [`docs/operations/ai-review-workflow.ja.md`](docs/operations/ai-review-workflow.ja.md) / [`docs/operations/ai-review-workflow.md`](docs/operations/ai-review-workflow.md)
 - [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md) / [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## ロードマップ
