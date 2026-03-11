@@ -15,8 +15,8 @@
 - 後方互換を保った拡張ルール
 
 非スコープ:
-- OAuth トークン保存
-- provider callback handler
+- 本番向け資格情報の暗号化保存 / キーローテーション
+- リフレッシュトークン運用（自動更新ワークフロー）
 - マルチテナントの資格情報管理
 
 ## 現行 DTO 契約
@@ -134,8 +134,9 @@ DTO 値自体は言語非依存のまま維持する。
 - 遷移履歴は SQLite 側で保持件数を圧縮する（`LOCUS_CONNECTION_TRANSITION_MAX_RETAINED`, 既定 200）。
 - provider metadata は `ConnectionProviderCatalog` port と prototype adapter 経由で解決する。
 - 接続状態の永続化は SQLite ベースに移行し、legacy の file record は遅延移行で読み込む。
+- GitHub OAuth の start / callback ルートは file-backed repository に pending state と token を保存し、OAuth クライアント設定が無い場合はローカル demo fallback で接続動作を検証できる。
 
 ## 次のステップ
 
-1. `token-expired` / `webhook` の遷移を実ランタイムイベントから発火させる（現状は手動経路のみ）。
-2. prototype 前提の OAuth 表現を実トークン/コールバックフローに置き換える。
+1. OAuth トークン保存をローカルファイルから暗号化ストレージへ移行する。
+2. リフレッシュトークンのライフサイクル管理と自動再認証回復を追加する。

@@ -15,8 +15,8 @@ This keeps provider lifecycle/state modeling explicit and testable while infrast
 - Backward-compatible evolution rules
 
 Out of scope:
-- OAuth token storage
-- Provider callback handlers
+- Production-grade credential encryption / key rotation
+- Background token refresh workflows
 - Multi-tenant credential management
 
 ## Current DTO Contract
@@ -134,8 +134,9 @@ When extending this contract:
 - Transition history is retained with SQLite-side pruning (`LOCUS_CONNECTION_TRANSITION_MAX_RETAINED`, default: 200).
 - Provider metadata now goes through a `ConnectionProviderCatalog` port with a prototype adapter implementation.
 - Connection state persistence now uses a SQLite-backed repository with lazy migration from legacy file records.
+- GitHub OAuth start/callback routes now persist pending state + token records in file-backed repositories, with a local demo fallback when OAuth client configuration is absent.
 
 ## Next Steps
 
-1. Emit `token-expired` / `webhook` transitions from real runtime events (currently manual path is wired).
-2. Replace prototype OAuth assumptions with real token/callback flows.
+1. Upgrade OAuth token storage from local file persistence to encrypted-at-rest storage.
+2. Add refresh-token lifecycle handling and automatic token-expiry recovery.
