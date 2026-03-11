@@ -78,6 +78,21 @@ export interface ReviewWorkspaceArchitectureGraphDto {
   edges: ReviewWorkspaceArchitectureEdgeDto[];
 }
 
+export interface ReviewWorkspaceBusinessContextItemDto {
+  contextId: string;
+  sourceType: "github_issue" | "confluence_page";
+  status: "linked" | "candidate" | "unavailable";
+  title: string;
+  summary: string | null;
+  href: string | null;
+}
+
+export interface ReviewWorkspaceBusinessContextDto {
+  generatedAt: string;
+  provider: "stub";
+  items: ReviewWorkspaceBusinessContextItemDto[];
+}
+
 export interface ReviewWorkspaceDto {
   reviewId: string;
   title: string;
@@ -104,5 +119,6 @@ export interface ReviewWorkspaceDto {
   availableStatuses: ReviewGroupStatus[];
   unsupportedSummary: ReviewWorkspaceUnsupportedSummaryDto;
   unsupportedFiles: ReviewWorkspaceUnsupportedFileDto[];
+  businessContext: ReviewWorkspaceBusinessContextDto;
   groups: ReviewWorkspaceGroupDto[];
 }

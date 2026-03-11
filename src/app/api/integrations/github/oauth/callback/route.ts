@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
+import {
+  OAuthCodeExchangeRejectedError,
+  OAuthCodeExchangeTemporaryError,
+} from "@/server/application/ports/oauth-code-exchange-provider";
 import { CompleteGitHubOAuthCallbackUseCase } from "@/server/application/usecases/complete-github-oauth-callback";
 import { getDependencies } from "@/server/composition/dependencies";
 
 const DEFAULT_REDIRECT_PATH = "/settings/connections";
+
+function createCallbackUrl(request: Request): string {
+  return new URL("/api/integrations/github/oauth/callback", request.url).toString();
+}
 
 function resolveRelativeRedirectPath(pathValue: string | null): string {
   if (
@@ -33,13 +41,21 @@ function toRedirectUrl(input: {
 
 export async function GET(request: Request): Promise<Response> {
   const requestUrl = new URL(request.url);
+  const callbackUrl = createCallbackUrl(request);
   const state = requestUrl.searchParams.get("state");
   const code = requestUrl.searchParams.get("code");
   const providerError = requestUrl.searchParams.get("error");
-  const { oauthStateRepository, connectionTokenRepository, connectionStateTransitionRepository, connectionProviderCatalog } =
+  const {
+    oauthStateRepository,
+    oauthCodeExchangeProvider,
+    connectionTokenRepository,
+    connectionStateTransitionRepository,
+    connectionProviderCatalog,
+  } =
     getDependencies();
   const useCase = new CompleteGitHubOAuthCallbackUseCase({
     oauthStateRepository,
+    oauthCodeExchangeProvider,
     connectionTokenRepository,
     connectionStateTransitionRepository,
     connectionProviderCatalog,
@@ -76,6 +92,7 @@ export async function GET(request: Request): Promise<Response> {
     const completed = await useCase.execute({
       state,
       code,
+      redirectUri: callbackUrl,
     });
 
     return NextResponse.redirect(
@@ -87,7 +104,31 @@ export async function GET(request: Request): Promise<Response> {
         }),
       }),
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof OAuthCodeExchangeTemporaryError) {
+      return NextResponse.redirect(
+        toRedirectUrl({
+          request,
+          path: DEFAULT_REDIRECT_PATH,
+          params: new URLSearchParams({
+            oauthError: "oauth_callback_retryable",
+          }),
+        }),
+      );
+    }
+
+    if (error instanceof OAuthCodeExchangeRejectedError) {
+      return NextResponse.redirect(
+        toRedirectUrl({
+          request,
+          path: DEFAULT_REDIRECT_PATH,
+          params: new URLSearchParams({
+            oauthError: "oauth_callback_failed",
+          }),
+        }),
+      );
+    }
+
     return NextResponse.redirect(
       toRedirectUrl({
         request,

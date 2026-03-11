@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -27,7 +27,7 @@ async function createRepository() {
 
 describe("FileConnectionTokenRepository", () => {
   it("upserts token by reviewer and provider", async () => {
-    const { repository } = await createRepository();
+    const { repository, dataDirectory } = await createRepository();
     await repository.upsertToken({
       reviewerId: "demo-reviewer",
       provider: "github",
@@ -62,6 +62,11 @@ describe("FileConnectionTokenRepository", () => {
       expiresAt: null,
       updatedAt: "2026-03-12T00:01:00.000Z",
     });
+
+    const tokenRecordPath = path.join(dataDirectory, "demo-reviewer.json");
+    const storedRecord = await readFile(tokenRecordPath, "utf8");
+    expect(storedRecord).not.toContain("token-2");
+    expect(storedRecord).toContain("enc:v1:");
   });
 
   it("returns null for malformed token files", async () => {

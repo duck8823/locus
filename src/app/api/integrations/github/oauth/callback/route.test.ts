@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { OAuthCodeExchangeTemporaryError } from "@/server/application/ports/oauth-code-exchange-provider";
 
 const {
   getDependenciesMock,
@@ -33,6 +34,7 @@ describe("GET /api/integrations/github/oauth/callback", () => {
       oauthStateRepository: {
         consumePendingState: consumePendingStateMock,
       },
+      oauthCodeExchangeProvider: {},
       connectionTokenRepository: {},
       connectionStateTransitionRepository: {},
       connectionProviderCatalog: {},
@@ -53,6 +55,7 @@ describe("GET /api/integrations/github/oauth/callback", () => {
     expect(executeMock).toHaveBeenCalledWith({
       state: "state-1",
       code: "code-1",
+      redirectUri: "https://locus.test/api/integrations/github/oauth/callback",
     });
     expect(response.headers.get("location")).toBe(
       "https://locus.test/settings/connections?oauthSuccess=github_connected",
@@ -104,6 +107,19 @@ describe("GET /api/integrations/github/oauth/callback", () => {
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
       "https://locus.test/settings/connections?oauthError=oauth_callback_failed",
+    );
+  });
+
+  it("redirects with retryable code for temporary exchange failures", async () => {
+    executeMock.mockRejectedValue(new OAuthCodeExchangeTemporaryError("upstream unavailable"));
+
+    const response = await GET(
+      new Request("https://locus.test/api/integrations/github/oauth/callback?state=state-1&code=code-1"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://locus.test/settings/connections?oauthError=oauth_callback_retryable",
     );
   });
 });

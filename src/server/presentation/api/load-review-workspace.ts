@@ -11,7 +11,7 @@ export interface LoadReviewWorkspaceInput {
 }
 
 export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceInput): Promise<ReviewWorkspaceDto> {
-  const { reviewSessionRepository, analysisJobScheduler } = getDependencies();
+  const { reviewSessionRepository, analysisJobScheduler, businessContextProvider } = getDependencies();
   const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository });
   const reviewSession = await useCase.execute({ reviewId });
   const activeInitialAnalysisJob = await loadActiveInitialAnalysisJob({
@@ -23,6 +23,13 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     reviewId,
   });
   const workspace = toReviewWorkspaceDto(reviewSession);
+  const reviewRecord = reviewSession.toRecord();
+  const businessContext = await businessContextProvider.loadSnapshotForReview({
+    reviewId: reviewRecord.reviewId,
+    repositoryName: reviewRecord.repositoryName,
+    title: reviewRecord.title,
+    source: reviewRecord.source ?? null,
+  });
   const effectiveReanalysisState = resolveEffectiveReanalysisState({
     persistedStatus: workspace.reanalysisStatus,
     persistedLastReanalyzeRequestedAt: workspace.lastReanalyzeRequestedAt,
@@ -43,5 +50,17 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       : null,
     reanalysisStatus: effectiveReanalysisState.reanalysisStatus,
     lastReanalyzeRequestedAt: effectiveReanalysisState.lastReanalyzeRequestedAt,
+    businessContext: {
+      generatedAt: businessContext.generatedAt,
+      provider: businessContext.provider,
+      items: businessContext.items.map((item) => ({
+        contextId: item.contextId,
+        sourceType: item.sourceType,
+        status: item.status,
+        title: item.title,
+        summary: item.summary,
+        href: item.href,
+      })),
+    },
   };
 }

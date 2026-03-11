@@ -274,6 +274,8 @@ describe("toReviewWorkspaceDto", () => {
         detail: null,
       },
     ]);
+    expect(dto.businessContext.provider).toBe("stub");
+    expect(dto.businessContext.items).toEqual([]);
   });
 
   it("returns an empty unsupported summary when all files were parsed", () => {
@@ -314,6 +316,8 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.lastReanalyzeRequestedAt).toBeNull();
     expect(dto.lastReanalyzeCompletedAt).toBeNull();
     expect(dto.lastReanalyzeError).toBeNull();
+    expect(dto.businessContext.provider).toBe("stub");
+    expect(dto.businessContext.items).toEqual([]);
 
     expect(dto.unsupportedSummary).toEqual({
       totalCount: 0,

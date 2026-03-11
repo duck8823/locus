@@ -10,6 +10,11 @@ import type {
   SavePendingOAuthStateInput,
 } from "@/server/application/ports/oauth-state-repository";
 import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
+import type {
+  ExchangeGitHubOAuthCodeInput,
+  OAuthCodeExchangeProvider,
+  OAuthCodeExchangeResult,
+} from "@/server/application/ports/oauth-code-exchange-provider";
 import type { ConnectionCatalogEntry } from "@/server/application/services/connection-catalog";
 import { CompleteGitHubOAuthCallbackUseCase } from "@/server/application/usecases/complete-github-oauth-callback";
 import type {
@@ -131,8 +136,27 @@ class InMemoryConnectionProviderCatalog implements ConnectionProviderCatalog {
   }
 }
 
+class StubOAuthCodeExchangeProvider implements OAuthCodeExchangeProvider {
+  lastInput: ExchangeGitHubOAuthCodeInput | null = null;
+
+  constructor(
+    private readonly result: OAuthCodeExchangeResult = {
+      accessToken: "oauth-access-token",
+      tokenType: "bearer",
+      scope: "repo read:org",
+      refreshToken: null,
+      expiresAt: null,
+    },
+  ) {}
+
+  async exchangeGitHubCode(input: ExchangeGitHubOAuthCodeInput): Promise<OAuthCodeExchangeResult> {
+    this.lastInput = input;
+    return this.result;
+  }
+}
+
 describe("CompleteGitHubOAuthCallbackUseCase", () => {
-  it("consumes state, stores token fingerprint, and marks connection as connected", async () => {
+  it("consumes state, exchanges code, and marks connection as connected", async () => {
     const oauthStateRepository = new InMemoryOAuthStateRepository();
     await oauthStateRepository.savePendingState({
       state: "state-1",
@@ -145,8 +169,10 @@ describe("CompleteGitHubOAuthCallbackUseCase", () => {
     });
     const connectionTokenRepository = new InMemoryConnectionTokenRepository();
     const transitionRepository = new InMemoryTransitionRepository();
+    const oauthCodeExchangeProvider = new StubOAuthCodeExchangeProvider();
     const useCase = new CompleteGitHubOAuthCallbackUseCase({
       oauthStateRepository,
+      oauthCodeExchangeProvider,
       connectionTokenRepository,
       connectionStateTransitionRepository: transitionRepository,
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
@@ -155,17 +181,24 @@ describe("CompleteGitHubOAuthCallbackUseCase", () => {
     const result = await useCase.execute({
       state: "state-1",
       code: "auth-code-xyz",
+      redirectUri: "https://locus.test/api/integrations/github/oauth/callback",
     });
 
     expect(result).toEqual({
       reviewerId: "demo-reviewer",
       redirectPath: "/settings/connections",
     });
+    expect(oauthCodeExchangeProvider.lastInput).toEqual({
+      code: "auth-code-xyz",
+      codeVerifier: "verifier-1",
+      redirectUri: "https://locus.test/api/integrations/github/oauth/callback",
+    });
     await expect(
       connectionTokenRepository.findTokenByReviewerId("demo-reviewer", "github"),
     ).resolves.toMatchObject({
       reviewerId: "demo-reviewer",
       provider: "github",
+      accessToken: "oauth-access-token",
       tokenType: "bearer",
     });
     await expect(
@@ -185,6 +218,7 @@ describe("CompleteGitHubOAuthCallbackUseCase", () => {
   it("rejects unknown state", async () => {
     const useCase = new CompleteGitHubOAuthCallbackUseCase({
       oauthStateRepository: new InMemoryOAuthStateRepository(),
+      oauthCodeExchangeProvider: new StubOAuthCodeExchangeProvider(),
       connectionTokenRepository: new InMemoryConnectionTokenRepository(),
       connectionStateTransitionRepository: new InMemoryTransitionRepository(),
       connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
@@ -194,7 +228,36 @@ describe("CompleteGitHubOAuthCallbackUseCase", () => {
       useCase.execute({
         state: "missing-state",
         code: "auth-code",
+        redirectUri: "https://locus.test/api/integrations/github/oauth/callback",
       }),
     ).rejects.toThrow("OAuth state is invalid or expired.");
+  });
+
+  it("rejects invalid redirect URI", async () => {
+    const oauthStateRepository = new InMemoryOAuthStateRepository();
+    await oauthStateRepository.savePendingState({
+      state: "state-1",
+      provider: "github",
+      reviewerId: "demo-reviewer",
+      redirectPath: "/settings/connections",
+      codeVerifier: "verifier-1",
+      createdAt: "2026-03-12T00:00:00.000Z",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    });
+    const useCase = new CompleteGitHubOAuthCallbackUseCase({
+      oauthStateRepository,
+      oauthCodeExchangeProvider: new StubOAuthCodeExchangeProvider(),
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
+      connectionStateTransitionRepository: new InMemoryTransitionRepository(),
+      connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
+    });
+
+    await expect(
+      useCase.execute({
+        state: "state-1",
+        code: "auth-code",
+        redirectUri: "not-a-url",
+      }),
+    ).rejects.toThrow("Invalid OAuth redirect URI.");
   });
 });
