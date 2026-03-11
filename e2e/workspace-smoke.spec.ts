@@ -97,3 +97,20 @@ test("persists connection state transitions in settings workspace", async ({ pag
     page.getByText(/Connected → Not connected|接続済み → 未接続/),
   ).toBeVisible();
 });
+
+test("keeps settings layout readable on narrow viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openSeedWorkspace(page);
+  await page.goto("/settings/connections");
+
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(
+    /Connections|接続設定/,
+  );
+  await expect(page.getByText(/History filter|履歴フィルター/)).toBeVisible();
+  await expect(page.getByText(/Recent transitions|最近の状態変更/).first()).toBeVisible();
+
+  const hasHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth + 1,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+});

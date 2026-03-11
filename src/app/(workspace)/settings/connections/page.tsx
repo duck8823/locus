@@ -6,6 +6,7 @@ import type { ConnectionProviderKey } from "@/server/application/services/connec
 import { loadConnectionsWorkspaceDto } from "@/server/presentation/api/load-connections-workspace";
 import { listConnectionStateTransitions } from "@/server/presentation/api/list-connection-state-transitions";
 import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
+import { resolveReviewerId } from "@/server/presentation/actions/reviewer-identity";
 import { setConnectionStateAction } from "@/server/presentation/actions/set-connection-state-action";
 import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 
@@ -75,11 +76,11 @@ const copyByLocale = {
     },
     providerDescriptionByKey: {
       github:
-        "OAuth endpoints are next; this card now tracks provider identity and lifecycle state.",
+        "OAuth endpoints are next. This card tracks provider identity and lifecycle state.",
       confluence:
         "Context overlay integration is planned after the first hosted review loop stabilizes.",
       jira:
-        "Issue-linking support is modeled in the contract but intentionally deferred from MVP v0.",
+        "Issue-linking support is modeled in the contract and deferred from MVP v0.",
     },
   },
   ja: {
@@ -146,11 +147,11 @@ const copyByLocale = {
     },
     providerDescriptionByKey: {
       github:
-        "次段で OAuth エンドポイントを実装予定。ここでは provider 識別子と状態遷移を先に固定します。",
+        "次段で OAuth を実装予定。ここでは provider 識別子と状態遷移を固定します。",
       confluence:
-        "コンテキストオーバーレイ連携は、ホスト連携フロー安定化後の段階で実装します。",
+        "コンテキストオーバーレイ連携は、ホスト連携フロー安定化後に実装します。",
       jira:
-        "Issue 連携は契約上の準備のみ行い、MVP v0 の実装スコープからは外しています。",
+        "Issue 連携は契約のみ準備し、MVP v0 の実装スコープからは外しています。",
     },
   },
 } as const;
@@ -172,7 +173,7 @@ const summarySectionStyle = {
 
 const cardsLayoutStyle = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
   gap: "16px",
 } as const;
 
@@ -180,10 +181,11 @@ const cardStyle = {
   border: "1px solid rgba(154, 167, 209, 0.16)",
   borderRadius: "18px",
   background: "rgba(18, 25, 51, 0.78)",
-  padding: "20px",
+  padding: "16px",
   display: "grid",
-  gap: "8px",
+  gap: "6px",
   minWidth: 0,
+  overflow: "hidden",
 } as const;
 
 const detailCardStyle = {
@@ -289,16 +291,6 @@ function formatStateSource(
   locale: keyof typeof copyByLocale,
 ): string {
   return copyByLocale[locale].stateSourceByKey[stateSource];
-}
-
-function resolveReviewerId(viewerCookie: string | undefined): string {
-  const normalized = viewerCookie?.trim();
-
-  if (!normalized) {
-    return "anonymous";
-  }
-
-  return normalized;
 }
 
 function formatCapabilityFlag(enabled: boolean, locale: keyof typeof copyByLocale): string {
@@ -492,10 +484,10 @@ export default async function ConnectionsPage({
           action="/settings/connections"
           style={{
             marginTop: "14px",
-            display: "flex",
+            display: "grid",
             gap: "8px",
-            alignItems: "flex-end",
-            flexWrap: "wrap",
+            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+            alignItems: "end",
           }}
         >
           <label style={{ color: "#9aa7d1", fontSize: "13px" }}>
@@ -558,6 +550,7 @@ export default async function ConnectionsPage({
               minHeight: "34px",
               cursor: "pointer",
               padding: "0 12px",
+              width: "100%",
             }}
           >
             {copy.historyApplyButton}
@@ -633,6 +626,9 @@ export default async function ConnectionsPage({
                       display: "grid",
                       gap: "6px",
                       marginTop: "8px",
+                      maxHeight: "220px",
+                      overflowY: "auto",
+                      paddingRight: "4px",
                     }}
                   >
                     {connection.recentTransitions.map((transition) => (
@@ -737,7 +733,6 @@ export default async function ConnectionsPage({
                   action={setConnectionStateAction}
                   style={{ display: "grid", gap: "8px", marginTop: "4px" }}
                 >
-                  <input type="hidden" name="reviewerId" value={reviewerId} />
                   <input type="hidden" name="provider" value={connection.provider} />
                   <input type="hidden" name="redirectPath" value="/settings/connections" />
                   <label style={{ color: "#9aa7d1", fontSize: "13px" }}>

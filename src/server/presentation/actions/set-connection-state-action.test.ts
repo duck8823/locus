@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   executeMock,
+  cookiesMock,
   getDependenciesMock,
   revalidatePathMock,
   redirectMock,
 } = vi.hoisted(() => ({
   executeMock: vi.fn(),
+  cookiesMock: vi.fn(),
   getDependenciesMock: vi.fn(),
   revalidatePathMock: vi.fn(),
   redirectMock: vi.fn(),
@@ -18,6 +20,10 @@ vi.mock("next/cache", () => ({
 
 vi.mock("next/navigation", () => ({
   redirect: redirectMock,
+}));
+
+vi.mock("next/headers", () => ({
+  cookies: cookiesMock,
 }));
 
 vi.mock("@/server/composition/dependencies", () => ({
@@ -45,6 +51,7 @@ import { setConnectionStateAction } from "@/server/presentation/actions/set-conn
 describe("setConnectionStateAction", () => {
   beforeEach(() => {
     executeMock.mockReset();
+    cookiesMock.mockReset();
     getDependenciesMock.mockReset();
     revalidatePathMock.mockReset();
     redirectMock.mockReset();
@@ -53,11 +60,16 @@ describe("setConnectionStateAction", () => {
       connectionStateTransitionRepository: {},
       connectionProviderCatalog: {},
     });
+    cookiesMock.mockResolvedValue({
+      get: vi.fn((name: string) =>
+        name === "locus-demo-viewer" ? { value: "cookie-reviewer" } : undefined,
+      ),
+    });
   });
 
   it("applies transition and redirects to settings page", async () => {
     const formData = new FormData();
-    formData.set("reviewerId", "demo-reviewer");
+    formData.set("reviewerId", "tampered-reviewer");
     formData.set("provider", "github");
     formData.set("nextStatus", "connected");
     formData.set("connectedAccountLabel", "duck8823");
@@ -66,13 +78,13 @@ describe("setConnectionStateAction", () => {
     await setConnectionStateAction(formData);
 
     expect(executeMock).toHaveBeenCalledWith({
-      reviewerId: "demo-reviewer",
+      reviewerId: "cookie-reviewer",
       provider: "github",
       nextStatus: "connected",
       connectedAccountLabel: "duck8823",
       transitionReason: "manual",
       transitionActorType: "reviewer",
-      transitionActorId: "demo-reviewer",
+      transitionActorId: "cookie-reviewer",
     });
     expect(revalidatePathMock).toHaveBeenCalledWith("/settings/connections");
     expect(redirectMock).toHaveBeenCalledWith("/settings/connections");
@@ -80,7 +92,6 @@ describe("setConnectionStateAction", () => {
 
   it("normalizes blank account labels to null", async () => {
     const formData = new FormData();
-    formData.set("reviewerId", "demo-reviewer");
     formData.set("provider", "github");
     formData.set("nextStatus", "reauth_required");
     formData.set("connectedAccountLabel", " ");
@@ -89,20 +100,19 @@ describe("setConnectionStateAction", () => {
     await setConnectionStateAction(formData);
 
     expect(executeMock).toHaveBeenCalledWith({
-      reviewerId: "demo-reviewer",
+      reviewerId: "cookie-reviewer",
       provider: "github",
       nextStatus: "reauth_required",
       connectedAccountLabel: null,
       transitionReason: "manual",
       transitionActorType: "reviewer",
-      transitionActorId: "demo-reviewer",
+      transitionActorId: "cookie-reviewer",
     });
   });
 
 
   it("rejects overly long account labels", async () => {
     const formData = new FormData();
-    formData.set("reviewerId", "demo-reviewer");
     formData.set("provider", "github");
     formData.set("nextStatus", "connected");
     formData.set("connectedAccountLabel", "a".repeat(201));
@@ -115,7 +125,6 @@ describe("setConnectionStateAction", () => {
   });
   it("rejects unsupported statuses", async () => {
     const formData = new FormData();
-    formData.set("reviewerId", "demo-reviewer");
     formData.set("provider", "github");
     formData.set("nextStatus", "planned");
     formData.set("redirectPath", "/settings/connections");
@@ -128,7 +137,6 @@ describe("setConnectionStateAction", () => {
 
   it("rejects non-relative redirect path", async () => {
     const formData = new FormData();
-    formData.set("reviewerId", "demo-reviewer");
     formData.set("provider", "github");
     formData.set("nextStatus", "connected");
     formData.set("redirectPath", "https://example.com");
@@ -137,5 +145,23 @@ describe("setConnectionStateAction", () => {
       "Invalid redirectPath: https://example.com",
     );
     expect(executeMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to anonymous reviewer when demo cookie is missing", async () => {
+    cookiesMock.mockResolvedValue({
+      get: vi.fn(() => undefined),
+    });
+    const formData = new FormData();
+    formData.set("provider", "github");
+    formData.set("nextStatus", "connected");
+    formData.set("redirectPath", "/settings/connections");
+
+    await setConnectionStateAction(formData);
+
+    expect(executeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reviewerId: "anonymous",
+      }),
+    );
   });
 });
