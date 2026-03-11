@@ -288,6 +288,7 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
       analysisCompletedAt: record.analysisCompletedAt ?? null,
     }),
     analysisError: record.analysisError ?? null,
+    activeAnalysisJob: null,
     reanalysisStatus: record.reanalysisStatus ?? "idle",
     lastOpenedAt: record.lastOpenedAt,
     lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt,

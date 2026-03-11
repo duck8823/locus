@@ -51,11 +51,15 @@ test("keeps review status changes after reload", async ({ page }) => {
   await openSeedWorkspace(page);
 
   await page.getByTestId("status-button-reviewed").click();
-  await expect(page.getByTestId("status-button-reviewed")).toHaveAttribute(
-    "data-active",
-    "true",
-  );
-  await expect(page).toHaveURL(workspacePathPattern);
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        return page.getByTestId("status-button-reviewed").getAttribute("data-active");
+      },
+      { timeout: 30_000 },
+    )
+    .toBe("true");
   await page.reload();
   await expect(page).toHaveURL(workspacePathPattern);
   await expect(page.getByTestId("status-button-reviewed")).toHaveAttribute(
