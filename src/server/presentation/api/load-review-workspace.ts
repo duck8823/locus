@@ -27,6 +27,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
   const businessContext = await businessContextProvider.loadSnapshotForReview({
     reviewId: reviewRecord.reviewId,
     repositoryName: reviewRecord.repositoryName,
+    branchLabel: reviewRecord.branchLabel,
     title: reviewRecord.title,
     source: reviewRecord.source ?? null,
   });

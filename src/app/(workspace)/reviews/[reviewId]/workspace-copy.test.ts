@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  workspaceCopyByLocale,
   formatArchitectureColumnLabel,
   formatBusinessContextSourceType,
   formatBusinessContextStatus,
@@ -18,5 +19,7 @@ describe("workspace-copy", () => {
     expect(formatArchitectureColumnLabel("upstream", "ja")).toBe("上流");
     expect(formatBusinessContextSourceType("github_issue", "ja")).toBe("GitHub Issue");
     expect(formatBusinessContextStatus("candidate", "ja")).toBe("候補");
+    expect(workspaceCopyByLocale.ja.text.semanticFocus).toBe("注目点");
+    expect(workspaceCopyByLocale.en.text.semanticSpanDelta).toBe("span delta");
   });
 });

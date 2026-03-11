@@ -54,15 +54,16 @@ describe("loadReviewWorkspaceDto", () => {
     loadActiveInitialAnalysisJobMock.mockReset();
     loadActiveManualReanalysisJobMock.mockReset();
     resolveEffectiveReanalysisStateMock.mockReset();
+    const loadSnapshotForReviewMock = vi.fn().mockResolvedValue({
+      generatedAt: "2026-03-12T00:00:00.000Z",
+      provider: "stub",
+      items: [],
+    });
     getDependenciesMock.mockReturnValue({
       reviewSessionRepository: {},
       analysisJobScheduler: {},
       businessContextProvider: {
-        loadSnapshotForReview: vi.fn().mockResolvedValue({
-          generatedAt: "2026-03-12T00:00:00.000Z",
-          provider: "stub",
-          items: [],
-        }),
+        loadSnapshotForReview: loadSnapshotForReviewMock,
       },
     });
     executeMock.mockResolvedValue({
@@ -70,6 +71,7 @@ describe("loadReviewWorkspaceDto", () => {
       toRecord: () => ({
         reviewId: "review-1",
         repositoryName: "duck8823/locus",
+        branchLabel: "feature/123-scope -> main",
         title: "Demo workspace",
         source: null,
       }),
@@ -116,6 +118,15 @@ describe("loadReviewWorkspaceDto", () => {
       generatedAt: "2026-03-12T00:00:00.000Z",
       provider: "stub",
       items: [],
+    });
+    expect(
+      getDependenciesMock.mock.results[0]?.value.businessContextProvider.loadSnapshotForReview,
+    ).toHaveBeenCalledWith({
+      reviewId: "review-1",
+      repositoryName: "duck8823/locus",
+      branchLabel: "feature/123-scope -> main",
+      title: "Demo workspace",
+      source: null,
     });
   });
 

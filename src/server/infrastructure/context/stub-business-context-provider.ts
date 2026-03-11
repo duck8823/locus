@@ -9,12 +9,21 @@ interface ExtractedIssueReference {
   repository: string;
   issueNumber: number;
   status: "linked" | "candidate";
-  source: "issue_url" | "repo_shorthand" | "same_repo_shorthand" | "pull_request_fallback";
+  source:
+    | "issue_url"
+    | "repo_shorthand"
+    | "same_repo_shorthand"
+    | "same_repo_closing_keyword"
+    | "branch_pattern"
+    | "pull_request_fallback";
 }
 
 const ISSUE_URL_PATTERN = /https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/issues\/(\d+)/gi;
 const REPO_SHORTHAND_PATTERN = /\b([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#(\d+)\b/g;
 const SAME_REPO_SHORTHAND_PATTERN = /(?:^|[^A-Za-z0-9_\/])#(\d+)\b/g;
+const CLOSING_KEYWORD_PATTERN = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b/gi;
+const BRANCH_ISSUE_PATTERN =
+  /\b(?:feature|feat|bugfix|fix|hotfix|issue|issues|task|chore)[/_-]+(?:[a-z]+[_-]+)?(\d{1,7})\b/gi;
 
 function toIssueKey(reference: {
   owner: string;
@@ -41,18 +50,44 @@ function upsertIssueReference(
   }
 }
 
+function extractHeadBranchLabel(branchLabel: string): string {
+  const normalized = branchLabel.trim();
+
+  if (normalized.length === 0) {
+    return "";
+  }
+
+  const arrowSeparatorIndex = normalized.indexOf("→");
+
+  if (arrowSeparatorIndex >= 0) {
+    return normalized.slice(0, arrowSeparatorIndex).trim();
+  }
+
+  const asciiArrowSeparatorIndex = normalized.indexOf("->");
+
+  if (asciiArrowSeparatorIndex >= 0) {
+    return normalized.slice(0, asciiArrowSeparatorIndex).trim();
+  }
+
+  return normalized;
+}
+
 function parseIssueReferences(input: {
   title: string;
+  branchLabel: string;
   owner: string;
   repository: string;
   pullRequestNumber: number;
 }): ExtractedIssueReference[] {
   const issueMap = new Map<string, ExtractedIssueReference>();
   const normalizedTitle = input.title.trim();
+  const normalizedHeadBranch = extractHeadBranchLabel(input.branchLabel);
 
   ISSUE_URL_PATTERN.lastIndex = 0;
   REPO_SHORTHAND_PATTERN.lastIndex = 0;
   SAME_REPO_SHORTHAND_PATTERN.lastIndex = 0;
+  CLOSING_KEYWORD_PATTERN.lastIndex = 0;
+  BRANCH_ISSUE_PATTERN.lastIndex = 0;
 
   for (const match of normalizedTitle.matchAll(ISSUE_URL_PATTERN)) {
     const owner = match[1];
@@ -90,6 +125,22 @@ function parseIssueReferences(input: {
     });
   }
 
+  for (const match of normalizedTitle.matchAll(CLOSING_KEYWORD_PATTERN)) {
+    const issueNumber = Number.parseInt(match[1] ?? "", 10);
+
+    if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
+      continue;
+    }
+
+    upsertIssueReference(issueMap, {
+      owner: input.owner,
+      repository: input.repository,
+      issueNumber,
+      status: "linked",
+      source: "same_repo_closing_keyword",
+    });
+  }
+
   for (const match of normalizedTitle.matchAll(SAME_REPO_SHORTHAND_PATTERN)) {
     const issueNumber = Number.parseInt(match[1] ?? "", 10);
 
@@ -103,6 +154,22 @@ function parseIssueReferences(input: {
       issueNumber,
       status: "candidate",
       source: "same_repo_shorthand",
+    });
+  }
+
+  for (const match of normalizedHeadBranch.matchAll(BRANCH_ISSUE_PATTERN)) {
+    const issueNumber = Number.parseInt(match[1] ?? "", 10);
+
+    if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
+      continue;
+    }
+
+    upsertIssueReference(issueMap, {
+      owner: input.owner,
+      repository: input.repository,
+      issueNumber,
+      status: "candidate",
+      source: "branch_pattern",
     });
   }
 
@@ -138,6 +205,14 @@ function toIssueSummary(reference: ExtractedIssueReference): string {
     return "Detected from #issue shorthand in the PR title (same repository inferred).";
   }
 
+  if (reference.source === "same_repo_closing_keyword") {
+    return "Detected from close/fix/resolve keyword in the PR title.";
+  }
+
+  if (reference.source === "branch_pattern") {
+    return "Detected from branch naming convention (issue number in head branch).";
+  }
+
   return "No explicit issue reference found in title. Showing a deterministic fallback candidate.";
 }
 
@@ -154,6 +229,7 @@ export class StubBusinessContextProvider implements BusinessContextProvider {
   async loadSnapshotForReview(input: {
     reviewId: string;
     repositoryName: string;
+    branchLabel: string;
     title: string;
     source: {
       provider: "github";
@@ -175,6 +251,7 @@ export class StubBusinessContextProvider implements BusinessContextProvider {
     if (input.source?.provider === "github") {
       const issueReferences = parseIssueReferences({
         title: input.title,
+        branchLabel: input.branchLabel,
         owner: input.source.owner,
         repository: input.source.repository,
         pullRequestNumber: input.source.pullRequestNumber,
