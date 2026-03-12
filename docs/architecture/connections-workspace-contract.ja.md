@@ -135,9 +135,13 @@ DTO 値自体は言語非依存のまま維持する。
 - provider metadata は `ConnectionProviderCatalog` port と prototype adapter 経由で解決する。
 - 接続状態の永続化は SQLite ベースに移行し、legacy の file record は遅延移行で読み込む。
 - GitHub OAuth の start / callback ルートは file-backed repository に pending state と token を保存し、OAuth クライアント設定が無い場合はローカル demo fallback で接続動作を検証できる。
-- 接続トークンの永続化は機密フィールドを AES-256-GCM で暗号化して保存し、環境変数キーで上書きできる。
+- 接続トークンの永続化は機密フィールドを AES-256-GCM で暗号化して保存し、鍵フォーマット検証を厳格化している。
+- 鍵ローテーション向けに key ring をサポートする:
+  - `LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEYS`（カンマ区切り）を優先
+  - 先頭鍵で暗号化し、全鍵で復号する
+  - 既存の `LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEY` も後方互換で利用可能
 
 ## 次のステップ
 
-1. 本番向けに managed key rotation / 安全な鍵配布を追加する。
+1. 本番向けに managed key 配布（KMS/secret manager 連携）を追加する。
 2. リフレッシュトークンのライフサイクル管理と自動再認証回復を追加する。

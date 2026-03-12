@@ -135,9 +135,13 @@ When extending this contract:
 - Provider metadata now goes through a `ConnectionProviderCatalog` port with a prototype adapter implementation.
 - Connection state persistence now uses a SQLite-backed repository with lazy migration from legacy file records.
 - GitHub OAuth start/callback routes persist pending state + token records in file-backed repositories, with a local demo fallback when OAuth client configuration is absent.
-- Connection-token persistence now encrypts sensitive token fields at rest (AES-256-GCM), with environment-key override support.
+- Connection-token persistence now encrypts sensitive token fields at rest (AES-256-GCM), with strict key-format validation.
+- Key-ring rotation is supported:
+  - `LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEYS` (comma-separated) is preferred
+  - first key is used for encryption, all keys are used for decryption
+  - legacy `LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEY` remains backward compatible
 
 ## Next Steps
 
-1. Add managed key rotation / secure key distribution for production deployments.
+1. Add managed key distribution (KMS/secret-manager integration) for production deployments.
 2. Add refresh-token lifecycle handling and automatic token-expiry recovery.
