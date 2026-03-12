@@ -1,14 +1,24 @@
 export type PullRequestSourceProvider = string;
 
+export interface PullRequestSourceRef {
+  provider: PullRequestSourceProvider;
+  [key: string]: unknown;
+}
+
+export interface PullRequestSnapshotBundle {
+  title: string;
+  repositoryName: string;
+  branchLabel: string;
+  snapshotPairs: unknown[];
+  source: PullRequestSourceRef;
+}
+
 export interface ProviderAgnosticPullRequestSnapshotProvider {
   fetchPullRequestSnapshots(input: {
     reviewId: string;
-    source: {
-      provider: PullRequestSourceProvider;
-      [key: string]: unknown;
-    };
+    source: PullRequestSourceRef;
     accessToken?: string | null;
-  }): Promise<unknown>;
+  }): Promise<PullRequestSnapshotBundle>;
 }
 
 export const PLUGIN_SDK_VERSION = 1 as const;
