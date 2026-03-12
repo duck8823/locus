@@ -2,6 +2,7 @@ import { GetReviewWorkspaceUseCase } from "@/server/application/usecases/get-rev
 import { getDependencies } from "@/server/composition/dependencies";
 import { loadActiveInitialAnalysisJob } from "@/server/presentation/api/load-active-initial-analysis-job";
 import { loadActiveManualReanalysisJob } from "@/server/presentation/api/load-active-manual-reanalysis-job";
+import { loadAnalysisJobHistory } from "@/server/presentation/api/load-analysis-job-history";
 import { toReviewWorkspaceDto } from "@/server/presentation/mappers/to-review-workspace-dto";
 import type { ReviewWorkspaceDto } from "@/server/presentation/dto/review-workspace-dto";
 import { resolveEffectiveReanalysisState } from "@/server/presentation/formatters/effective-reanalysis-state";
@@ -19,6 +20,10 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     reviewId,
   });
   const activeManualReanalysisJob = await loadActiveManualReanalysisJob({
+    analysisJobScheduler,
+    reviewId,
+  });
+  const analysisJobHistory = await loadAnalysisJobHistory({
     analysisJobScheduler,
     reviewId,
   });
@@ -49,6 +54,8 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
           startedAt: activeInitialAnalysisJob.startedAt ?? null,
         }
       : null,
+    analysisHistory: analysisJobHistory.history,
+    dogfoodingMetrics: analysisJobHistory.metrics,
     reanalysisStatus: effectiveReanalysisState.reanalysisStatus,
     lastReanalyzeRequestedAt: effectiveReanalysisState.lastReanalyzeRequestedAt,
     businessContext: {

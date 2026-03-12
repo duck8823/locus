@@ -7,7 +7,8 @@ type SemanticSymbolKind = "function" | "method" | "class" | "module" | "unknown"
 type ReviewGroupStatus = "unread" | "in_progress" | "reviewed";
 type SemanticChangeType = "added" | "removed" | "modified" | "moved" | "renamed";
 type UnsupportedFileReason = "unsupported_language" | "parser_failed" | "binary_file";
-type AnalysisJobReason = "initial_ingestion" | "code_host_webhook";
+type AnalysisJobReason = "initial_ingestion" | "manual_reanalysis" | "code_host_webhook";
+type AnalysisJobStatus = "queued" | "running" | "succeeded" | "failed";
 type BusinessContextSourceType = "github_issue" | "confluence_page";
 type BusinessContextStatus = "linked" | "candidate" | "unavailable";
 type BusinessContextConfidence = "high" | "medium" | "low";
@@ -40,6 +41,7 @@ export const workspaceCopyByLocale = {
       initialAnalysis: "Initial analysis",
       reanalysisStatus: "Reanalysis status",
       analysisCoverage: "Analysis coverage",
+      analysisJobs: "Analysis jobs",
       businessContext: "Business context",
       architecturePane: "Architecture pane",
     },
@@ -102,6 +104,14 @@ export const workspaceCopyByLocale = {
       architectureContextWillAppear:
         "Architecture context will appear after the first change group is available.",
       analysisProgressAriaLabel: "Analysis progress",
+      jobStatus: "Status",
+      jobAttempts: "Attempts",
+      jobDuration: "Duration",
+      jobQueuedAt: "Queued at",
+      noAnalysisJobsYet: "No analysis jobs recorded yet.",
+      averageDuration: "Average duration",
+      failureRate: "Failure rate",
+      recoverySuccessRate: "Recovery success rate",
       semanticKind: "kind",
       semanticSignature: "signature",
       semanticBody: "body",
@@ -175,7 +185,14 @@ export const workspaceCopyByLocale = {
     },
     analysisJobReason: {
       initial_ingestion: "Initial ingestion",
+      manual_reanalysis: "Manual reanalysis",
       code_host_webhook: "Webhook ingestion",
+    },
+    analysisJobStatus: {
+      queued: "Queued",
+      running: "Running",
+      succeeded: "Succeeded",
+      failed: "Failed",
     },
     businessContextSourceType: {
       github_issue: "GitHub Issue",
@@ -220,6 +237,7 @@ export const workspaceCopyByLocale = {
       initialAnalysis: "初回解析",
       reanalysisStatus: "再解析ステータス",
       analysisCoverage: "解析カバレッジ",
+      analysisJobs: "解析ジョブ",
       businessContext: "ビジネスコンテキスト",
       architecturePane: "アーキテクチャ",
     },
@@ -281,6 +299,14 @@ export const workspaceCopyByLocale = {
       architectureContextWillAppear:
         "最初の変更グループが利用可能になると、ここにアーキテクチャ情報が表示されます。",
       analysisProgressAriaLabel: "解析進捗",
+      jobStatus: "状態",
+      jobAttempts: "試行回数",
+      jobDuration: "所要時間",
+      jobQueuedAt: "キュー投入",
+      noAnalysisJobsYet: "解析ジョブ履歴はまだありません。",
+      averageDuration: "平均所要時間",
+      failureRate: "失敗率",
+      recoverySuccessRate: "復帰成功率",
       semanticKind: "種類",
       semanticSignature: "シグネチャ",
       semanticBody: "本文",
@@ -354,7 +380,14 @@ export const workspaceCopyByLocale = {
     },
     analysisJobReason: {
       initial_ingestion: "初回取り込み",
+      manual_reanalysis: "手動再解析",
       code_host_webhook: "Webhook 取り込み",
+    },
+    analysisJobStatus: {
+      queued: "キュー待機",
+      running: "実行中",
+      succeeded: "成功",
+      failed: "失敗",
     },
     businessContextSourceType: {
       github_issue: "GitHub Issue",
@@ -473,6 +506,17 @@ export function formatAnalysisJobReason(
   return (
     copy.analysisJobReason[reason as AnalysisJobReason] ??
     reason.replaceAll("_", " ")
+  );
+}
+
+export function formatAnalysisJobStatus(
+  status: string,
+  locale: WorkspaceLocale,
+): string {
+  const copy = workspaceCopyByLocale[locale];
+  return (
+    copy.analysisJobStatus[status as AnalysisJobStatus] ??
+    status.replaceAll("_", " ")
   );
 }
 

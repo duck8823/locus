@@ -810,4 +810,87 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persisted.jobs[0]?.status).toBe("running");
     expect(persisted.jobs[0]?.startedAt).toBe(now);
   });
+
+  it("lists recent jobs for a review with status and attempt metadata", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    await writeFile(
+      filePath,
+      JSON.stringify(
+        {
+          jobs: [
+            {
+              jobId: "job-old",
+              reviewId: "review-history",
+              requestedAt: "2026-03-10T00:00:00.000Z",
+              reason: "initial_ingestion",
+              status: "succeeded",
+              queuedAt: "2026-03-10T00:00:01.000Z",
+              startedAt: "2026-03-10T00:00:02.000Z",
+              completedAt: "2026-03-10T00:00:10.000Z",
+              durationMs: 8000,
+              attempts: 1,
+              lastError: null,
+            },
+            {
+              jobId: "job-other-review",
+              reviewId: "review-other",
+              requestedAt: "2026-03-10T00:00:00.000Z",
+              reason: "manual_reanalysis",
+              status: "failed",
+              queuedAt: "2026-03-10T00:01:00.000Z",
+              startedAt: "2026-03-10T00:01:01.000Z",
+              completedAt: "2026-03-10T00:01:04.000Z",
+              durationMs: 3000,
+              attempts: 2,
+              lastError: "network timeout",
+            },
+            {
+              jobId: "job-new",
+              reviewId: "review-history",
+              requestedAt: "2026-03-10T00:02:00.000Z",
+              reason: "manual_reanalysis",
+              status: "failed",
+              queuedAt: "2026-03-10T00:02:01.000Z",
+              startedAt: "2026-03-10T00:02:02.000Z",
+              completedAt: "2026-03-10T00:02:05.000Z",
+              durationMs: 3000,
+              attempts: 3,
+              lastError: "temporary failure",
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      onJob: async () => {},
+    });
+
+    const history = await scheduler.listRecentJobs({
+      reviewId: "review-history",
+      limit: 1,
+    });
+
+    expect(history).toEqual([
+      {
+        jobId: "job-new",
+        reviewId: "review-history",
+        requestedAt: "2026-03-10T00:02:00.000Z",
+        reason: "manual_reanalysis",
+        status: "failed",
+        queuedAt: "2026-03-10T00:02:01.000Z",
+        startedAt: "2026-03-10T00:02:02.000Z",
+        completedAt: "2026-03-10T00:02:05.000Z",
+        durationMs: 3000,
+        attempts: 3,
+        lastError: "temporary failure",
+      },
+    ]);
+  });
 });
