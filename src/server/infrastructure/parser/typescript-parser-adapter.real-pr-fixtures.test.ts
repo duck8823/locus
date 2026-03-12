@@ -140,6 +140,19 @@ describe("TypeScriptParserAdapter real PR fixtures", () => {
     );
   });
 
+  it("keeps stable symbol keys for security-sensitive fixture callables", async () => {
+    const adapter = new TypeScriptParserAdapter();
+    const [, pair] = createRealPrFixturePairs("real-pr-fixture-review");
+    const before = await adapter.parse(pair.before!);
+    const after = await adapter.parse(pair.after!);
+    const diff = await adapter.diff({ before, after });
+    const symbolKeys = new Set(diff.items.map((item) => item.symbolKey));
+
+    expect(symbolKeys.has("function::<root>::startGitHubDemoSessionAction")).toBe(true);
+    expect(symbolKeys.has("function::<root>::parsePullRequestNumber")).toBe(true);
+    expect(symbolKeys.has("function::<root>::readRequiredValue")).toBe(true);
+  });
+
   it("runs end-to-end analysis pipeline on real PR fixtures without unsupported files", async () => {
     const reviewId = "real-pr-fixture-review";
     const startedAt = Date.now();
