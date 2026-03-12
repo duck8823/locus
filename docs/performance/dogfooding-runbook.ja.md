@@ -46,6 +46,7 @@ npm run dogfood:run
 5. `docs/performance/dogfooding-runs/run-<timestamp>.json` へ記録
 
 実行後に、生成された artifact のパスが標準出力に表示される。
+ベンチマーク計測の可視化のため、`ANALYZE_SNAPSHOTS_BENCHMARK=1` と `ANALYZE_SNAPSHOTS_REAL_PR_BENCHMARK=1` は自動設定される。
 
 ### 2) 手動ステップ確認（任意）
 
@@ -70,6 +71,8 @@ npm run dogfood:metrics
 - `global.failureRatePercent`
 - `global.recoverySuccessRatePercent`
 - `byReview[]` のレビュー単位内訳
+
+選択中の jobs ストアに解析ジョブ記録がない場合、これら指標は `0` または `null` になる。
 
 artifact 形式の詳細: [dogfooding-runs/README.ja.md](dogfooding-runs/README.ja.md)
 

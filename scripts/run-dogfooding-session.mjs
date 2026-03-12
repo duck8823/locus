@@ -7,10 +7,13 @@ import { runDogfoodingMetrics } from "./dogfooding-metrics.mjs";
 
 const execFileAsync = promisify(execFile);
 
-async function runCommand(command, args) {
+async function runCommand(command, args, extraEnv = {}) {
   const { stdout, stderr } = await execFileAsync(command, args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: {
+      ...process.env,
+      ...extraEnv,
+    },
     maxBuffer: 10 * 1024 * 1024,
   });
 
@@ -27,30 +30,58 @@ function createTimestamp() {
 
 async function main() {
   const runCommands = [
-    ["npm", ["run", "demo:data:reseed"]],
-    [
-      "npx",
-      [
+    {
+      command: "npm",
+      args: ["run", "demo:data:reseed"],
+    },
+    {
+      command: "npx",
+      args: [
         "vitest",
         "run",
         "src/server/infrastructure/parser/analyze-source-snapshots.large-pr.test.ts",
       ],
-    ],
-    [
-      "npx",
-      [
+      env: {
+        ANALYZE_SNAPSHOTS_BENCHMARK: "1",
+      },
+    },
+    {
+      command: "npx",
+      args: [
         "vitest",
         "run",
         "src/server/infrastructure/parser/typescript-parser-adapter.real-pr-fixtures.test.ts",
       ],
-    ],
+      env: {
+        ANALYZE_SNAPSHOTS_REAL_PR_BENCHMARK: "1",
+      },
+    },
   ];
 
   const commandResults = [];
+  let hasFailedCommand = false;
 
-  for (const [command, args] of runCommands) {
-    const result = await runCommand(command, args);
-    commandResults.push(result);
+  for (const entry of runCommands) {
+    try {
+      const result = await runCommand(entry.command, entry.args, entry.env);
+      commandResults.push({ ...result, status: "succeeded" });
+    } catch (error) {
+      hasFailedCommand = true;
+      const message = error instanceof Error ? error.message : "Unknown command failure";
+      const stdout = typeof error === "object" && error !== null && "stdout" in error
+        ? String(error.stdout ?? "")
+        : "";
+      const stderr = typeof error === "object" && error !== null && "stderr" in error
+        ? String(error.stderr ?? "")
+        : "";
+      commandResults.push({
+        command: `${entry.command} ${entry.args.join(" ")}`,
+        stdout,
+        stderr,
+        status: "failed",
+        error: message,
+      });
+    }
   }
 
   const metrics = await runDogfoodingMetrics();
@@ -73,6 +104,10 @@ async function main() {
   );
 
   process.stdout.write(`${outputPath}\n`);
+
+  if (hasFailedCommand) {
+    process.exitCode = 1;
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

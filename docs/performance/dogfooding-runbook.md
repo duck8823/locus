@@ -46,6 +46,7 @@ What it does:
 5. Write JSON artifact to `docs/performance/dogfooding-runs/run-<timestamp>.json`
 
 The command prints the artifact path to stdout.
+`ANALYZE_SNAPSHOTS_BENCHMARK=1` and `ANALYZE_SNAPSHOTS_REAL_PR_BENCHMARK=1` are set automatically for benchmark visibility.
 
 ### 2) Step-by-step verification (optional)
 
@@ -70,6 +71,8 @@ npm run dogfood:metrics
 - `global.failureRatePercent`
 - `global.recoverySuccessRatePercent`
 - `byReview[]` breakdown
+
+If no analysis jobs are recorded in the selected jobs store, these metrics may be `0` or `null`.
 
 For artifact format details: [dogfooding-runs/README.md](dogfooding-runs/README.md)
 
