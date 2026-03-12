@@ -10,6 +10,7 @@ import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import { toSemanticChangeFocusView } from "./semantic-change-focus";
 import {
   formatAnalysisJobReason,
+  formatAnalysisJobStatus,
   formatArchitectureCategoryLabel,
   formatArchitectureColumnLabel,
   formatBusinessContextConfidence,
@@ -65,6 +66,15 @@ function formatAnalysisDuration(durationMs: number): string {
 function formatCoveragePercent(coveragePercent: number): string {
   const formatted = coveragePercent.toFixed(1);
 
+  return formatted.endsWith(".0") ? `${formatted.slice(0, -2)}%` : `${formatted}%`;
+}
+
+function formatNullablePercent(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  const formatted = value.toFixed(1);
   return formatted.endsWith(".0") ? `${formatted.slice(0, -2)}%` : `${formatted}%`;
 }
 
@@ -642,6 +652,51 @@ export default async function ReviewWorkspacePage({
                 ) : null}
               </>
             ) : null}
+          </CollapsibleDetails>
+
+          <CollapsibleDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            defaultOpen={workspace.analysisHistory.length > 0}
+            summary={
+              <span className={styles.muted}>{copy.section.analysisJobs}</span>
+            }
+          >
+            <p className={styles.muted}>
+              {copy.text.averageDuration}: {workspace.dogfoodingMetrics.averageDurationMs !== null
+                ? formatAnalysisDuration(workspace.dogfoodingMetrics.averageDurationMs)
+                : "—"}
+              {" · "}
+              {copy.text.failureRate}: {formatNullablePercent(workspace.dogfoodingMetrics.failureRatePercent)}
+              {" · "}
+              {copy.text.recoverySuccessRate}:{" "}
+              {formatNullablePercent(workspace.dogfoodingMetrics.recoverySuccessRatePercent)}
+            </p>
+            {workspace.analysisHistory.length > 0 ? (
+              <ul className={styles.analysisHistoryList}>
+                {workspace.analysisHistory.map((job) => (
+                  <li key={job.jobId} className={styles.analysisHistoryItem}>
+                    <p className={styles.muted}>
+                      {formatAnalysisJobReason(job.reason, workspaceLocale)} ·{" "}
+                      {copy.text.jobStatus}: {formatAnalysisJobStatus(job.status, workspaceLocale)}
+                    </p>
+                    <p className={styles.muted}>
+                      {copy.text.jobQueuedAt}: <LocalizedDateTime isoTimestamp={job.queuedAt} />
+                      {" · "}
+                      {copy.text.jobAttempts}: {job.attempts}
+                      {" · "}
+                      {copy.text.jobDuration}: {job.durationMs !== null ? formatAnalysisDuration(job.durationMs) : "—"}
+                    </p>
+                    {job.lastError ? (
+                      <p className={styles.reanalysisError}>{job.lastError}</p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>{copy.text.noAnalysisJobsYet}</p>
+            )}
           </CollapsibleDetails>
 
           <CollapsibleDetails

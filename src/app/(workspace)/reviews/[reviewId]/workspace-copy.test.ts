@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   workspaceCopyByLocale,
+  formatAnalysisJobStatus,
   formatArchitectureColumnLabel,
   formatBusinessContextConfidence,
   formatBusinessContextInferenceSource,
@@ -19,6 +20,7 @@ describe("workspace-copy", () => {
     expect(formatSemanticSymbolKind("method", "ja")).toBe("メソッド");
     expect(formatUnsupportedReason("parser_failed", "ja")).toBe("パーサー失敗");
     expect(formatArchitectureColumnLabel("upstream", "ja")).toBe("上流");
+    expect(formatAnalysisJobStatus("running", "ja")).toBe("実行中");
     expect(formatBusinessContextSourceType("github_issue", "ja")).toBe("GitHub Issue");
     expect(formatBusinessContextStatus("candidate", "ja")).toBe("候補");
     expect(formatBusinessContextConfidence("high", "ja")).toBe("高");
