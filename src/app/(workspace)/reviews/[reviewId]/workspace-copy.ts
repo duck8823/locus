@@ -639,3 +639,223 @@ export function formatBusinessContextInferenceSource(
     inferenceSource.replaceAll("_", " ")
   );
 }
+
+const DEMO_WORKSPACE_TITLE_EN = "Demo semantic review workspace";
+const DEMO_WORKSPACE_TITLE_JA = "セマンティックレビュー・デモワークスペース";
+const SEMANTIC_GROUP_TITLE_SUFFIX_EN = " semantic changes";
+const SEMANTIC_GROUP_TITLE_SUFFIX_JA = " のセマンティック差分";
+const NO_SEMANTIC_CHANGES_DETECTED_EN = "No semantic changes detected.";
+const NO_SEMANTIC_CHANGES_DETECTED_JA = "セマンティック差分は検出されませんでした。";
+
+const SEMANTIC_BODY_SUMMARY_JA_BY_EN = {
+  "Callable added": "呼び出し可能要素が追加されました",
+  "Callable removed": "呼び出し可能要素が削除されました",
+  "Body changed": "実装本体が変更されました",
+  "Signature changed": "シグネチャが変更されました",
+  "Signature and body changed": "シグネチャと実装本体の両方が変更されました",
+} as const;
+
+const BUSINESS_CONTEXT_TITLE_JA_BY_EN = {
+  "No GitHub issue context is linked yet": "GitHub Issue コンテキストはまだ紐づいていません",
+  "No Confluence page linked": "Confluence ページは未連携です",
+  "Business context temporarily unavailable": "ビジネスコンテキストを一時的に取得できません",
+} as const;
+
+const BUSINESS_CONTEXT_SUMMARY_JA_BY_EN = {
+  "Issue context requires a GitHub-hosted review source.":
+    "Issue コンテキストは GitHub 由来のレビューソースで利用できます。",
+  "Confluence linking is intentionally deferred; this panel defines the future contract.":
+    "Confluence 連携は後続フェーズで対応予定です。このパネルでは将来契約を確認できます。",
+  "Failed to load context provider output. Retry is available.":
+    "コンテキストプロバイダーの取得に失敗しました。再試行できます。",
+} as const;
+
+type KnownSuggestionId =
+  | "verify-removed-symbol-references"
+  | "check-downstream-callers"
+  | "review-input-validation"
+  | "trace-requirement-context"
+  | "baseline-manual-review";
+
+const AI_SUGGESTION_TEXT_JA_BY_ID: Record<
+  KnownSuggestionId,
+  {
+    headline: string;
+    recommendation: string;
+  }
+> = {
+  "verify-removed-symbol-references": {
+    headline: "削除されたシンボルの呼び出し元を確認",
+    recommendation:
+      "削除されたシンボルが検出されました。直接/間接の呼び出し元が削除・移行済みか、または feature flag で保護されているか確認してください。",
+  },
+  "check-downstream-callers": {
+    headline: "下流の挙動変化をレビュー",
+    recommendation:
+      "変更されたシンボルに下流依存があります。呼び出し側と契約前提の退行リスクを確認してください。",
+  },
+  "review-input-validation": {
+    headline: "新規経路のバリデーションと境界値を確認",
+    recommendation:
+      "新しい呼び出し可能要素が追加されました。境界条件・不正入力・認証/認可の前提を確認してください。",
+  },
+  "trace-requirement-context": {
+    headline: "要件コンテキストへのトレーサビリティを確認",
+    recommendation:
+      "関連する要件コンテキストと照合し、受け入れ条件がテストでカバーされているか確認してください。",
+  },
+  "baseline-manual-review": {
+    headline: "高シグナルのヒューリスティックは検出されませんでした",
+    recommendation:
+      "ベースライン確認を実施してください: API互換性、テストカバレッジ差分、エラーハンドリング、セキュリティ影響のあるデータフロー。",
+  },
+};
+
+const AI_SUGGESTION_RATIONALE_LINE_JA_BY_EN = {
+  "No semantic changes were found for the selected group.":
+    "選択中グループではセマンティック差分が見つかりませんでした。",
+  "Semantic context was limited.": "セマンティックコンテキストが限定的でした。",
+  "Architecture context was limited.": "アーキテクチャコンテキストが限定的でした。",
+  "Business context was limited.": "ビジネスコンテキストが限定的でした。",
+} as const;
+
+const AI_RATIONALE_PREFIX_JA_BY_EN = {
+  "Removed: ": "削除: ",
+  "Added: ": "追加: ",
+  "Modified: ": "変更: ",
+  "Location: ": "位置: ",
+  "Signature: ": "シグネチャ: ",
+  "Architecture downstream count: ": "下流ノード数: ",
+  "Downstream neighbors: ": "下流隣接ノード数: ",
+  "Representative symbols: ": "代表シンボル: ",
+  "Context: ": "コンテキスト: ",
+  "Source: ": "ソース: ",
+  "Confidence: ": "確信度: ",
+} as const;
+
+function replaceByPrefix(input: string, prefix: string, replacementPrefix: string): string {
+  if (!input.startsWith(prefix)) {
+    return input;
+  }
+
+  return `${replacementPrefix}${input.slice(prefix.length)}`;
+}
+
+function localizeAiSuggestionRationaleLine(line: string, locale: WorkspaceLocale): string {
+  if (locale !== "ja") {
+    return line;
+  }
+
+  const mappedLine =
+    AI_SUGGESTION_RATIONALE_LINE_JA_BY_EN[
+      line as keyof typeof AI_SUGGESTION_RATIONALE_LINE_JA_BY_EN
+    ];
+
+  if (mappedLine) {
+    return mappedLine;
+  }
+
+  return Object.entries(AI_RATIONALE_PREFIX_JA_BY_EN).reduce(
+    (current, [prefix, replacementPrefix]) =>
+      replaceByPrefix(current, prefix, replacementPrefix),
+    line,
+  );
+}
+
+export function formatWorkspaceTitle(title: string, locale: WorkspaceLocale): string {
+  if (locale === "ja" && title === DEMO_WORKSPACE_TITLE_EN) {
+    return DEMO_WORKSPACE_TITLE_JA;
+  }
+
+  return title;
+}
+
+export function formatReviewGroupTitle(title: string, locale: WorkspaceLocale): string {
+  if (
+    locale === "ja" &&
+    title.endsWith(SEMANTIC_GROUP_TITLE_SUFFIX_EN) &&
+    title.length > SEMANTIC_GROUP_TITLE_SUFFIX_EN.length
+  ) {
+    return `${title.slice(0, -SEMANTIC_GROUP_TITLE_SUFFIX_EN.length)}${SEMANTIC_GROUP_TITLE_SUFFIX_JA}`;
+  }
+
+  return title;
+}
+
+export function formatReviewGroupSummary(summary: string, locale: WorkspaceLocale): string {
+  if (locale === "ja" && summary === NO_SEMANTIC_CHANGES_DETECTED_EN) {
+    return NO_SEMANTIC_CHANGES_DETECTED_JA;
+  }
+
+  return summary;
+}
+
+export function formatSemanticBodySummary(
+  bodySummary: string | null,
+  locale: WorkspaceLocale,
+): string | null {
+  if (bodySummary === null || locale !== "ja") {
+    return bodySummary;
+  }
+
+  return (
+    SEMANTIC_BODY_SUMMARY_JA_BY_EN[
+      bodySummary as keyof typeof SEMANTIC_BODY_SUMMARY_JA_BY_EN
+    ] ?? bodySummary
+  );
+}
+
+export function localizeAiSuggestionText(input: {
+  locale: WorkspaceLocale;
+  suggestionId: string;
+  headline: string;
+  recommendation: string;
+  rationale: string[];
+}): {
+  headline: string;
+  recommendation: string;
+  rationale: string[];
+} {
+  if (input.locale !== "ja") {
+    return {
+      headline: input.headline,
+      recommendation: input.recommendation,
+      rationale: input.rationale,
+    };
+  }
+
+  const localized = AI_SUGGESTION_TEXT_JA_BY_ID[input.suggestionId as KnownSuggestionId];
+
+  return {
+    headline: localized?.headline ?? input.headline,
+    recommendation: localized?.recommendation ?? input.recommendation,
+    rationale: input.rationale.map((line) => localizeAiSuggestionRationaleLine(line, input.locale)),
+  };
+}
+
+export function formatBusinessContextTitle(title: string, locale: WorkspaceLocale): string {
+  if (locale !== "ja") {
+    return title;
+  }
+
+  return (
+    BUSINESS_CONTEXT_TITLE_JA_BY_EN[
+      title as keyof typeof BUSINESS_CONTEXT_TITLE_JA_BY_EN
+    ] ?? title
+  );
+}
+
+export function formatBusinessContextSummary(
+  summary: string | null,
+  locale: WorkspaceLocale,
+): string | null {
+  if (summary === null || locale !== "ja") {
+    return summary;
+  }
+
+  return (
+    BUSINESS_CONTEXT_SUMMARY_JA_BY_EN[
+      summary as keyof typeof BUSINESS_CONTEXT_SUMMARY_JA_BY_EN
+    ] ?? summary
+  );
+}

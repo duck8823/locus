@@ -4,16 +4,29 @@ import { useMemo } from "react";
 
 export interface LocalizedDateTimeProps {
   isoTimestamp: string;
+  locale?: "ja" | "en";
 }
 
-export function LocalizedDateTime({ isoTimestamp }: LocalizedDateTimeProps) {
+export function resolveLocalizedDateTimeLocale(locale?: "ja" | "en"): string | undefined {
+  if (locale === "ja") {
+    return "ja-JP";
+  }
+
+  if (locale === "en") {
+    return "en-US";
+  }
+
+  return undefined;
+}
+
+export function LocalizedDateTime({ isoTimestamp, locale }: LocalizedDateTimeProps) {
   const label = useMemo(
     () =>
-      new Intl.DateTimeFormat(undefined, {
+      new Intl.DateTimeFormat(resolveLocalizedDateTimeLocale(locale), {
         dateStyle: "medium",
         timeStyle: "short",
       }).format(new Date(isoTimestamp)),
-    [isoTimestamp],
+    [isoTimestamp, locale],
   );
 
   return (
