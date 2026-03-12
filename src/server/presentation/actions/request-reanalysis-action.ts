@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { RequestManualReanalysisUseCase } from "@/server/application/usecases/request-manual-reanalysis";
 import { getDependencies } from "@/server/composition/dependencies";
 import { readRequiredString } from "@/server/presentation/actions/read-required-string";
+import { toWorkspaceErrorCode } from "@/server/presentation/actions/workspace-error-code";
 
 export async function requestReanalysisAction(formData: FormData): Promise<void> {
   const reviewId = readRequiredString(formData, "reviewId");
@@ -14,7 +15,14 @@ export async function requestReanalysisAction(formData: FormData): Promise<void>
     analysisJobScheduler,
   });
 
-  await useCase.execute({ reviewId });
-  revalidatePath(`/reviews/${reviewId}`);
-  redirect(`/reviews/${reviewId}`);
+  try {
+    await useCase.execute({ reviewId });
+    revalidatePath(`/reviews/${reviewId}`);
+    redirect(`/reviews/${reviewId}`);
+  } catch (error) {
+    const query = new URLSearchParams({
+      workspaceError: toWorkspaceErrorCode(error),
+    });
+    redirect(`/reviews/${reviewId}?${query.toString()}`);
+  }
 }
