@@ -11,6 +11,15 @@ This repository uses a multi-AI review loop for implementation pull requests:
 5. Address Codex comments and request review again until no issues remain.
 6. Merge after CI and review checks are green.
 
+## In-app AI suggestion workflow (MVP slice)
+
+Within `/reviews/[reviewId]`, the **AI suggestions** panel provides:
+- suggestion headline + recommendation + rationale
+- category/confidence labels
+- local triage decision (`Adopt` / `Hold` / `Clear`)
+
+Decision state is stored in browser localStorage by review id so it survives page reloads in the same browser profile.
+
 ## Codex environment prerequisite
 
 If Codex replies with:
@@ -32,4 +41,3 @@ Without this setup, Codex cannot produce PR review comments.
 - CI checks pass (`Lint / Typecheck / Unit / Build`, `E2E Smoke`)
 - Gemini blocker comments addressed
 - Codex blocker comments addressed (or Codex returns no issues)
-
