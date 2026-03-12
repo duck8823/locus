@@ -21,10 +21,16 @@ npm run dogfood:run
   "commands": [
     {
       "command": "npm run demo:data:reseed",
+      "status": "succeeded",
       "stdout": "...",
       "stderr": ""
     }
   ],
+  "sessionMetrics": {
+    "syntheticLargePrDurationMs": 1234,
+    "realPrFixtureDurationMs": 210,
+    "failedCommandCount": 0
+  },
   "metrics": {
     "generatedAt": "2026-03-12T08:12:45.120Z",
     "jobsFilePath": ".../jobs.json",
@@ -36,11 +42,14 @@ npm run dogfood:run
       "recoverySuccessRatePercent": null
     },
     "byReview": []
-  }
+  },
+  "warnings": []
 }
 ```
 
 ## Usage notes
 
 - Keep raw artifacts for trend tracking and incident investigation.
+- Use `sessionMetrics.*DurationMs` as the benchmark result for the current run.
+- `metrics` reflects the persisted analysis-job store; if `warnings` includes no-job notice, treat those KPIs as non-representative for this run.
 - If the artifact includes sensitive command output, sanitize before sharing externally.

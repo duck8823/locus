@@ -42,8 +42,9 @@ What it does:
 1. `npm run demo:data:reseed`
 2. Run synthetic 200-file benchmark test
 3. Run real-PR fixture regression test
-4. Compute dogfooding metrics
-5. Write JSON artifact to `docs/performance/dogfooding-runs/run-<timestamp>.json`
+4. Capture session benchmark metrics from test stdout
+5. Compute job-store dogfooding metrics
+6. Write JSON artifact to `docs/performance/dogfooding-runs/run-<timestamp>.json`
 
 The command prints the artifact path to stdout.
 `ANALYZE_SNAPSHOTS_BENCHMARK=1` and `ANALYZE_SNAPSHOTS_REAL_PR_BENCHMARK=1` are set automatically for benchmark visibility.
@@ -73,6 +74,7 @@ npm run dogfood:metrics
 - `byReview[]` breakdown
 
 If no analysis jobs are recorded in the selected jobs store, these metrics may be `0` or `null`.
+In that case, rely on artifact `sessionMetrics.*DurationMs` for this run's benchmark timing.
 
 For artifact format details: [dogfooding-runs/README.md](dogfooding-runs/README.md)
 

@@ -42,8 +42,9 @@ npm run dogfood:run
 1. `npm run demo:data:reseed`
 2. 合成200ファイルのベンチマークテスト
 3. 実PRフィクスチャの回帰テスト
-4. ドッグフーディング指標の算出
-5. `docs/performance/dogfooding-runs/run-<timestamp>.json` へ記録
+4. テスト標準出力から session ベンチマーク指標を抽出
+5. jobs ストア由来のドッグフーディング指標を算出
+6. `docs/performance/dogfooding-runs/run-<timestamp>.json` へ記録
 
 実行後に、生成された artifact のパスが標準出力に表示される。
 ベンチマーク計測の可視化のため、`ANALYZE_SNAPSHOTS_BENCHMARK=1` と `ANALYZE_SNAPSHOTS_REAL_PR_BENCHMARK=1` は自動設定される。
@@ -73,6 +74,7 @@ npm run dogfood:metrics
 - `byReview[]` のレビュー単位内訳
 
 選択中の jobs ストアに解析ジョブ記録がない場合、これら指標は `0` または `null` になる。
+その場合、この実行の所要時間は artifact の `sessionMetrics.*DurationMs` を優先して参照する。
 
 artifact 形式の詳細: [dogfooding-runs/README.ja.md](dogfooding-runs/README.ja.md)
 

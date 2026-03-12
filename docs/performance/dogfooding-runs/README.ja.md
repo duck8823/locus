@@ -21,10 +21,16 @@ npm run dogfood:run
   "commands": [
     {
       "command": "npm run demo:data:reseed",
+      "status": "succeeded",
       "stdout": "...",
       "stderr": ""
     }
   ],
+  "sessionMetrics": {
+    "syntheticLargePrDurationMs": 1234,
+    "realPrFixtureDurationMs": 210,
+    "failedCommandCount": 0
+  },
   "metrics": {
     "generatedAt": "2026-03-12T08:12:45.120Z",
     "jobsFilePath": ".../jobs.json",
@@ -36,11 +42,14 @@ npm run dogfood:run
       "recoverySuccessRatePercent": null
     },
     "byReview": []
-  }
+  },
+  "warnings": []
 }
 ```
 
 ## 運用メモ
 
 - トレンド比較や障害調査のため、生データは一定期間保持する。
+- 当該実行のベンチマーク値は `sessionMetrics.*DurationMs` を参照する。
+- `metrics` は永続化済み analysis-job ストアの集計値。`warnings` に no-job 警告がある場合、当該実行のKPIとしては扱わない。
 - コマンド出力に機密情報が含まれる場合、外部共有前にマスクする。

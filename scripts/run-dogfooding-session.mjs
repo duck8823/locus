@@ -28,6 +28,17 @@ function createTimestamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
 }
 
+function parseBenchmarkDuration(stdout, pattern) {
+  const match = stdout.match(pattern);
+
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 async function main() {
   const runCommands = [
     {
@@ -84,7 +95,37 @@ async function main() {
     }
   }
 
+  const syntheticLargePrDurationMs = commandResults
+    .filter((result) => result.status === "succeeded")
+    .map((result) =>
+      parseBenchmarkDuration(
+        result.stdout,
+        /\[benchmark\]\s+processed\s+\d+\s+files\s+in\s+(\d+)\s+ms/i,
+      ))
+    .find((duration) => duration !== null) ?? null;
+  const realPrFixtureDurationMs = commandResults
+    .filter((result) => result.status === "succeeded")
+    .map((result) =>
+      parseBenchmarkDuration(
+        result.stdout,
+        /\[benchmark\]\s+analyzed\s+real-pr\s+fixtures\s+in\s+(\d+)\s+ms/i,
+      ))
+    .find((duration) => duration !== null) ?? null;
+  const sessionMetrics = {
+    syntheticLargePrDurationMs,
+    realPrFixtureDurationMs,
+    failedCommandCount: commandResults.filter((result) => result.status === "failed").length,
+  };
+
   const metrics = await runDogfoodingMetrics();
+  const warnings = [];
+
+  if (metrics.global.totalJobs === 0) {
+    warnings.push(
+      "No analysis jobs found in metrics store; job-based KPIs are not representative for this session.",
+    );
+  }
+
   const outputDirectory = path.join(process.cwd(), "docs", "performance", "dogfooding-runs");
   await mkdir(outputDirectory, { recursive: true });
   const outputPath = path.join(outputDirectory, `run-${createTimestamp()}.json`);
@@ -95,7 +136,9 @@ async function main() {
       {
         generatedAt: new Date().toISOString(),
         commands: commandResults,
+        sessionMetrics,
         metrics,
+        warnings,
       },
       null,
       2,
