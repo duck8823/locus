@@ -14,16 +14,22 @@ import {
   formatAnalysisJobStatus,
   formatArchitectureCategoryLabel,
   formatArchitectureColumnLabel,
+  formatBusinessContextSummary,
+  formatBusinessContextTitle,
   formatBusinessContextConfidence,
   formatBusinessContextInferenceSource,
   formatArchitectureRelation,
   formatBusinessContextSourceType,
   formatBusinessContextStatus,
   formatMarkStatusAction,
+  formatReviewGroupSummary,
+  formatReviewGroupTitle,
   formatReviewGroupStatus,
+  formatSemanticBodySummary,
   formatSemanticChangeType,
   formatSemanticSymbolKind,
   formatUnsupportedReason,
+  formatWorkspaceTitle,
   workspaceCopyByLocale,
 } from "./workspace-copy";
 import { resolveWorkspaceLocale } from "@/app/(workspace)/workspace-locale";
@@ -254,14 +260,15 @@ export default async function ReviewWorkspacePage({
             {copy.links.backToHome}
           </Link>
           <h1 className={styles.workspaceTitle}>
-            {workspace.title}
+            {formatWorkspaceTitle(workspace.title, workspaceLocale)}
           </h1>
           <div className={styles.meta}>
             <span>{copy.meta.reviewer}: {workspace.viewerName}</span>
             <span>{copy.meta.repository}: {workspace.repositoryName}</span>
             <span>{copy.meta.branch}: {workspace.branchLabel}</span>
             <span>
-              {copy.meta.lastOpened}: <LocalizedDateTime isoTimestamp={workspace.lastOpenedAt} />
+              {copy.meta.lastOpened}:{" "}
+              <LocalizedDateTime isoTimestamp={workspace.lastOpenedAt} locale={workspaceLocale} />
             </span>
           </div>
         </div>
@@ -322,7 +329,7 @@ export default async function ReviewWorkspacePage({
 
       <div className={styles.layout}>
         <section className={styles.panel}>
-                <h2>{copy.section.changeGroups}</h2>
+          <h2>{copy.section.changeGroups}</h2>
           {workspace.groups.length > 0 ? (
             <ul className={styles.groupList}>
               {workspace.groups.map((group) => (
@@ -337,12 +344,16 @@ export default async function ReviewWorkspacePage({
                       data-testid={`group-button-${group.groupId}`}
                     >
                       <span className={styles.groupTitle}>
-                        <span className={styles.groupTitleText}>{group.title}</span>
+                        <span className={styles.groupTitleText}>
+                          {formatReviewGroupTitle(group.title, workspaceLocale)}
+                        </span>
                         <span className={styles.badge} data-status={group.status}>
                           {formatReviewGroupStatus(group.status, workspaceLocale)}
                         </span>
                       </span>
-                      <p className={styles.groupListSummary}>{group.summary}</p>
+                      <p className={styles.groupListSummary}>
+                        {formatReviewGroupSummary(group.summary, workspaceLocale)}
+                      </p>
                     </button>
                   </form>
                 </li>
@@ -365,8 +376,12 @@ export default async function ReviewWorkspacePage({
                 <span className={styles.badge} data-status={selectedGroup.status}>
                   {formatReviewGroupStatus(selectedGroup.status, workspaceLocale)}
                 </span>
-                <h3 className={styles.selectedGroupTitle}>{selectedGroup.title}</h3>
-                <p className={styles.groupSummary}>{selectedGroup.summary}</p>
+                <h3 className={styles.selectedGroupTitle}>
+                  {formatReviewGroupTitle(selectedGroup.title, workspaceLocale)}
+                </h3>
+                <p className={styles.groupSummary}>
+                  {formatReviewGroupSummary(selectedGroup.summary, workspaceLocale)}
+                </p>
                 <p className={styles.filePath}>{selectedGroup.filePath}</p>
               </div>
 
@@ -419,7 +434,12 @@ export default async function ReviewWorkspacePage({
                             {change.signatureSummary
                               ? ` · ${copy.text.semanticSignature}: ${change.signatureSummary}`
                               : ""}
-                            {change.bodySummary ? ` · ${copy.text.semanticBody}: ${change.bodySummary}` : ""}
+                            {change.bodySummary
+                              ? ` · ${copy.text.semanticBody}: ${
+                                  formatSemanticBodySummary(change.bodySummary, workspaceLocale) ??
+                                  change.bodySummary
+                                }`
+                              : ""}
                           </p>
                           <p className={styles.semanticChangeMeta}>
                             {copy.text.semanticFocus}: {focusView.focusLabel}
@@ -512,7 +532,10 @@ export default async function ReviewWorkspacePage({
                 {workspace.analysisRequestedAt ? (
                   <p className={styles.muted}>
                     {copy.text.requestedAt}{" "}
-                    <LocalizedDateTime isoTimestamp={workspace.analysisRequestedAt} />
+                    <LocalizedDateTime
+                      isoTimestamp={workspace.analysisRequestedAt}
+                      locale={workspaceLocale}
+                    />
                   </p>
                 ) : null}
               </>
@@ -524,12 +547,18 @@ export default async function ReviewWorkspacePage({
                 </p>
                 <p className={styles.muted}>
                   {copy.text.queueAcceptedAt}{" "}
-                  <LocalizedDateTime isoTimestamp={workspace.activeAnalysisJob.queuedAt} />
+                  <LocalizedDateTime
+                    isoTimestamp={workspace.activeAnalysisJob.queuedAt}
+                    locale={workspaceLocale}
+                  />
                 </p>
                 {workspace.activeAnalysisJob.startedAt ? (
                   <p className={styles.muted}>
                     {copy.text.workerStartedAt}{" "}
-                    <LocalizedDateTime isoTimestamp={workspace.activeAnalysisJob.startedAt} />
+                    <LocalizedDateTime
+                      isoTimestamp={workspace.activeAnalysisJob.startedAt}
+                      locale={workspaceLocale}
+                    />
                   </p>
                 ) : null}
               </>
@@ -558,7 +587,10 @@ export default async function ReviewWorkspacePage({
               workspace.analysisCompletedAt ? (
                 <p>
                   {copy.text.readyAt}{" "}
-                  <LocalizedDateTime isoTimestamp={workspace.analysisCompletedAt} />
+                  <LocalizedDateTime
+                    isoTimestamp={workspace.analysisCompletedAt}
+                    locale={workspaceLocale}
+                  />
                 </p>
               ) : (
                 <p>{copy.text.analysisReady}</p>
@@ -605,7 +637,10 @@ export default async function ReviewWorkspacePage({
             {workspace.reanalysisStatus === "queued" && workspace.lastReanalyzeRequestedAt ? (
               <p>
                 {copy.text.queuedSince}{" "}
-                <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+                <LocalizedDateTime
+                  isoTimestamp={workspace.lastReanalyzeRequestedAt}
+                  locale={workspaceLocale}
+                />
               </p>
             ) : null}
             {workspace.reanalysisStatus === "queued" && !workspace.lastReanalyzeRequestedAt ? (
@@ -614,7 +649,10 @@ export default async function ReviewWorkspacePage({
             {workspace.reanalysisStatus === "running" && workspace.lastReanalyzeRequestedAt ? (
               <p>
                 {copy.text.runningSince}{" "}
-                <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+                <LocalizedDateTime
+                  isoTimestamp={workspace.lastReanalyzeRequestedAt}
+                  locale={workspaceLocale}
+                />
               </p>
             ) : null}
             {workspace.reanalysisStatus === "running" && !workspace.lastReanalyzeRequestedAt ? (
@@ -625,7 +663,10 @@ export default async function ReviewWorkspacePage({
                 {workspace.lastReanalyzeCompletedAt ? (
                   <p>
                     {copy.text.succeededAt}{" "}
-                    <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
+                    <LocalizedDateTime
+                      isoTimestamp={workspace.lastReanalyzeCompletedAt}
+                      locale={workspaceLocale}
+                    />
                   </p>
                 ) : (
                   <p>{copy.text.succeededOnly}</p>
@@ -633,7 +674,10 @@ export default async function ReviewWorkspacePage({
                 {workspace.lastReanalyzeRequestedAt ? (
                   <p className={styles.muted}>
                     {copy.text.requestedAt}{" "}
-                    <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeRequestedAt} />
+                    <LocalizedDateTime
+                      isoTimestamp={workspace.lastReanalyzeRequestedAt}
+                      locale={workspaceLocale}
+                    />
                   </p>
                 ) : null}
               </>
@@ -643,7 +687,10 @@ export default async function ReviewWorkspacePage({
                 {workspace.lastReanalyzeCompletedAt ? (
                   <p>
                     {copy.text.failedAt}{" "}
-                    <LocalizedDateTime isoTimestamp={workspace.lastReanalyzeCompletedAt} />
+                    <LocalizedDateTime
+                      isoTimestamp={workspace.lastReanalyzeCompletedAt}
+                      locale={workspaceLocale}
+                    />
                   </p>
                 ) : (
                   <p>{copy.text.failedOnly}</p>
@@ -697,7 +744,8 @@ export default async function ReviewWorkspacePage({
                       {copy.text.jobStatus}: {formatAnalysisJobStatus(job.status, workspaceLocale)}
                     </p>
                     <p className={styles.muted}>
-                      {copy.text.jobQueuedAt}: <LocalizedDateTime isoTimestamp={job.queuedAt} />
+                      {copy.text.jobQueuedAt}:{" "}
+                      <LocalizedDateTime isoTimestamp={job.queuedAt} locale={workspaceLocale} />
                       {" · "}
                       {copy.text.jobAttempts}: {job.attempts}
                       {" · "}
@@ -791,7 +839,10 @@ export default async function ReviewWorkspacePage({
                 <p className={styles.muted}>{copy.text.businessContextFallbackRetryHint}</p>
                 {workspace.businessContext.diagnostics.occurredAt ? (
                   <p className={styles.muted}>
-                    <LocalizedDateTime isoTimestamp={workspace.businessContext.diagnostics.occurredAt} />
+                    <LocalizedDateTime
+                      isoTimestamp={workspace.businessContext.diagnostics.occurredAt}
+                      locale={workspaceLocale}
+                    />
                   </p>
                 ) : null}
               </div>
@@ -816,10 +867,12 @@ export default async function ReviewWorkspacePage({
                             borderRadius: "10px",
                           }}
                         >
-                          {contextItem.title}
+                          {formatBusinessContextTitle(contextItem.title, workspaceLocale)}
                         </a>
                       ) : (
-                        <span className={styles.groupSummary}>{contextItem.title}</span>
+                        <span className={styles.groupSummary}>
+                          {formatBusinessContextTitle(contextItem.title, workspaceLocale)}
+                        </span>
                       )}
                     </div>
                     <p className={styles.muted}>
@@ -841,7 +894,9 @@ export default async function ReviewWorkspacePage({
                       )}
                     </p>
                     {contextItem.summary ? (
-                      <p className={styles.muted}>{contextItem.summary}</p>
+                      <p className={styles.muted}>
+                        {formatBusinessContextSummary(contextItem.summary, workspaceLocale)}
+                      </p>
                     ) : null}
                   </li>
                 ))}

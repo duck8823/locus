@@ -36,6 +36,7 @@ describe("requestReanalysisAction", () => {
     getDependenciesMock.mockReset();
     revalidatePathMock.mockReset();
     redirectMock.mockReset();
+    redirectMock.mockImplementation(() => undefined);
     getDependenciesMock.mockReturnValue({
       reviewSessionRepository: {},
       analysisJobScheduler: {},
@@ -63,5 +64,18 @@ describe("requestReanalysisAction", () => {
     expect(redirectMock).toHaveBeenCalledWith(
       "/reviews/review-1?workspaceError=workspace_not_found",
     );
+  });
+
+  it("does not swallow redirect control flow as action failure", async () => {
+    const nextRedirect = new Error("NEXT_REDIRECT");
+    redirectMock.mockImplementationOnce(() => {
+      throw nextRedirect;
+    });
+    const formData = new FormData();
+    formData.set("reviewId", "review-1");
+
+    await expect(requestReanalysisAction(formData)).rejects.toBe(nextRedirect);
+    expect(redirectMock).toHaveBeenCalledTimes(1);
+    expect(redirectMock).toHaveBeenCalledWith("/reviews/review-1");
   });
 });

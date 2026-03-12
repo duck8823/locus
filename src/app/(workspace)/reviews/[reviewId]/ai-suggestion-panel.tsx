@@ -6,6 +6,7 @@ import type { WorkspaceLocale } from "@/app/(workspace)/workspace-locale";
 import {
   formatAiSuggestionCategory,
   formatAiSuggestionConfidence,
+  localizeAiSuggestionText,
   workspaceCopyByLocale,
 } from "@/app/(workspace)/reviews/[reviewId]/workspace-copy";
 import type { ReviewWorkspaceAiSuggestionDto } from "@/server/presentation/dto/review-workspace-dto";
@@ -83,6 +84,13 @@ export function AiSuggestionPanel(props: {
     <ul className={styles.aiSuggestionList}>
       {props.suggestions.map((suggestion) => {
         const decision = decisionMap[suggestion.suggestionId] ?? null;
+        const localizedText = localizeAiSuggestionText({
+          locale: props.locale,
+          suggestionId: suggestion.suggestionId,
+          headline: suggestion.headline,
+          recommendation: suggestion.recommendation,
+          rationale: suggestion.rationale,
+        });
         const decisionLabel =
           decision === "adopted"
             ? copy.text.aiDecisionAdopted
@@ -93,7 +101,7 @@ export function AiSuggestionPanel(props: {
         return (
           <li key={suggestion.suggestionId} className={styles.aiSuggestionCard}>
             <div className={styles.semanticChangeHeader}>
-              <strong>{suggestion.headline}</strong>
+              <strong>{localizedText.headline}</strong>
               <span className={styles.changeBadge} data-change-type="modified">
                 {decisionLabel}
               </span>
@@ -105,10 +113,10 @@ export function AiSuggestionPanel(props: {
               {copy.text.aiSuggestionConfidence}:{" "}
               {formatAiSuggestionConfidence(suggestion.confidence, props.locale)}
             </p>
-            <p className={styles.groupSummary}>{suggestion.recommendation}</p>
+            <p className={styles.groupSummary}>{localizedText.recommendation}</p>
             <p className={styles.muted}>{copy.text.aiSuggestionRationale}</p>
             <ul className={styles.aiSuggestionRationaleList}>
-              {suggestion.rationale.map((item, index) => (
+              {localizedText.rationale.map((item, index) => (
                 <li key={`${suggestion.suggestionId}-rationale-${index}`} className={styles.semanticChangeMeta}>
                   {item}
                 </li>

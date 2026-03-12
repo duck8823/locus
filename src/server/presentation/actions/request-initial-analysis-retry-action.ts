@@ -14,15 +14,22 @@ export async function requestInitialAnalysisRetryAction(formData: FormData): Pro
     reviewSessionRepository,
     analysisJobScheduler,
   });
+  let workspaceErrorCode: string | null = null;
 
   try {
     await useCase.execute({ reviewId });
-    revalidatePath(`/reviews/${reviewId}`);
-    redirect(`/reviews/${reviewId}`);
   } catch (error) {
+    workspaceErrorCode = toWorkspaceErrorCode(error);
+  }
+
+  revalidatePath(`/reviews/${reviewId}`);
+
+  if (workspaceErrorCode) {
     const query = new URLSearchParams({
-      workspaceError: toWorkspaceErrorCode(error),
+      workspaceError: workspaceErrorCode,
     });
     redirect(`/reviews/${reviewId}?${query.toString()}`);
   }
+
+  redirect(`/reviews/${reviewId}`);
 }

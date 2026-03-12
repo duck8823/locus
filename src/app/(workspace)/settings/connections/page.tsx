@@ -559,7 +559,10 @@ export default async function ConnectionsPage({
         </p>
         <p style={{ color: "#9aa7d1", marginBottom: "0px" }}>
           {copy.generatedAt}:{" "}
-          <LocalizedDateTime isoTimestamp={connectionsWorkspace.generatedAt} />
+          <LocalizedDateTime
+            isoTimestamp={connectionsWorkspace.generatedAt}
+            locale={workspaceLocale}
+          />
         </p>
         {oauthFeedback ? (
           <p
@@ -692,7 +695,10 @@ export default async function ConnectionsPage({
               <p style={{ color: "#9aa7d1" }}>
                 {copy.updatedAtLabel}:{" "}
                 {connection.statusUpdatedAt ? (
-                  <LocalizedDateTime isoTimestamp={connection.statusUpdatedAt} />
+                  <LocalizedDateTime
+                    isoTimestamp={connection.statusUpdatedAt}
+                    locale={workspaceLocale}
+                  />
                 ) : (
                   formatConnectedAccountLabel(null, workspaceLocale)
                 )}
@@ -778,7 +784,11 @@ export default async function ConnectionsPage({
                           {formatStatus(transition.nextStatus, workspaceLocale)}
                         </p>
                         <p style={{ color: "#9aa7d1", marginBottom: "2px", fontSize: "12px" }}>
-                          {copy.changedAtLabel}: <LocalizedDateTime isoTimestamp={transition.changedAt} />
+                          {copy.changedAtLabel}:{" "}
+                          <LocalizedDateTime
+                            isoTimestamp={transition.changedAt}
+                            locale={workspaceLocale}
+                          />
                         </p>
                         <p style={{ color: "#9aa7d1", marginBottom: "2px", fontSize: "12px" }}>
                           {copy.reasonLabel}:{" "}
