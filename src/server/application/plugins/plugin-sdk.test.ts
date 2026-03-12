@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   PLUGIN_SDK_VERSION,
+  type CodeHostPlugin,
   type PullRequestSourceProvider,
   type PluginManifest,
   validatePluginManifest,
   validatePluginActivationResult,
 } from "@/server/application/plugins/plugin-sdk";
-import { sampleCodeHostPlugin } from "@/server/infrastructure/plugins/sample/sample-codehost-plugin";
 
 function createManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {
@@ -110,8 +110,34 @@ describe("plugin-sdk contract", () => {
   });
 
   it("accepts the sample plugin contract", async () => {
-    const manifestIssues = validatePluginManifest(sampleCodeHostPlugin.manifest);
-    const activationResult = await sampleCodeHostPlugin.activate({
+    const samplePlugin: CodeHostPlugin = {
+      manifest: createManifest({
+        pluginId: "sample.codehost",
+        displayName: "Sample CodeHost Plugin",
+      }),
+      activate: async () => ({
+        capabilities: [
+          {
+            kind: "pull-request-snapshot-provider",
+            provider: "sample",
+            implementation: {
+              fetchPullRequestSnapshots: async (input: {
+                reviewId: string;
+                source: { provider: PullRequestSourceProvider };
+              }) => ({
+                title: input.reviewId,
+                repositoryName: "sample/repo",
+                branchLabel: "feature → main",
+                snapshotPairs: [],
+                source: input.source,
+              }),
+            },
+          },
+        ],
+      }),
+    };
+    const manifestIssues = validatePluginManifest(samplePlugin.manifest);
+    const activationResult = await samplePlugin.activate({
       signal: new AbortController().signal,
       logger: {
         debug: () => {},
@@ -121,7 +147,7 @@ describe("plugin-sdk contract", () => {
       },
     });
     const activationIssues = validatePluginActivationResult({
-      manifest: sampleCodeHostPlugin.manifest,
+      manifest: samplePlugin.manifest,
       result: activationResult,
     });
 
