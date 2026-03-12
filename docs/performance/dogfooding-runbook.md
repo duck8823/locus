@@ -73,8 +73,7 @@ npm run dogfood:metrics
 - `global.recoverySuccessRatePercent`
 - `byReview[]` breakdown
 
-If no analysis jobs are recorded in the selected jobs store, these metrics may be `0` or `null`.
-In that case, rely on artifact `sessionMetrics.*DurationMs` for this run's benchmark timing.
+`npm run dogfood:run` appends synthetic benchmark jobs before computing these KPIs, so metrics reflect the current session by default.
 
 For artifact format details: [dogfooding-runs/README.md](dogfooding-runs/README.md)
 

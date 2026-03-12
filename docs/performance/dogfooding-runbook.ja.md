@@ -73,8 +73,7 @@ npm run dogfood:metrics
 - `global.recoverySuccessRatePercent`
 - `byReview[]` のレビュー単位内訳
 
-選択中の jobs ストアに解析ジョブ記録がない場合、これら指標は `0` または `null` になる。
-その場合、この実行の所要時間は artifact の `sessionMetrics.*DurationMs` を優先して参照する。
+`npm run dogfood:run` は指標算出前に synthetic benchmark job を追記するため、通常は当該セッションを反映した KPI になる。
 
 artifact 形式の詳細: [dogfooding-runs/README.ja.md](dogfooding-runs/README.ja.md)
 

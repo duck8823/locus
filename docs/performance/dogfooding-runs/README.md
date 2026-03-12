@@ -50,6 +50,7 @@ npm run dogfood:run
 ## Usage notes
 
 - Keep raw artifacts for trend tracking and incident investigation.
+- `dogfood:run` appends synthetic benchmark jobs before metrics aggregation so `metrics.global.*` reflects this run by default.
 - Use `sessionMetrics.*DurationMs` as the benchmark result for the current run.
-- `metrics` reflects the persisted analysis-job store; if `warnings` includes no-job notice, treat those KPIs as non-representative for this run.
+- If `warnings` is non-empty, benchmark extraction was partial; verify command logs before comparing trends.
 - If the artifact includes sensitive command output, sanitize before sharing externally.

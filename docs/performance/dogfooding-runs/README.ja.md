@@ -50,6 +50,7 @@ npm run dogfood:run
 ## 運用メモ
 
 - トレンド比較や障害調査のため、生データは一定期間保持する。
+- `dogfood:run` は metrics 集計前に synthetic benchmark job を追記するため、`metrics.global.*` は通常この実行を反映する。
 - 当該実行のベンチマーク値は `sessionMetrics.*DurationMs` を参照する。
-- `metrics` は永続化済み analysis-job ストアの集計値。`warnings` に no-job 警告がある場合、当該実行のKPIとしては扱わない。
+- `warnings` が非空の場合はベンチマーク抽出が不完全なので、比較前に command 出力を確認する。
 - コマンド出力に機密情報が含まれる場合、外部共有前にマスクする。
