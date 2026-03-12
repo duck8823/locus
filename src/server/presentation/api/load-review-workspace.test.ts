@@ -85,6 +85,10 @@ describe("loadReviewWorkspaceDto", () => {
     });
     toReviewWorkspaceDtoMock.mockReturnValue({
       reviewId: "review-1",
+      title: "Demo workspace",
+      repositoryName: "duck8823/locus",
+      branchLabel: "feature/123-scope -> main",
+      groups: [],
       reanalysisStatus: "idle",
       lastReanalyzeRequestedAt: null,
       analysisHistory: [],
@@ -93,6 +97,7 @@ describe("loadReviewWorkspaceDto", () => {
         failureRatePercent: null,
         recoverySuccessRatePercent: null,
       },
+      aiSuggestionPayload: null,
       businessContext: {
         generatedAt: "2026-03-12T00:00:00.000Z",
         provider: "stub",
@@ -146,6 +151,14 @@ describe("loadReviewWorkspaceDto", () => {
       averageDurationMs: null,
       failureRatePercent: null,
       recoverySuccessRatePercent: null,
+    });
+    expect(dto.aiSuggestionPayload).toMatchObject({
+      review: {
+        reviewId: "review-1",
+      },
+      semanticContext: {
+        totalCount: 0,
+      },
     });
     expect(dto.businessContext).toEqual({
       generatedAt: "2026-03-12T00:00:00.000Z",
