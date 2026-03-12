@@ -755,11 +755,16 @@ function localizeAiSuggestionRationaleLine(line: string, locale: WorkspaceLocale
     return mappedLine;
   }
 
-  return Object.entries(AI_RATIONALE_PREFIX_JA_BY_EN).reduce(
-    (current, [prefix, replacementPrefix]) =>
-      replaceByPrefix(current, prefix, replacementPrefix),
-    line,
+  const matchedPrefixEntry = Object.entries(AI_RATIONALE_PREFIX_JA_BY_EN).find(([prefix]) =>
+    line.startsWith(prefix),
   );
+
+  if (!matchedPrefixEntry) {
+    return line;
+  }
+
+  const [prefix, replacementPrefix] = matchedPrefixEntry;
+  return replaceByPrefix(line, prefix, replacementPrefix);
 }
 
 export function formatWorkspaceTitle(title: string, locale: WorkspaceLocale): string {

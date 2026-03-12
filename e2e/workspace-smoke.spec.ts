@@ -138,9 +138,9 @@ test("queues reanalysis without action_failed redirect or workspace crash", asyn
   await expect
     .poll(() => page.url(), { timeout: 30_000 })
     .toMatch(/\/reviews\/demo-review$/);
-  expect(page.url()).not.toContain("workspaceError=action_failed");
 
   const locationSummary = page.getByText(/location details|位置情報/).first();
+  // Open and close the details panel to cover both toggle directions.
   await locationSummary.click();
   await locationSummary.click();
 

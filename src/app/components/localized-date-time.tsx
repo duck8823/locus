@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
+import type { WorkspaceLocale } from "@/app/(workspace)/workspace-locale";
 
 export interface LocalizedDateTimeProps {
   isoTimestamp: string;
-  locale?: "ja" | "en";
+  locale?: WorkspaceLocale;
 }
 
-export function resolveLocalizedDateTimeLocale(locale?: "ja" | "en"): string | undefined {
+export function resolveLocalizedDateTimeLocale(locale?: WorkspaceLocale): string | undefined {
   if (locale === "ja") {
     return "ja-JP";
   }
