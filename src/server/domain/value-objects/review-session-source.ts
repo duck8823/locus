@@ -3,6 +3,7 @@ export interface GitHubReviewSessionSource {
   owner: string;
   repository: string;
   pullRequestNumber: number;
+  [key: string]: unknown;
 }
 
 export interface SeedFixtureReviewSessionSource {

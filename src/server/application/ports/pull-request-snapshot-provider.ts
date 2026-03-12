@@ -12,6 +12,7 @@ export interface PullRequestSourceRef {
   owner?: string;
   repository?: string;
   pullRequestNumber?: number;
+  [key: string]: unknown;
 }
 
 export interface GitHubPullRequestRef extends PullRequestSourceRef {

@@ -89,6 +89,26 @@ function resolvePluginFromModule(moduleExport: unknown): CodeHostPlugin | null {
   return null;
 }
 
+function isCrossModuleAuthError(error: unknown): boolean {
+  if (error instanceof PullRequestProviderAuthError) {
+    return true;
+  }
+
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const record = error as Record<string, unknown>;
+
+  return (
+    record.name === "PullRequestProviderAuthError" &&
+    typeof record.provider === "string" &&
+    typeof record.statusCode === "number" &&
+    typeof record.path === "string" &&
+    typeof record.responseBody === "string"
+  );
+}
+
 export class PluginCapabilityUnavailableError extends Error {
   constructor(
     readonly capability: "pull-request-snapshot-provider",
@@ -114,7 +134,7 @@ export class PluginRuntime {
     this.logger = options.logger ?? noopLogger;
     this.shouldDisableOnCapabilityError =
       options.shouldDisableOnCapabilityError ??
-      ((error: unknown) => !(error instanceof PullRequestProviderAuthError));
+      ((error: unknown) => !isCrossModuleAuthError(error));
   }
 
   async loadFromModulePaths(input: {

@@ -163,4 +163,64 @@ describe("PluginRuntime", () => {
       reason: null,
     });
   });
+
+  it("keeps plugin active for auth-like errors from foreign module boundaries", async () => {
+    const authPlugin: CodeHostPlugin = {
+      manifest: {
+        pluginId: "auth.foreign.plugin",
+        displayName: "Auth Foreign Plugin",
+        version: "0.1.0",
+        sdkVersion: PLUGIN_SDK_VERSION,
+        capabilities: [
+          {
+            kind: "pull-request-snapshot-provider",
+            provider: "authz-foreign",
+          },
+        ],
+      },
+      activate: async () => ({
+        capabilities: [
+          {
+            kind: "pull-request-snapshot-provider",
+            provider: "authz-foreign",
+            implementation: {
+              fetchPullRequestSnapshots: async () => {
+                const error = new Error("expired token");
+                error.name = "PullRequestProviderAuthError";
+                Object.assign(error, {
+                  provider: "authz-foreign",
+                  statusCode: 401,
+                  path: "/foreign",
+                  responseBody: "expired",
+                });
+                throw error;
+              },
+            },
+          },
+        ],
+      }),
+    };
+
+    const runtime = new PluginRuntime();
+    await runtime.loadPlugin({
+      plugin: authPlugin,
+      source: "auth-foreign",
+    });
+    const provider = runtime.createPullRequestSnapshotProvider();
+
+    await expect(
+      provider.fetchPullRequestSnapshots({
+        reviewId: "review-1",
+        source: { provider: "authz-foreign", projectId: 10 },
+      }),
+    ).rejects.toMatchObject({
+      name: "PullRequestProviderAuthError",
+      statusCode: 401,
+    });
+    expect(runtime.listPluginStatuses()).toContainEqual({
+      pluginId: "auth.foreign.plugin",
+      status: "active",
+      reason: null,
+    });
+  });
 });
