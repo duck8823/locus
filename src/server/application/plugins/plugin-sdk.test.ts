@@ -50,6 +50,16 @@ describe("plugin-sdk contract", () => {
     );
   });
 
+  it("rejects non-object capabilities in manifest", () => {
+    const issues = validatePluginManifest(
+      createManifest({
+        capabilities: [null as never],
+      }),
+    );
+
+    expect(issues).toContain("manifest.capabilities[0] must be an object");
+  });
+
   it("requires declared capabilities to be implemented at activation", () => {
     const issues = validatePluginActivationResult({
       manifest: createManifest(),
@@ -116,6 +126,17 @@ describe("plugin-sdk contract", () => {
     expect(issues).toContain(
       "activation.capabilities includes undeclared capability: pull-request-snapshot-provider:other",
     );
+  });
+
+  it("rejects non-object capabilities from activation", () => {
+    const issues = validatePluginActivationResult({
+      manifest: createManifest(),
+      result: {
+        capabilities: [null],
+      },
+    });
+
+    expect(issues).toContain("activation.capabilities[0] must be an object");
   });
 
   it("accepts the sample plugin contract", async () => {

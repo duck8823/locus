@@ -101,6 +101,11 @@ export function validatePluginManifest(manifest: PluginManifest): string[] {
   const seen = new Set<string>();
 
   manifest.capabilities.forEach((capability, index) => {
+    if (!isObjectRecord(capability)) {
+      issues.push(`manifest.capabilities[${index}] must be an object`);
+      return;
+    }
+
     if (capability.kind !== "pull-request-snapshot-provider") {
       issues.push(`manifest.capabilities[${index}].kind is unsupported`);
       return;
@@ -148,6 +153,11 @@ export function validatePluginActivationResult(input: {
   const resolvedCapabilityKeys = new Set<string>();
 
   capabilities.forEach((capability, index) => {
+    if (!isObjectRecord(capability)) {
+      issues.push(`activation.capabilities[${index}] must be an object`);
+      return;
+    }
+
     if (capability.kind !== "pull-request-snapshot-provider") {
       issues.push(`activation.capabilities[${index}].kind is unsupported`);
       return;
