@@ -8,6 +8,7 @@ import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submi
 import { CollapsibleDetails } from "./collapsible-details";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import { toSemanticChangeFocusView } from "./semantic-change-focus";
+import { AiSuggestionPanel } from "./ai-suggestion-panel";
 import {
   formatAnalysisJobReason,
   formatAnalysisJobStatus,
@@ -652,6 +653,20 @@ export default async function ReviewWorkspacePage({
                 ) : null}
               </>
             ) : null}
+          </CollapsibleDetails>
+
+          <CollapsibleDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            defaultOpen={workspace.aiSuggestions.length > 0}
+            summary={<span className={styles.muted}>{copy.section.aiSuggestions}</span>}
+          >
+            <AiSuggestionPanel
+              reviewId={workspace.reviewId}
+              locale={workspaceLocale}
+              suggestions={workspace.aiSuggestions}
+            />
           </CollapsibleDetails>
 
           <CollapsibleDetails
