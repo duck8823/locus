@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import type {
   ActiveAnalysisJobSnapshot,
   AnalysisJobScheduler,
+  AnalysisJobHistorySnapshot,
   FindQueuedAnalysisJobInput,
   QueuedAnalysisJobSnapshot,
   ScheduleAnalysisJobInput,
@@ -49,6 +50,7 @@ export interface FileAnalysisJobSchedulerOptions {
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_MAX_RETAINED_TERMINAL_JOBS = 500;
 const DEFAULT_STALE_RUNNING_MS = 10 * 60 * 1000;
+const DEFAULT_HISTORY_LIMIT = 20;
 
 function normalizeMinimumOneInteger(value: number | undefined, fallback: number): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) {
@@ -255,6 +257,32 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
       queuedAt: queuedJob.queuedAt,
       startedAt: queuedJob.startedAt,
     };
+  }
+
+  async listRecentJobs(input: {
+    reviewId: string;
+    limit?: number;
+  }): Promise<AnalysisJobHistorySnapshot[]> {
+    const store = await this.loadStore();
+    const limit = normalizeMinimumOneInteger(input.limit, DEFAULT_HISTORY_LIMIT);
+
+    return store.jobs
+      .filter((job) => job.reviewId === input.reviewId)
+      .sort((left, right) => right.queuedAt.localeCompare(left.queuedAt))
+      .slice(0, limit)
+      .map((job) => ({
+        jobId: job.jobId,
+        reviewId: job.reviewId,
+        requestedAt: job.requestedAt,
+        reason: job.reason,
+        status: job.status,
+        queuedAt: job.queuedAt,
+        startedAt: job.startedAt,
+        completedAt: job.completedAt,
+        durationMs: job.durationMs,
+        attempts: job.attempts,
+        lastError: job.lastError,
+      }));
   }
 
   async drainNow(): Promise<void> {

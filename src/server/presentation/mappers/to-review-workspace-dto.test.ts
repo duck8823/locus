@@ -139,6 +139,12 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.analysisAttemptCount).toBe(2);
     expect(dto.analysisDurationMs).toBeNull();
     expect(dto.analysisError).toBeNull();
+    expect(dto.analysisHistory).toEqual([]);
+    expect(dto.dogfoodingMetrics).toEqual({
+      averageDurationMs: null,
+      failureRatePercent: null,
+      recoverySuccessRatePercent: null,
+    });
     expect(dto.reanalysisStatus).toBe("failed");
     expect(dto.lastReanalyzeRequestedAt).toBe("2026-03-08T01:00:00.000Z");
     expect(dto.lastReanalyzeCompletedAt).toBe("2026-03-08T01:00:09.000Z");
@@ -312,6 +318,12 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.analysisAttemptCount).toBe(0);
     expect(dto.analysisDurationMs).toBeNull();
     expect(dto.analysisError).toBeNull();
+    expect(dto.analysisHistory).toEqual([]);
+    expect(dto.dogfoodingMetrics).toEqual({
+      averageDurationMs: null,
+      failureRatePercent: null,
+      recoverySuccessRatePercent: null,
+    });
     expect(dto.reanalysisStatus).toBe("idle");
     expect(dto.lastReanalyzeRequestedAt).toBeNull();
     expect(dto.lastReanalyzeCompletedAt).toBeNull();

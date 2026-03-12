@@ -33,6 +33,20 @@ export interface ActiveAnalysisJobSnapshot {
   startedAt: string | null;
 }
 
+export interface AnalysisJobHistorySnapshot {
+  jobId: string;
+  reviewId: string;
+  requestedAt: string;
+  reason: ScheduleAnalysisJobInput["reason"];
+  status: "queued" | "running" | "succeeded" | "failed";
+  queuedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number | null;
+  attempts: number;
+  lastError: string | null;
+}
+
 export interface AnalysisJobScheduler {
   scheduleReviewAnalysis(input: ScheduleAnalysisJobInput): Promise<ScheduledAnalysisJob>;
   findQueuedJob?(
@@ -41,4 +55,8 @@ export interface AnalysisJobScheduler {
   findActiveJob?(
     input: FindQueuedAnalysisJobInput,
   ): Promise<ActiveAnalysisJobSnapshot | null>;
+  listRecentJobs?(input: {
+    reviewId: string;
+    limit?: number;
+  }): Promise<AnalysisJobHistorySnapshot[]>;
 }

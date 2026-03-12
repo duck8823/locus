@@ -317,6 +317,12 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     }),
     analysisError: record.analysisError ?? null,
     activeAnalysisJob: null,
+    analysisHistory: [],
+    dogfoodingMetrics: {
+      averageDurationMs: null,
+      failureRatePercent: null,
+      recoverySuccessRatePercent: null,
+    },
     reanalysisStatus: record.reanalysisStatus ?? "idle",
     lastOpenedAt: record.lastOpenedAt,
     lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt,

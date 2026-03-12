@@ -17,6 +17,24 @@ export interface ReviewWorkspaceActiveAnalysisJobDto {
   startedAt: string | null;
 }
 
+export interface ReviewWorkspaceAnalysisHistoryItemDto {
+  jobId: string;
+  reason: "initial_ingestion" | "manual_reanalysis" | "code_host_webhook";
+  status: "queued" | "running" | "succeeded" | "failed";
+  queuedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number | null;
+  attempts: number;
+  lastError: string | null;
+}
+
+export interface ReviewWorkspaceDogfoodingMetricsDto {
+  averageDurationMs: number | null;
+  failureRatePercent: number | null;
+  recoverySuccessRatePercent: number | null;
+}
+
 export interface ReviewWorkspaceSemanticChangeDto {
   semanticChangeId: string;
   symbolDisplayName: string;
@@ -120,6 +138,8 @@ export interface ReviewWorkspaceDto {
   analysisDurationMs: number | null;
   analysisError: string | null;
   activeAnalysisJob: ReviewWorkspaceActiveAnalysisJobDto | null;
+  analysisHistory: ReviewWorkspaceAnalysisHistoryItemDto[];
+  dogfoodingMetrics: ReviewWorkspaceDogfoodingMetricsDto;
   reanalysisStatus: ReviewReanalysisStatus;
   lastOpenedAt: string;
   lastReanalyzeRequestedAt: string | null;

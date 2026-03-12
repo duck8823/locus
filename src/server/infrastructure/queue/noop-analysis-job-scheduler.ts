@@ -1,6 +1,7 @@
 import type {
   ActiveAnalysisJobSnapshot,
   AnalysisJobScheduler,
+  AnalysisJobHistorySnapshot,
   FindQueuedAnalysisJobInput,
   QueuedAnalysisJobSnapshot,
   ScheduleAnalysisJobInput,
@@ -28,5 +29,13 @@ export class NoopAnalysisJobScheduler implements AnalysisJobScheduler {
   ): Promise<ActiveAnalysisJobSnapshot | null> {
     void input;
     return null;
+  }
+
+  async listRecentJobs(input: {
+    reviewId: string;
+    limit?: number;
+  }): Promise<AnalysisJobHistorySnapshot[]> {
+    void input;
+    return [];
   }
 }
