@@ -98,6 +98,7 @@ describe("loadReviewWorkspaceDto", () => {
         recoverySuccessRatePercent: null,
       },
       aiSuggestionPayload: null,
+      aiSuggestions: [],
       businessContext: {
         generatedAt: "2026-03-12T00:00:00.000Z",
         provider: "stub",
@@ -159,6 +160,10 @@ describe("loadReviewWorkspaceDto", () => {
       semanticContext: {
         totalCount: 0,
       },
+    });
+    expect(dto.aiSuggestions[0]).toMatchObject({
+      suggestionId: "baseline-manual-review",
+      category: "general",
     });
     expect(dto.businessContext).toEqual({
       generatedAt: "2026-03-12T00:00:00.000Z",

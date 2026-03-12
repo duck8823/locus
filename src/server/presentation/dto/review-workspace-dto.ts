@@ -96,6 +96,15 @@ export interface ReviewWorkspaceAiSuggestionPayloadDto {
   };
 }
 
+export interface ReviewWorkspaceAiSuggestionDto {
+  suggestionId: string;
+  category: "semantic" | "architecture" | "business" | "general";
+  confidence: "high" | "medium" | "low";
+  headline: string;
+  recommendation: string;
+  rationale: string[];
+}
+
 export interface ReviewWorkspaceSemanticChangeDto {
   semanticChangeId: string;
   symbolDisplayName: string;
@@ -208,6 +217,7 @@ export interface ReviewWorkspaceDto {
   analysisHistory: ReviewWorkspaceAnalysisHistoryItemDto[];
   dogfoodingMetrics: ReviewWorkspaceDogfoodingMetricsDto;
   aiSuggestionPayload: ReviewWorkspaceAiSuggestionPayloadDto | null;
+  aiSuggestions: ReviewWorkspaceAiSuggestionDto[];
   reanalysisStatus: ReviewReanalysisStatus;
   lastOpenedAt: string;
   lastReanalyzeRequestedAt: string | null;

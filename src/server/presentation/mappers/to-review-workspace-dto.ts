@@ -324,6 +324,7 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
       recoverySuccessRatePercent: null,
     },
     aiSuggestionPayload: null,
+    aiSuggestions: [],
     reanalysisStatus: record.reanalysisStatus ?? "idle",
     lastOpenedAt: record.lastOpenedAt,
     lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt,

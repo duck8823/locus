@@ -1,5 +1,6 @@
 import { GetReviewWorkspaceUseCase } from "@/server/application/usecases/get-review-workspace";
 import { buildAiSuggestionPayload } from "@/server/application/ai/build-ai-suggestion-payload";
+import { generateAiSuggestionsFromPayload } from "@/server/application/ai/generate-ai-suggestions";
 import { getDependencies } from "@/server/composition/dependencies";
 import { loadActiveInitialAnalysisJob } from "@/server/presentation/api/load-active-initial-analysis-job";
 import { loadActiveManualReanalysisJob } from "@/server/presentation/api/load-active-manual-reanalysis-job";
@@ -120,6 +121,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       href: item.href,
     })),
   });
+  const aiSuggestions = generateAiSuggestionsFromPayload(aiSuggestionPayload);
 
   return {
     ...workspace,
@@ -136,6 +138,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     analysisHistory: analysisJobHistory.history,
     dogfoodingMetrics: analysisJobHistory.metrics,
     aiSuggestionPayload,
+    aiSuggestions,
     reanalysisStatus: effectiveReanalysisState.reanalysisStatus,
     lastReanalyzeRequestedAt: effectiveReanalysisState.lastReanalyzeRequestedAt,
     businessContext: {
