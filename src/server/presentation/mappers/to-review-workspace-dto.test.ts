@@ -489,6 +489,66 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.unsupportedFiles[99]?.filePath).toBe("generated/file-100.bin");
   });
 
+  it("keeps unsupported reason buckets deterministic regardless of input order", () => {
+    const reviewSession = ReviewSession.create({
+      reviewId: "review-6",
+      title: "Unsupported ordering",
+      repositoryName: "duck8823/locus",
+      branchLabel: "main",
+      viewerName: "Duck",
+      lastOpenedAt: "2026-03-08T00:00:00.000Z",
+      groups: [
+        {
+          groupId: "group-1",
+          title: "Group 1",
+          summary: "Primary",
+          filePath: "src/a.ts",
+          status: "unread",
+          upstream: [],
+          downstream: [],
+        },
+      ],
+      unsupportedFileAnalyses: [
+        {
+          reviewId: "review-6",
+          fileId: "u-1",
+          filePath: "src/unknown.vue",
+          language: "vue",
+          reason: "unsupported_language",
+        },
+        {
+          reviewId: "review-6",
+          fileId: "u-2",
+          filePath: "assets/logo.png",
+          language: null,
+          reason: "binary_file",
+        },
+        {
+          reviewId: "review-6",
+          fileId: "u-3",
+          filePath: "src/broken.ts",
+          language: "typescript",
+          reason: "parser_failed",
+        },
+        {
+          reviewId: "review-6",
+          fileId: "u-4",
+          filePath: "src/second.vue",
+          language: "vue",
+          reason: "unsupported_language",
+        },
+      ],
+    });
+
+    const dto = toReviewWorkspaceDto(reviewSession);
+
+    expect(dto.unsupportedSummary.byReason).toEqual([
+      { reason: "binary_file", count: 1 },
+      { reason: "parser_failed", count: 1 },
+      { reason: "unsupported_language", count: 2 },
+    ]);
+  });
+
   it("caps partial coverage below 100 percent", () => {
     const unsupportedFileAnalyses = [
       {
