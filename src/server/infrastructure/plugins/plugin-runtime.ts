@@ -5,13 +5,16 @@ import {
   validatePluginActivationResult,
   validatePluginManifest,
   type CodeHostPlugin,
-  type ProviderAgnosticPullRequestSnapshotProvider,
   type PluginActivationResult,
   type PluginCapabilityBinding,
   type PluginRuntimeLogger,
-  type PullRequestSourceRef,
-  type PullRequestSourceProvider,
 } from "@/server/application/plugins/plugin-sdk";
+import {
+  PullRequestProviderAuthError,
+  type ProviderAgnosticPullRequestSnapshotProvider,
+  type PullRequestSourceProvider,
+  type PullRequestSourceRef,
+} from "@/server/application/ports/pull-request-snapshot-provider";
 
 export type PluginLoadStatus = "active" | "disabled" | "skipped";
 
@@ -86,6 +89,26 @@ function resolvePluginFromModule(moduleExport: unknown): CodeHostPlugin | null {
   return null;
 }
 
+function isCrossModuleAuthError(error: unknown): boolean {
+  if (error instanceof PullRequestProviderAuthError) {
+    return true;
+  }
+
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const record = error as Record<string, unknown>;
+
+  return (
+    record.name === "PullRequestProviderAuthError" &&
+    typeof record.provider === "string" &&
+    typeof record.statusCode === "number" &&
+    typeof record.path === "string" &&
+    typeof record.responseBody === "string"
+  );
+}
+
 export class PluginCapabilityUnavailableError extends Error {
   constructor(
     readonly capability: "pull-request-snapshot-provider",
@@ -111,13 +134,7 @@ export class PluginRuntime {
     this.logger = options.logger ?? noopLogger;
     this.shouldDisableOnCapabilityError =
       options.shouldDisableOnCapabilityError ??
-      ((error: unknown) => {
-        if (error instanceof Error && error.name === "PullRequestProviderAuthError") {
-          return false;
-        }
-
-        return true;
-      });
+      ((error: unknown) => !isCrossModuleAuthError(error));
   }
 
   async loadFromModulePaths(input: {
