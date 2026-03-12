@@ -323,6 +323,7 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
       failureRatePercent: null,
       recoverySuccessRatePercent: null,
     },
+    aiSuggestionPayload: null,
     reanalysisStatus: record.reanalysisStatus ?? "idle",
     lastOpenedAt: record.lastOpenedAt,
     lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt,

@@ -1,4 +1,5 @@
 import { GetReviewWorkspaceUseCase } from "@/server/application/usecases/get-review-workspace";
+import { buildAiSuggestionPayload } from "@/server/application/ai/build-ai-suggestion-payload";
 import { getDependencies } from "@/server/composition/dependencies";
 import { loadActiveInitialAnalysisJob } from "@/server/presentation/api/load-active-initial-analysis-job";
 import { loadActiveManualReanalysisJob } from "@/server/presentation/api/load-active-manual-reanalysis-job";
@@ -71,6 +72,54 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     persistedLastReanalyzeRequestedAt: workspace.lastReanalyzeRequestedAt,
     activeManualReanalysisJob,
   });
+  const selectedGroup =
+    workspace.groups.find((group) => group.isSelected) ?? workspace.groups[0] ?? null;
+  const aiSuggestionPayload = buildAiSuggestionPayload({
+    review: {
+      reviewId: workspace.reviewId,
+      title: workspace.title,
+      repositoryName: workspace.repositoryName,
+      branchLabel: workspace.branchLabel,
+    },
+    selectedGroup: selectedGroup
+      ? {
+          groupId: selectedGroup.groupId,
+          title: selectedGroup.title,
+          filePath: selectedGroup.filePath,
+          semanticChanges: selectedGroup.semanticChanges.map((change) => ({
+            semanticChangeId: change.semanticChangeId,
+            symbolDisplayName: change.symbolDisplayName,
+            symbolKind: change.symbolKind,
+            changeType: change.changeType,
+            signatureSummary: change.signatureSummary,
+            bodySummary: change.bodySummary,
+            before: change.before,
+            after: change.after,
+          })),
+          architectureGraph: {
+            nodes: selectedGroup.architectureGraph.nodes.map((node) => ({
+              nodeId: node.nodeId,
+              kind: node.kind,
+              label: node.label,
+              role: node.role,
+            })),
+            edges: selectedGroup.architectureGraph.edges.map((edge) => ({
+              fromNodeId: edge.fromNodeId,
+              toNodeId: edge.toNodeId,
+            })),
+          },
+        }
+      : null,
+    businessContextItems: businessContext.items.map((item) => ({
+      contextId: item.contextId,
+      sourceType: item.sourceType,
+      status: item.status,
+      confidence: item.confidence,
+      title: item.title,
+      summary: item.summary,
+      href: item.href,
+    })),
+  });
 
   return {
     ...workspace,
@@ -86,6 +135,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       : null,
     analysisHistory: analysisJobHistory.history,
     dogfoodingMetrics: analysisJobHistory.metrics,
+    aiSuggestionPayload,
     reanalysisStatus: effectiveReanalysisState.reanalysisStatus,
     lastReanalyzeRequestedAt: effectiveReanalysisState.lastReanalyzeRequestedAt,
     businessContext: {

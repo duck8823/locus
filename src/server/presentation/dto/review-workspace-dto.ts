@@ -35,6 +35,67 @@ export interface ReviewWorkspaceDogfoodingMetricsDto {
   recoverySuccessRatePercent: number | null;
 }
 
+export interface ReviewWorkspaceAiSuggestionPayloadDto {
+  generatedAt: string;
+  review: {
+    reviewId: string;
+    title: string;
+    repositoryName: string;
+    branchLabel: string;
+  };
+  semanticContext: {
+    totalCount: number;
+    includedCount: number;
+    isTruncated: boolean;
+    fallbackMessage: string | null;
+    changes: Array<{
+      semanticChangeId: string;
+      symbolDisplayName: string;
+      symbolKind: SemanticSymbolKind;
+      changeType: SemanticChangeType;
+      signatureSummary: string | null;
+      bodySummary: string | null;
+      location: string;
+    }>;
+  };
+  architectureContext: {
+    groupId: string | null;
+    groupTitle: string | null;
+    filePath: string | null;
+    totalUpstreamCount: number;
+    totalDownstreamCount: number;
+    includedUpstreamCount: number;
+    includedDownstreamCount: number;
+    isTruncated: boolean;
+    fallbackMessage: string | null;
+    upstreamNodes: Array<{
+      nodeId: string;
+      kind: "layer" | "file" | "symbol" | "unknown";
+      label: string;
+    }>;
+    downstreamNodes: Array<{
+      nodeId: string;
+      kind: "layer" | "file" | "symbol" | "unknown";
+      label: string;
+    }>;
+  };
+  businessContext: {
+    totalCount: number;
+    includedCount: number;
+    isTruncated: boolean;
+    fallbackMessage: string | null;
+    items: Array<{
+      contextId: string;
+      sourceType: "github_issue" | "confluence_page";
+      status: "linked" | "candidate" | "unavailable";
+      confidence: "high" | "medium" | "low";
+      title: string;
+      summary: string | null;
+      href: string | null;
+    }>;
+  };
+}
+
 export interface ReviewWorkspaceSemanticChangeDto {
   semanticChangeId: string;
   symbolDisplayName: string;
@@ -146,6 +207,7 @@ export interface ReviewWorkspaceDto {
   activeAnalysisJob: ReviewWorkspaceActiveAnalysisJobDto | null;
   analysisHistory: ReviewWorkspaceAnalysisHistoryItemDto[];
   dogfoodingMetrics: ReviewWorkspaceDogfoodingMetricsDto;
+  aiSuggestionPayload: ReviewWorkspaceAiSuggestionPayloadDto | null;
   reanalysisStatus: ReviewReanalysisStatus;
   lastOpenedAt: string;
   lastReanalyzeRequestedAt: string | null;
