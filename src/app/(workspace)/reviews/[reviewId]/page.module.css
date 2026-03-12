@@ -424,6 +424,21 @@
   margin-top: 4px;
 }
 
+.analysisHistoryList {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.analysisHistoryItem {
+  border: 1px solid rgba(154, 167, 209, 0.14);
+  border-radius: 10px;
+  background: rgba(11, 16, 32, 0.45);
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+
 .unsupportedFileItem {
   border: 1px solid rgba(154, 167, 209, 0.14);
   border-radius: 10px;
