@@ -767,6 +767,20 @@ export default async function ReviewWorkspacePage({
             summary={<span className={styles.muted}>{copy.section.businessContext}</span>}
           >
             <p className={styles.muted}>{copy.text.businessContextHint}</p>
+            {workspace.businessContext.diagnostics.status === "fallback" ? (
+              <div className={styles.workspaceAlert}>
+                <p>{copy.text.businessContextFallback}</p>
+                {workspace.businessContext.diagnostics.message ? (
+                  <p className={styles.reanalysisError}>{workspace.businessContext.diagnostics.message}</p>
+                ) : null}
+                <p className={styles.muted}>{copy.text.businessContextFallbackRetryHint}</p>
+                {workspace.businessContext.diagnostics.occurredAt ? (
+                  <p className={styles.muted}>
+                    <LocalizedDateTime isoTimestamp={workspace.businessContext.diagnostics.occurredAt} />
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {workspace.businessContext.items.length > 0 ? (
               <ul className={styles.businessContextList}>
                 {workspace.businessContext.items.map((contextItem) => (

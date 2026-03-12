@@ -128,6 +128,10 @@ export const workspaceCopyByLocale = {
         "The request failed. Reload this page and try again.",
       workspaceErrorNextAction:
         "If the issue continues, check connection status and review logs.",
+      businessContextFallback:
+        "Business context could not be loaded. Showing fallback snapshot.",
+      businessContextFallbackRetryHint:
+        "Use Reload now to retry context loading.",
     },
     actions: {
       markStatusPrefix: "Mark",
@@ -323,6 +327,10 @@ export const workspaceCopyByLocale = {
         "リクエストに失敗しました。ページを再読み込みして再実行してください。",
       workspaceErrorNextAction:
         "継続する場合は接続状態とログを確認してください。",
+      businessContextFallback:
+        "Business Context の取得に失敗したため、フォールバックスナップショットを表示しています。",
+      businessContextFallbackRetryHint:
+        "「今すぐ再読み込み」で再取得できます。",
     },
     actions: {
       markStatusPrefix: "状態を",
