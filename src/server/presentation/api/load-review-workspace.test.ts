@@ -96,6 +96,12 @@ describe("loadReviewWorkspaceDto", () => {
       businessContext: {
         generatedAt: "2026-03-12T00:00:00.000Z",
         provider: "stub",
+        diagnostics: {
+          status: "ok",
+          retryable: true,
+          message: null,
+          occurredAt: null,
+        },
         items: [],
       },
     });
@@ -144,6 +150,12 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.businessContext).toEqual({
       generatedAt: "2026-03-12T00:00:00.000Z",
       provider: "stub",
+      diagnostics: {
+        status: "ok",
+        retryable: true,
+        message: null,
+        occurredAt: null,
+      },
       items: [],
     });
     expect(
@@ -204,6 +216,78 @@ describe("loadReviewWorkspaceDto", () => {
         href: "https://github.com/octocat/locus/issues/451",
       },
     ]);
+    expect(dto.businessContext.diagnostics).toEqual({
+      status: "ok",
+      retryable: true,
+      message: null,
+      occurredAt: null,
+    });
+  });
+
+  it("injects analysis-history snapshots and derived dogfooding metrics", async () => {
+    loadAnalysisJobHistoryMock.mockResolvedValueOnce({
+      history: [
+        {
+          jobId: "job-1",
+          reason: "manual_reanalysis",
+          status: "failed",
+          queuedAt: "2026-03-12T00:00:01.000Z",
+          startedAt: "2026-03-12T00:00:02.000Z",
+          completedAt: "2026-03-12T00:00:04.000Z",
+          durationMs: 2000,
+          attempts: 2,
+          lastError: "temporary timeout",
+        },
+      ],
+      metrics: {
+        averageDurationMs: 2500,
+        failureRatePercent: 50,
+        recoverySuccessRatePercent: 50,
+      },
+    });
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.analysisHistory).toEqual([
+      {
+        jobId: "job-1",
+        reason: "manual_reanalysis",
+        status: "failed",
+        queuedAt: "2026-03-12T00:00:01.000Z",
+        startedAt: "2026-03-12T00:00:02.000Z",
+        completedAt: "2026-03-12T00:00:04.000Z",
+        durationMs: 2000,
+        attempts: 2,
+        lastError: "temporary timeout",
+      },
+    ]);
+    expect(dto.dogfoodingMetrics).toEqual({
+      averageDurationMs: 2500,
+      failureRatePercent: 50,
+      recoverySuccessRatePercent: 50,
+    });
+  });
+
+  it("falls back to diagnostic business context when provider throws", async () => {
+    getDependenciesMock.mockReturnValueOnce({
+      reviewSessionRepository: {},
+      analysisJobScheduler: {},
+      businessContextProvider: {
+        loadSnapshotForReview: vi.fn().mockRejectedValue(new Error("context timeout")),
+      },
+    });
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.businessContext.provider).toBe("fallback");
+    expect(dto.businessContext.diagnostics.status).toBe("fallback");
+    expect(dto.businessContext.diagnostics.retryable).toBe(true);
+    expect(dto.businessContext.diagnostics.message).toBe("context timeout");
+    expect(dto.businessContext.items[0]).toMatchObject({
+      status: "unavailable",
+      sourceType: "github_issue",
+      inferenceSource: "none",
+    });
   });
 
   it("injects analysis-history snapshots and derived dogfooding metrics", async () => {

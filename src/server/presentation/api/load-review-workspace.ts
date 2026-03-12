@@ -29,12 +29,42 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
   });
   const workspace = toReviewWorkspaceDto(reviewSession);
   const reviewRecord = reviewSession.toRecord();
+  const businessContextDiagnostics: ReviewWorkspaceDto["businessContext"]["diagnostics"] = {
+    status: "ok",
+    retryable: true,
+    message: null,
+    occurredAt: null,
+  };
   const businessContext = await businessContextProvider.loadSnapshotForReview({
     reviewId: reviewRecord.reviewId,
     repositoryName: reviewRecord.repositoryName,
     branchLabel: reviewRecord.branchLabel,
     title: reviewRecord.title,
     source: reviewRecord.source ?? null,
+  }).catch((error) => {
+    const occurredAt = new Date().toISOString();
+    businessContextDiagnostics.status = "fallback";
+    businessContextDiagnostics.retryable = true;
+    businessContextDiagnostics.message =
+      error instanceof Error ? error.message : "Unknown business-context loading failure.";
+    businessContextDiagnostics.occurredAt = occurredAt;
+
+    return {
+      generatedAt: occurredAt,
+      provider: "stub" as const,
+      items: [
+        {
+          contextId: `ctx-business-context-fallback-${reviewId}`,
+          sourceType: "github_issue" as const,
+          status: "unavailable" as const,
+          confidence: "low" as const,
+          inferenceSource: "none" as const,
+          title: "Business context temporarily unavailable",
+          summary: "Failed to load context provider output. Retry is available.",
+          href: null,
+        },
+      ],
+    };
   });
   const effectiveReanalysisState = resolveEffectiveReanalysisState({
     persistedStatus: workspace.reanalysisStatus,
@@ -60,7 +90,8 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     lastReanalyzeRequestedAt: effectiveReanalysisState.lastReanalyzeRequestedAt,
     businessContext: {
       generatedAt: businessContext.generatedAt,
-      provider: businessContext.provider,
+      provider: businessContextDiagnostics.status === "fallback" ? "fallback" : businessContext.provider,
+      diagnostics: businessContextDiagnostics,
       items: businessContext.items.map((item) => ({
         contextId: item.contextId,
         sourceType: item.sourceType,

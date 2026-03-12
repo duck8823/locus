@@ -334,6 +334,12 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     businessContext: {
       generatedAt: new Date().toISOString(),
       provider: "stub",
+      diagnostics: {
+        status: "ok",
+        retryable: true,
+        message: null,
+        occurredAt: null,
+      },
       items: [],
     },
     groups: record.groups.map((group) => ({

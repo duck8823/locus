@@ -43,7 +43,13 @@ export interface ReviewWorkspaceBusinessContextItemDto {
 
 export interface ReviewWorkspaceBusinessContextDto {
   generatedAt: string
-  provider: "stub"
+  provider: "stub" | "fallback"
+  diagnostics: {
+    status: "ok" | "fallback"
+    retryable: boolean
+    message: string | null
+    occurredAt: string | null
+  }
   items: ReviewWorkspaceBusinessContextItemDto[]
 }
 ```
@@ -75,6 +81,16 @@ export interface ReviewWorkspaceBusinessContextDto {
   - branch conventions (`feature/123-*`, `issue-456`, etc.) provide additional `candidate` links
   - when no reference exists, a deterministic fallback candidate (PR number) is emitted
 - Non-GitHub sources receive unavailable rows only.
+
+## Failure Handling (H3-4)
+
+- When context loading fails, API returns `provider: "fallback"` with a deterministic unavailable item.
+- `diagnostics` includes:
+  - `status: "fallback"`
+  - `retryable` flag for UI
+  - error `message` (best effort)
+  - `occurredAt` timestamp
+- UI shows retry guidance (`Reload now`) and keeps workspace usable.
 
 ## Evolution Rules
 

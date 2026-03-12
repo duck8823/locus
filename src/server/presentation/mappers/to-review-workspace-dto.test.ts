@@ -281,6 +281,12 @@ describe("toReviewWorkspaceDto", () => {
       },
     ]);
     expect(dto.businessContext.provider).toBe("stub");
+    expect(dto.businessContext.diagnostics).toEqual({
+      status: "ok",
+      retryable: true,
+      message: null,
+      occurredAt: null,
+    });
     expect(dto.businessContext.items).toEqual([]);
   });
 
@@ -329,6 +335,12 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.lastReanalyzeCompletedAt).toBeNull();
     expect(dto.lastReanalyzeError).toBeNull();
     expect(dto.businessContext.provider).toBe("stub");
+    expect(dto.businessContext.diagnostics).toEqual({
+      status: "ok",
+      retryable: true,
+      message: null,
+      occurredAt: null,
+    });
     expect(dto.businessContext.items).toEqual([]);
 
     expect(dto.unsupportedSummary).toEqual({
