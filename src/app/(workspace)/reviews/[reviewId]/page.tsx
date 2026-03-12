@@ -37,6 +37,7 @@ import { selectReviewGroupAction } from "@/server/presentation/actions/select-re
 import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 import { setReviewGroupStatusAction } from "@/server/presentation/actions/set-review-group-status-action";
 import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
+import { parseWorkspaceErrorCode } from "@/server/presentation/actions/workspace-error-code";
 import {
   groupArchitectureNodes,
   type ArchitectureNodeGroups,
@@ -110,10 +111,13 @@ interface ArchitectureColumn {
 
 export default async function ReviewWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ reviewId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { reviewId } = await params;
+  const resolvedSearchParams = await searchParams;
   const headerStore = await headers();
   const cookieStore = await cookies();
   const viewerName = cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value;
@@ -122,6 +126,19 @@ export default async function ReviewWorkspacePage({
     acceptLanguage: headerStore.get("accept-language"),
   });
   const copy = workspaceCopyByLocale[workspaceLocale];
+  const workspaceErrorCode = parseWorkspaceErrorCode(
+    typeof resolvedSearchParams.workspaceError === "string"
+      ? resolvedSearchParams.workspaceError
+      : null,
+  );
+  const workspaceErrorMessage =
+    workspaceErrorCode === "workspace_not_found"
+      ? copy.text.workspaceErrorWorkspaceNotFound
+      : workspaceErrorCode === "source_unavailable"
+        ? copy.text.workspaceErrorSourceUnavailable
+        : workspaceErrorCode === "action_failed"
+          ? copy.text.workspaceErrorActionFailed
+          : null;
 
   if (!viewerName) {
     redirect("/");
@@ -284,6 +301,13 @@ export default async function ReviewWorkspacePage({
           </form>
         </div>
       </div>
+
+      {workspaceErrorMessage ? (
+        <section className={styles.workspaceAlert} role="status" aria-live="polite">
+          <p>{workspaceErrorMessage}</p>
+          <p className={styles.muted}>{copy.text.workspaceErrorNextAction}</p>
+        </section>
+      ) : null}
 
       <div className={styles.layout}>
         <section className={styles.panel}>
