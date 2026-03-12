@@ -4,6 +4,7 @@ import { FileConnectionTokenRepository } from "@/server/infrastructure/db/file-c
 import { FileOAuthStateRepository } from "@/server/infrastructure/db/file-oauth-state-repository";
 import { PrototypeConnectionProviderCatalog } from "@/server/application/services/connection-catalog";
 import { StubBusinessContextProvider } from "@/server/infrastructure/context/stub-business-context-provider";
+import { StubIssueContextProvider } from "@/server/infrastructure/context/stub-issue-context-provider";
 import { GitHubPullRequestSnapshotProvider } from "@/server/infrastructure/github/github-pull-request-snapshot-provider";
 import { GitHubOAuthCodeExchangeProvider } from "@/server/infrastructure/github/github-oauth-code-exchange-provider";
 import { TypeScriptParserAdapter } from "@/server/infrastructure/parser/typescript-parser-adapter";
@@ -42,6 +43,7 @@ const connectionTokenRepository = new FileConnectionTokenRepository();
 const oauthStateRepository = new FileOAuthStateRepository();
 const oauthCodeExchangeProvider = new GitHubOAuthCodeExchangeProvider();
 const businessContextProvider = new StubBusinessContextProvider();
+const issueContextProvider = new StubIssueContextProvider();
 const parserAdapters = [new TypeScriptParserAdapter()];
 const pullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
 const runScheduledAnalysisJobUseCase = new RunScheduledAnalysisJobUseCase({
@@ -79,6 +81,7 @@ export function getDependencies() {
     oauthStateRepository,
     oauthCodeExchangeProvider,
     businessContextProvider,
+    issueContextProvider,
     analysisJobScheduler,
     parserAdapters,
     pullRequestSnapshotProvider,
