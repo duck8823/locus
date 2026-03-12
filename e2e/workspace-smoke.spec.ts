@@ -71,6 +71,38 @@ test("keeps review status changes after reload", async ({ page }) => {
   );
 });
 
+test("persists AI suggestion decisions after reload", async ({ page }) => {
+  await openSeedWorkspace(page);
+
+  const adoptButton = page.getByRole("button", { name: /Adopt|採用/ }).first();
+  await expect(adoptButton).toBeVisible();
+  await adoptButton.click();
+  await expect(page.getByText(/Adopted|採用済み/).first()).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText(/Adopted|採用済み/).first()).toBeVisible();
+});
+
+test("keeps review detail pane readable on narrow viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openSeedWorkspace(page);
+
+  await expect(
+    page.getByRole("heading", { level: 2, name: /Detail pane|詳細/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByTestId("status-button-reviewed"),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/location details|位置情報/).first(),
+  ).toBeVisible();
+
+  const hasHorizontalOverflow = await page.evaluate(
+    () => document.documentElement.scrollWidth > window.innerWidth + 1,
+  );
+  expect(hasHorizontalOverflow).toBe(false);
+});
+
 test("persists connection state transitions in settings workspace", async ({ page }) => {
   await openSeedWorkspace(page);
   await page.goto("/settings/connections");

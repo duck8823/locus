@@ -17,6 +17,94 @@ export interface ReviewWorkspaceActiveAnalysisJobDto {
   startedAt: string | null;
 }
 
+export interface ReviewWorkspaceAnalysisHistoryItemDto {
+  jobId: string;
+  reason: "initial_ingestion" | "manual_reanalysis" | "code_host_webhook";
+  status: "queued" | "running" | "succeeded" | "failed";
+  queuedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number | null;
+  attempts: number;
+  lastError: string | null;
+}
+
+export interface ReviewWorkspaceDogfoodingMetricsDto {
+  averageDurationMs: number | null;
+  failureRatePercent: number | null;
+  recoverySuccessRatePercent: number | null;
+}
+
+export interface ReviewWorkspaceAiSuggestionPayloadDto {
+  generatedAt: string;
+  review: {
+    reviewId: string;
+    title: string;
+    repositoryName: string;
+    branchLabel: string;
+  };
+  semanticContext: {
+    totalCount: number;
+    includedCount: number;
+    isTruncated: boolean;
+    fallbackMessage: string | null;
+    changes: Array<{
+      semanticChangeId: string;
+      symbolDisplayName: string;
+      symbolKind: SemanticSymbolKind;
+      changeType: SemanticChangeType;
+      signatureSummary: string | null;
+      bodySummary: string | null;
+      location: string;
+    }>;
+  };
+  architectureContext: {
+    groupId: string | null;
+    groupTitle: string | null;
+    filePath: string | null;
+    totalUpstreamCount: number;
+    totalDownstreamCount: number;
+    includedUpstreamCount: number;
+    includedDownstreamCount: number;
+    isTruncated: boolean;
+    fallbackMessage: string | null;
+    upstreamNodes: Array<{
+      nodeId: string;
+      kind: "layer" | "file" | "symbol" | "unknown";
+      label: string;
+    }>;
+    downstreamNodes: Array<{
+      nodeId: string;
+      kind: "layer" | "file" | "symbol" | "unknown";
+      label: string;
+    }>;
+  };
+  businessContext: {
+    totalCount: number;
+    includedCount: number;
+    isTruncated: boolean;
+    fallbackMessage: string | null;
+    items: Array<{
+      contextId: string;
+      sourceType: "github_issue" | "confluence_page";
+      status: "linked" | "candidate" | "unavailable";
+      confidence: "high" | "medium" | "low";
+      title: string;
+      summary: string | null;
+      href: string | null;
+    }>;
+  };
+}
+
+export interface ReviewWorkspaceAiSuggestionDto {
+  suggestionId: string;
+  category: "semantic" | "architecture" | "business" | "general";
+  confidence: "high" | "medium" | "low";
+  headline: string;
+  recommendation: string;
+  rationale: string[];
+}
+
 export interface ReviewWorkspaceSemanticChangeDto {
   semanticChangeId: string;
   symbolDisplayName: string;
@@ -98,7 +186,13 @@ export interface ReviewWorkspaceBusinessContextItemDto {
 
 export interface ReviewWorkspaceBusinessContextDto {
   generatedAt: string;
-  provider: "stub";
+  provider: "stub" | "fallback";
+  diagnostics: {
+    status: "ok" | "fallback";
+    retryable: boolean;
+    message: string | null;
+    occurredAt: string | null;
+  };
   items: ReviewWorkspaceBusinessContextItemDto[];
 }
 
@@ -120,6 +214,10 @@ export interface ReviewWorkspaceDto {
   analysisDurationMs: number | null;
   analysisError: string | null;
   activeAnalysisJob: ReviewWorkspaceActiveAnalysisJobDto | null;
+  analysisHistory: ReviewWorkspaceAnalysisHistoryItemDto[];
+  dogfoodingMetrics: ReviewWorkspaceDogfoodingMetricsDto;
+  aiSuggestionPayload: ReviewWorkspaceAiSuggestionPayloadDto | null;
+  aiSuggestions: ReviewWorkspaceAiSuggestionDto[];
   reanalysisStatus: ReviewReanalysisStatus;
   lastOpenedAt: string;
   lastReanalyzeRequestedAt: string | null;

@@ -68,4 +68,50 @@ describe("toSemanticChangeFocusView", () => {
     expect(result.focusLabel).toBe("名称が変更されています");
     expect(result.spanDeltaLabel).toBeNull();
   });
+
+  it("covers added and moved focus labels with safe fallback for unknown summaries", () => {
+    const added = toSemanticChangeFocusView({
+      locale: "en",
+      changeType: "added",
+      bodySummary: "unknown delta",
+      before: null,
+      after: {
+        startLine: 12,
+        endLine: 15,
+      },
+    });
+    const moved = toSemanticChangeFocusView({
+      locale: "ja",
+      changeType: "moved",
+      bodySummary: null,
+      before: {
+        startLine: 3,
+        endLine: 7,
+      },
+      after: {
+        startLine: 30,
+        endLine: 34,
+      },
+    });
+    const unknownModified = toSemanticChangeFocusView({
+      locale: "en",
+      changeType: "modified",
+      bodySummary: "some parser summary that is not classified",
+      before: {
+        startLine: 1,
+        endLine: 1,
+      },
+      after: {
+        startLine: 1,
+        endLine: 1,
+      },
+    });
+
+    expect(added.focusLabel).toBe("A new callable was introduced");
+    expect(added.spanDeltaLabel).toBe("+4 lines");
+    expect(moved.focusLabel).toBe("定義位置が移動しています");
+    expect(moved.spanDeltaLabel).toBe("行数差分なし");
+    expect(unknownModified.focusLabel).toBe("Callable implementation was updated");
+    expect(unknownModified.spanDeltaLabel).toBe("No span change");
+  });
 });

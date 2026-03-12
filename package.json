@@ -12,7 +12,10 @@
     "typecheck": "tsc --noEmit",
     "demo:data:status": "node scripts/manage-demo-data.mjs status",
     "demo:data:reset": "node scripts/manage-demo-data.mjs reset",
-    "demo:data:reseed": "node scripts/manage-demo-data.mjs reseed"
+    "demo:data:reseed": "node scripts/manage-demo-data.mjs reseed",
+    "dogfood:metrics": "node scripts/dogfooding-metrics.mjs",
+    "dogfood:run": "node scripts/run-dogfooding-session.mjs",
+    "ai:suggest:evaluate": "node --experimental-strip-types scripts/evaluate-ai-suggestions.mjs"
   },
   "dependencies": {
     "next": "16.1.6",

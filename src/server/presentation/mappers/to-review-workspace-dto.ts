@@ -317,6 +317,14 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     }),
     analysisError: record.analysisError ?? null,
     activeAnalysisJob: null,
+    analysisHistory: [],
+    dogfoodingMetrics: {
+      averageDurationMs: null,
+      failureRatePercent: null,
+      recoverySuccessRatePercent: null,
+    },
+    aiSuggestionPayload: null,
+    aiSuggestions: [],
     reanalysisStatus: record.reanalysisStatus ?? "idle",
     lastOpenedAt: record.lastOpenedAt,
     lastReanalyzeRequestedAt: record.lastReanalyzeRequestedAt,
@@ -328,6 +336,12 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     businessContext: {
       generatedAt: new Date().toISOString(),
       provider: "stub",
+      diagnostics: {
+        status: "ok",
+        retryable: true,
+        message: null,
+        occurredAt: null,
+      },
       items: [],
     },
     groups: record.groups.map((group) => ({

@@ -8,8 +8,10 @@ import { InitialAnalysisRetrySubmitButton } from "./initial-analysis-retry-submi
 import { CollapsibleDetails } from "./collapsible-details";
 import { ReanalyzeSubmitButton } from "./reanalyze-submit-button";
 import { toSemanticChangeFocusView } from "./semantic-change-focus";
+import { AiSuggestionPanel } from "./ai-suggestion-panel";
 import {
   formatAnalysisJobReason,
+  formatAnalysisJobStatus,
   formatArchitectureCategoryLabel,
   formatArchitectureColumnLabel,
   formatBusinessContextConfidence,
@@ -37,6 +39,7 @@ import { selectReviewGroupAction } from "@/server/presentation/actions/select-re
 import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 import { setReviewGroupStatusAction } from "@/server/presentation/actions/set-review-group-status-action";
 import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
+import { parseWorkspaceErrorCode } from "@/server/presentation/actions/workspace-error-code";
 import {
   groupArchitectureNodes,
   type ArchitectureNodeGroups,
@@ -64,6 +67,15 @@ function formatAnalysisDuration(durationMs: number): string {
 function formatCoveragePercent(coveragePercent: number): string {
   const formatted = coveragePercent.toFixed(1);
 
+  return formatted.endsWith(".0") ? `${formatted.slice(0, -2)}%` : `${formatted}%`;
+}
+
+function formatNullablePercent(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) {
+    return "—";
+  }
+
+  const formatted = value.toFixed(1);
   return formatted.endsWith(".0") ? `${formatted.slice(0, -2)}%` : `${formatted}%`;
 }
 
@@ -110,10 +122,13 @@ interface ArchitectureColumn {
 
 export default async function ReviewWorkspacePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ reviewId: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { reviewId } = await params;
+  const resolvedSearchParams = await searchParams;
   const headerStore = await headers();
   const cookieStore = await cookies();
   const viewerName = cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value;
@@ -122,6 +137,19 @@ export default async function ReviewWorkspacePage({
     acceptLanguage: headerStore.get("accept-language"),
   });
   const copy = workspaceCopyByLocale[workspaceLocale];
+  const workspaceErrorCode = parseWorkspaceErrorCode(
+    typeof resolvedSearchParams.workspaceError === "string"
+      ? resolvedSearchParams.workspaceError
+      : null,
+  );
+  const workspaceErrorMessage =
+    workspaceErrorCode === "workspace_not_found"
+      ? copy.text.workspaceErrorWorkspaceNotFound
+      : workspaceErrorCode === "source_unavailable"
+        ? copy.text.workspaceErrorSourceUnavailable
+        : workspaceErrorCode === "action_failed"
+          ? copy.text.workspaceErrorActionFailed
+          : null;
 
   if (!viewerName) {
     redirect("/");
@@ -284,6 +312,13 @@ export default async function ReviewWorkspacePage({
           </form>
         </div>
       </div>
+
+      {workspaceErrorMessage ? (
+        <section className={styles.workspaceAlert} role="status" aria-live="polite">
+          <p>{workspaceErrorMessage}</p>
+          <p className={styles.muted}>{copy.text.workspaceErrorNextAction}</p>
+        </section>
+      ) : null}
 
       <div className={styles.layout}>
         <section className={styles.panel}>
@@ -624,6 +659,65 @@ export default async function ReviewWorkspacePage({
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
+            defaultOpen={workspace.aiSuggestions.length > 0}
+            summary={<span className={styles.muted}>{copy.section.aiSuggestions}</span>}
+          >
+            <AiSuggestionPanel
+              reviewId={workspace.reviewId}
+              locale={workspaceLocale}
+              suggestions={workspace.aiSuggestions}
+            />
+          </CollapsibleDetails>
+
+          <CollapsibleDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
+            defaultOpen={workspace.analysisHistory.length > 0}
+            summary={
+              <span className={styles.muted}>{copy.section.analysisJobs}</span>
+            }
+          >
+            <p className={styles.muted}>
+              {copy.text.averageDuration}: {workspace.dogfoodingMetrics.averageDurationMs !== null
+                ? formatAnalysisDuration(workspace.dogfoodingMetrics.averageDurationMs)
+                : "—"}
+              {" · "}
+              {copy.text.failureRate}: {formatNullablePercent(workspace.dogfoodingMetrics.failureRatePercent)}
+              {" · "}
+              {copy.text.recoverySuccessRate}:{" "}
+              {formatNullablePercent(workspace.dogfoodingMetrics.recoverySuccessRatePercent)}
+            </p>
+            {workspace.analysisHistory.length > 0 ? (
+              <ul className={styles.analysisHistoryList}>
+                {workspace.analysisHistory.map((job) => (
+                  <li key={job.jobId} className={styles.analysisHistoryItem}>
+                    <p className={styles.muted}>
+                      {formatAnalysisJobReason(job.reason, workspaceLocale)} ·{" "}
+                      {copy.text.jobStatus}: {formatAnalysisJobStatus(job.status, workspaceLocale)}
+                    </p>
+                    <p className={styles.muted}>
+                      {copy.text.jobQueuedAt}: <LocalizedDateTime isoTimestamp={job.queuedAt} />
+                      {" · "}
+                      {copy.text.jobAttempts}: {job.attempts}
+                      {" · "}
+                      {copy.text.jobDuration}: {job.durationMs !== null ? formatAnalysisDuration(job.durationMs) : "—"}
+                    </p>
+                    {job.lastError ? (
+                      <p className={styles.reanalysisError}>{job.lastError}</p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>{copy.text.noAnalysisJobsYet}</p>
+            )}
+          </CollapsibleDetails>
+
+          <CollapsibleDetails
+            className={styles.collapsibleDetail}
+            summaryClassName={styles.collapsibleSummary}
+            contentClassName={styles.collapsibleContent}
             defaultOpen={workspace.unsupportedSummary.totalCount > 0}
             summary={
               <span className={styles.muted}>{copy.section.analysisCoverage}</span>
@@ -688,6 +782,20 @@ export default async function ReviewWorkspacePage({
             summary={<span className={styles.muted}>{copy.section.businessContext}</span>}
           >
             <p className={styles.muted}>{copy.text.businessContextHint}</p>
+            {workspace.businessContext.diagnostics.status === "fallback" ? (
+              <div className={styles.workspaceAlert}>
+                <p>{copy.text.businessContextFallback}</p>
+                {workspace.businessContext.diagnostics.message ? (
+                  <p className={styles.reanalysisError}>{workspace.businessContext.diagnostics.message}</p>
+                ) : null}
+                <p className={styles.muted}>{copy.text.businessContextFallbackRetryHint}</p>
+                {workspace.businessContext.diagnostics.occurredAt ? (
+                  <p className={styles.muted}>
+                    <LocalizedDateTime isoTimestamp={workspace.businessContext.diagnostics.occurredAt} />
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             {workspace.businessContext.items.length > 0 ? (
               <ul className={styles.businessContextList}>
                 {workspace.businessContext.items.map((contextItem) => (

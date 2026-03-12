@@ -335,6 +335,17 @@
   overflow-wrap: break-word;
 }
 
+.workspaceAlert {
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 14px;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  display: grid;
+  gap: 6px;
+}
+
 .analysisProgressTrack {
   height: 8px;
   width: 100%;
@@ -411,6 +422,43 @@
   display: grid;
   gap: 8px;
   margin-top: 4px;
+}
+
+.analysisHistoryList {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.analysisHistoryItem {
+  border: 1px solid rgba(154, 167, 209, 0.14);
+  border-radius: 10px;
+  background: rgba(11, 16, 32, 0.45);
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.aiSuggestionList {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.aiSuggestionCard {
+  border: 1px solid rgba(154, 167, 209, 0.16);
+  border-radius: 12px;
+  background: rgba(11, 16, 32, 0.5);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.aiSuggestionRationaleList {
+  list-style: disc;
+  margin-left: 18px;
+  display: grid;
+  gap: 4px;
 }
 
 .unsupportedFileItem {

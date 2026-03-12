@@ -139,6 +139,14 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.analysisAttemptCount).toBe(2);
     expect(dto.analysisDurationMs).toBeNull();
     expect(dto.analysisError).toBeNull();
+    expect(dto.analysisHistory).toEqual([]);
+    expect(dto.dogfoodingMetrics).toEqual({
+      averageDurationMs: null,
+      failureRatePercent: null,
+      recoverySuccessRatePercent: null,
+    });
+    expect(dto.aiSuggestionPayload).toBeNull();
+    expect(dto.aiSuggestions).toEqual([]);
     expect(dto.reanalysisStatus).toBe("failed");
     expect(dto.lastReanalyzeRequestedAt).toBe("2026-03-08T01:00:00.000Z");
     expect(dto.lastReanalyzeCompletedAt).toBe("2026-03-08T01:00:09.000Z");
@@ -275,6 +283,12 @@ describe("toReviewWorkspaceDto", () => {
       },
     ]);
     expect(dto.businessContext.provider).toBe("stub");
+    expect(dto.businessContext.diagnostics).toEqual({
+      status: "ok",
+      retryable: true,
+      message: null,
+      occurredAt: null,
+    });
     expect(dto.businessContext.items).toEqual([]);
   });
 
@@ -316,7 +330,15 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.lastReanalyzeRequestedAt).toBeNull();
     expect(dto.lastReanalyzeCompletedAt).toBeNull();
     expect(dto.lastReanalyzeError).toBeNull();
+    expect(dto.aiSuggestionPayload).toBeNull();
+    expect(dto.aiSuggestions).toEqual([]);
     expect(dto.businessContext.provider).toBe("stub");
+    expect(dto.businessContext.diagnostics).toEqual({
+      status: "ok",
+      retryable: true,
+      message: null,
+      occurredAt: null,
+    });
     expect(dto.businessContext.items).toEqual([]);
 
     expect(dto.unsupportedSummary).toEqual({
