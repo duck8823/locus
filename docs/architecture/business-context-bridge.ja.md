@@ -43,7 +43,13 @@ export interface ReviewWorkspaceBusinessContextItemDto {
 
 export interface ReviewWorkspaceBusinessContextDto {
   generatedAt: string
-  provider: "stub"
+  provider: "stub" | "fallback"
+  diagnostics: {
+    status: "ok" | "fallback"
+    retryable: boolean
+    message: string | null
+    occurredAt: string | null
+  }
   items: ReviewWorkspaceBusinessContextItemDto[]
 }
 ```
@@ -75,6 +81,16 @@ export interface ReviewWorkspaceBusinessContextDto {
   - ブランチ命名規約（`feature/123-*`, `issue-456` など）からも `candidate` を補完する
   - 明示参照がない場合は PR 番号を使った deterministic な候補を返す
 - GitHub 以外のソースでは unavailable のみ返す。
+
+## 失敗時ハンドリング (H3-4)
+
+- context 読み込み失敗時は API が `provider: "fallback"` を返し、決定的な unavailable 行を返す。
+- `diagnostics` で次を返す:
+  - `status: "fallback"`
+  - UI 再試行可否の `retryable`
+  - 取得できる範囲の `message`
+  - 発生時刻 `occurredAt`
+- UI は「今すぐ再読み込み」を案内しつつ、ワークスペース本体は継続利用可能にする。
 
 ## 拡張ポリシー
 

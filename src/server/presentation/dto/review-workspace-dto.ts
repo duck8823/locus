@@ -116,7 +116,13 @@ export interface ReviewWorkspaceBusinessContextItemDto {
 
 export interface ReviewWorkspaceBusinessContextDto {
   generatedAt: string;
-  provider: "stub";
+  provider: "stub" | "fallback";
+  diagnostics: {
+    status: "ok" | "fallback";
+    retryable: boolean;
+    message: string | null;
+    occurredAt: string | null;
+  };
   items: ReviewWorkspaceBusinessContextItemDto[];
 }
 
