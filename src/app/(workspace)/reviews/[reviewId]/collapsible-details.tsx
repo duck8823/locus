@@ -49,10 +49,11 @@ export function CollapsibleDetails({
       onToggle={(event) => {
         const shouldPersistManualState = hasManualToggleIntentRef.current;
         hasManualToggleIntentRef.current = false;
+        const nextOpen = event.currentTarget.open;
         setManualOpen((previousManualOpen) =>
           resolveManualOpenOnToggle({
             hasManualToggleIntent: shouldPersistManualState,
-            nextOpen: event.currentTarget.open,
+            nextOpen,
             previousManualOpen,
           }),
         );

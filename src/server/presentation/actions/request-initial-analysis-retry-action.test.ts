@@ -36,6 +36,7 @@ describe("requestInitialAnalysisRetryAction", () => {
     getDependenciesMock.mockReset();
     revalidatePathMock.mockReset();
     redirectMock.mockReset();
+    redirectMock.mockImplementation(() => undefined);
     getDependenciesMock.mockReturnValue({
       reviewSessionRepository: {},
       analysisJobScheduler: {},
@@ -63,5 +64,18 @@ describe("requestInitialAnalysisRetryAction", () => {
     expect(redirectMock).toHaveBeenCalledWith(
       "/reviews/review-1?workspaceError=source_unavailable",
     );
+  });
+
+  it("keeps redirect control flow on success", async () => {
+    const nextRedirect = new Error("NEXT_REDIRECT");
+    redirectMock.mockImplementationOnce(() => {
+      throw nextRedirect;
+    });
+    const formData = new FormData();
+    formData.set("reviewId", "review-1");
+
+    await expect(requestInitialAnalysisRetryAction(formData)).rejects.toBe(nextRedirect);
+    expect(redirectMock).toHaveBeenCalledTimes(1);
+    expect(redirectMock).toHaveBeenCalledWith("/reviews/review-1");
   });
 });
