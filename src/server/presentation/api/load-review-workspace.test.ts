@@ -333,4 +333,48 @@ describe("loadReviewWorkspaceDto", () => {
       recoverySuccessRatePercent: 50,
     });
   });
+
+  it("injects analysis-history snapshots and derived dogfooding metrics", async () => {
+    loadAnalysisJobHistoryMock.mockResolvedValueOnce({
+      history: [
+        {
+          jobId: "job-1",
+          reason: "manual_reanalysis",
+          status: "failed",
+          queuedAt: "2026-03-12T00:00:01.000Z",
+          startedAt: "2026-03-12T00:00:02.000Z",
+          completedAt: "2026-03-12T00:00:04.000Z",
+          durationMs: 2000,
+          attempts: 2,
+          lastError: "temporary timeout",
+        },
+      ],
+      metrics: {
+        averageDurationMs: 2500,
+        failureRatePercent: 50,
+        recoverySuccessRatePercent: 50,
+      },
+    });
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.analysisHistory).toEqual([
+      {
+        jobId: "job-1",
+        reason: "manual_reanalysis",
+        status: "failed",
+        queuedAt: "2026-03-12T00:00:01.000Z",
+        startedAt: "2026-03-12T00:00:02.000Z",
+        completedAt: "2026-03-12T00:00:04.000Z",
+        durationMs: 2000,
+        attempts: 2,
+        lastError: "temporary timeout",
+      },
+    ]);
+    expect(dto.dogfoodingMetrics).toEqual({
+      averageDurationMs: 2500,
+      failureRatePercent: 50,
+      recoverySuccessRatePercent: 50,
+    });
+  });
 });
