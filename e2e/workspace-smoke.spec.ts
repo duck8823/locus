@@ -87,6 +87,22 @@ test("keeps review detail pane readable on narrow viewport", async ({ page }) =>
   expect(hasHorizontalOverflow).toBe(false);
 });
 
+test("shows unified recovery guidance for workspace retry errors", async ({ page }) => {
+  await openSeedWorkspace(page);
+  await page.goto("/reviews/demo-review?workspaceError=source_unavailable");
+
+  await expect(
+    page.getByText(
+      /Reanalysis source is unavailable\. Reconnect GitHub OAuth and retry\.|再解析元が利用できません。GitHub OAuth を再接続して再試行してください。/,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      /If the issue continues, check connection status and review logs\.|継続する場合は接続状態とログを確認してください。/,
+    ),
+  ).toBeVisible();
+});
+
 test("persists connection state transitions in settings workspace", async ({ page }) => {
   await openSeedWorkspace(page);
   await page.goto("/settings/connections");
