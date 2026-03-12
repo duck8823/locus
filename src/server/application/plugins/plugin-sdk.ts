@@ -126,11 +126,18 @@ export function validatePluginManifest(manifest: PluginManifest): string[] {
 
 export function validatePluginActivationResult(input: {
   manifest: PluginManifest;
-  result: PluginActivationResult;
+  result: unknown;
 }): string[] {
   const issues: string[] = [];
 
-  if (!Array.isArray(input.result.capabilities)) {
+  if (!isObjectRecord(input.result)) {
+    issues.push("activation result must be an object");
+    return issues;
+  }
+
+  const capabilities = input.result.capabilities;
+
+  if (!Array.isArray(capabilities)) {
     issues.push("activation result must contain capabilities array");
     return issues;
   }
@@ -140,7 +147,7 @@ export function validatePluginActivationResult(input: {
   );
   const resolvedCapabilityKeys = new Set<string>();
 
-  input.result.capabilities.forEach((capability, index) => {
+  capabilities.forEach((capability, index) => {
     if (capability.kind !== "pull-request-snapshot-provider") {
       issues.push(`activation.capabilities[${index}].kind is unsupported`);
       return;

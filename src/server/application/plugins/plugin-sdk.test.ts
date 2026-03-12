@@ -63,6 +63,15 @@ describe("plugin-sdk contract", () => {
     );
   });
 
+  it("rejects non-object activation results", () => {
+    const issues = validatePluginActivationResult({
+      manifest: createManifest(),
+      result: null,
+    });
+
+    expect(issues).toEqual(["activation result must be an object"]);
+  });
+
   it("rejects undeclared capabilities from activation", () => {
     const issues = validatePluginActivationResult({
       manifest: createManifest(),
