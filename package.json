@@ -13,7 +13,8 @@
     "demo:data:status": "node scripts/manage-demo-data.mjs status",
     "demo:data:reset": "node scripts/manage-demo-data.mjs reset",
     "demo:data:reseed": "node scripts/manage-demo-data.mjs reseed",
-    "dogfood:metrics": "node scripts/dogfooding-metrics.mjs"
+    "dogfood:metrics": "node scripts/dogfooding-metrics.mjs",
+    "ai:suggest:evaluate": "node --experimental-strip-types scripts/evaluate-ai-suggestions.mjs"
   },
   "dependencies": {
     "next": "16.1.6",
