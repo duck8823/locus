@@ -120,7 +120,8 @@ Required events:
 ### Pre-release
 
 - [ ] `GITHUB_WEBHOOK_SECRET` is set via secret manager (never hardcoded).
-- [ ] `LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEY` is set to a managed 32-byte key.
+- [ ] `LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEYS` is set as an ordered key ring (first key encrypts, all keys decrypt) for safe key rotation.
+- [ ] `LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEY` is used only for backward compatibility and migration fallback.
 - [ ] OAuth client credentials are not committed and have rotation owner/date.
 - [ ] CI quality gate is green (`lint`, `typecheck`, `test`, `build`).
 
