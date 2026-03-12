@@ -335,6 +335,17 @@
   overflow-wrap: break-word;
 }
 
+.workspaceAlert {
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 14px;
+  background: rgba(127, 29, 29, 0.2);
+  color: #fecaca;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  display: grid;
+  gap: 6px;
+}
+
 .analysisProgressTrack {
   height: 8px;
   width: 100%;

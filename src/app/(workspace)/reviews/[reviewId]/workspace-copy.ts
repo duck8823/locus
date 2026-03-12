@@ -110,6 +110,14 @@ export const workspaceCopyByLocale = {
       semanticFocus: "focus",
       semanticSpanDelta: "span delta",
       semanticLocationDetails: "location details",
+      workspaceErrorWorkspaceNotFound:
+        "The review workspace could not be found. Please reopen it from the home screen.",
+      workspaceErrorSourceUnavailable:
+        "Reanalysis source is unavailable. Reconnect GitHub OAuth and retry.",
+      workspaceErrorActionFailed:
+        "The request failed. Reload this page and try again.",
+      workspaceErrorNextAction:
+        "If the issue continues, check connection status and review logs.",
     },
     actions: {
       markStatusPrefix: "Mark",
@@ -281,6 +289,14 @@ export const workspaceCopyByLocale = {
       semanticFocus: "注目点",
       semanticSpanDelta: "行数差分",
       semanticLocationDetails: "位置情報",
+      workspaceErrorWorkspaceNotFound:
+        "レビュー画面が見つかりません。ホーム画面から開き直してください。",
+      workspaceErrorSourceUnavailable:
+        "再解析元が利用できません。GitHub OAuth を再接続して再試行してください。",
+      workspaceErrorActionFailed:
+        "リクエストに失敗しました。ページを再読み込みして再実行してください。",
+      workspaceErrorNextAction:
+        "継続する場合は接続状態とログを確認してください。",
     },
     actions: {
       markStatusPrefix: "状態を",
