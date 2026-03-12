@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   PLUGIN_SDK_VERSION,
   type CodeHostPlugin,
-  type PullRequestSourceProvider,
   type PluginManifest,
   validatePluginManifest,
   validatePluginActivationResult,
 } from "@/server/application/plugins/plugin-sdk";
+import type { PullRequestSourceProvider } from "@/server/application/ports/pull-request-snapshot-provider";
 
 function createManifest(overrides: Partial<PluginManifest> = {}): PluginManifest {
   return {

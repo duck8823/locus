@@ -3,18 +3,12 @@ import {
   PLUGIN_SDK_VERSION,
   type CodeHostPlugin,
 } from "@/server/application/plugins/plugin-sdk";
+import { PullRequestProviderAuthError } from "@/server/application/ports/pull-request-snapshot-provider";
 import {
   PluginCapabilityUnavailableError,
   PluginRuntime,
 } from "@/server/infrastructure/plugins/plugin-runtime";
 import { sampleCodeHostPlugin } from "@/server/infrastructure/plugins/sample/sample-codehost-plugin";
-
-class PullRequestProviderAuthError extends Error {
-  constructor(message = "auth error") {
-    super(message);
-    this.name = "PullRequestProviderAuthError";
-  }
-}
 
 describe("PluginRuntime", () => {
   it("loads sample plugin and resolves provider capability", async () => {
@@ -143,7 +137,7 @@ describe("PluginRuntime", () => {
             provider: "authz",
             implementation: {
               fetchPullRequestSnapshots: async () => {
-                throw new PullRequestProviderAuthError("expired token");
+                throw new PullRequestProviderAuthError("authz", 401, "/demo", "expired token");
               },
             },
           },

@@ -5,13 +5,16 @@ import {
   validatePluginActivationResult,
   validatePluginManifest,
   type CodeHostPlugin,
-  type ProviderAgnosticPullRequestSnapshotProvider,
   type PluginActivationResult,
   type PluginCapabilityBinding,
   type PluginRuntimeLogger,
-  type PullRequestSourceRef,
-  type PullRequestSourceProvider,
 } from "@/server/application/plugins/plugin-sdk";
+import {
+  PullRequestProviderAuthError,
+  type ProviderAgnosticPullRequestSnapshotProvider,
+  type PullRequestSourceProvider,
+  type PullRequestSourceRef,
+} from "@/server/application/ports/pull-request-snapshot-provider";
 
 export type PluginLoadStatus = "active" | "disabled" | "skipped";
 
@@ -111,13 +114,7 @@ export class PluginRuntime {
     this.logger = options.logger ?? noopLogger;
     this.shouldDisableOnCapabilityError =
       options.shouldDisableOnCapabilityError ??
-      ((error: unknown) => {
-        if (error instanceof Error && error.name === "PullRequestProviderAuthError") {
-          return false;
-        }
-
-        return true;
-      });
+      ((error: unknown) => !(error instanceof PullRequestProviderAuthError));
   }
 
   async loadFromModulePaths(input: {
