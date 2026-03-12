@@ -71,6 +71,18 @@ test("keeps review status changes after reload", async ({ page }) => {
   );
 });
 
+test("persists AI suggestion decisions after reload", async ({ page }) => {
+  await openSeedWorkspace(page);
+
+  const adoptButton = page.getByRole("button", { name: /Adopt|採用/ }).first();
+  await expect(adoptButton).toBeVisible();
+  await adoptButton.click();
+  await expect(page.getByText(/Adopted|採用済み/).first()).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText(/Adopted|採用済み/).first()).toBeVisible();
+});
+
 test("keeps review detail pane readable on narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openSeedWorkspace(page);

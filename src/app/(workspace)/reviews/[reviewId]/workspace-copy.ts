@@ -9,6 +9,8 @@ type SemanticChangeType = "added" | "removed" | "modified" | "moved" | "renamed"
 type UnsupportedFileReason = "unsupported_language" | "parser_failed" | "binary_file";
 type AnalysisJobReason = "initial_ingestion" | "manual_reanalysis" | "code_host_webhook";
 type AnalysisJobStatus = "queued" | "running" | "succeeded" | "failed";
+type AiSuggestionCategory = "semantic" | "architecture" | "business" | "general";
+type AiSuggestionConfidence = "high" | "medium" | "low";
 type BusinessContextSourceType = "github_issue" | "confluence_page";
 type BusinessContextStatus = "linked" | "candidate" | "unavailable";
 type BusinessContextConfidence = "high" | "medium" | "low";
@@ -42,6 +44,7 @@ export const workspaceCopyByLocale = {
       reanalysisStatus: "Reanalysis status",
       analysisCoverage: "Analysis coverage",
       analysisJobs: "Analysis jobs",
+      aiSuggestions: "AI suggestions",
       businessContext: "Business context",
       architecturePane: "Architecture pane",
     },
@@ -112,6 +115,13 @@ export const workspaceCopyByLocale = {
       averageDuration: "Average duration",
       failureRate: "Failure rate",
       recoverySuccessRate: "Recovery success rate",
+      noAiSuggestionsYet: "No AI suggestions yet.",
+      aiSuggestionRationale: "Rationale",
+      aiSuggestionCategory: "Category",
+      aiSuggestionConfidence: "Confidence",
+      aiDecisionAdopted: "Adopted",
+      aiDecisionHolding: "On hold",
+      aiDecisionNone: "Not decided",
       semanticKind: "kind",
       semanticSignature: "signature",
       semanticBody: "body",
@@ -144,6 +154,9 @@ export const workspaceCopyByLocale = {
       refreshing: "Refreshing...",
       retryInitialAnalysis: "Retry initial analysis",
       retryingInitialAnalysis: "Retrying...",
+      adoptSuggestion: "Adopt",
+      holdSuggestion: "Hold",
+      clearSuggestionDecision: "Clear",
     },
     reviewGroupStatus: {
       unread: "Unread",
@@ -198,6 +211,17 @@ export const workspaceCopyByLocale = {
       succeeded: "Succeeded",
       failed: "Failed",
     },
+    aiSuggestionCategory: {
+      semantic: "Semantic",
+      architecture: "Architecture",
+      business: "Business",
+      general: "General",
+    },
+    aiSuggestionConfidence: {
+      high: "High",
+      medium: "Medium",
+      low: "Low",
+    },
     businessContextSourceType: {
       github_issue: "GitHub Issue",
       confluence_page: "Confluence Page",
@@ -242,6 +266,7 @@ export const workspaceCopyByLocale = {
       reanalysisStatus: "再解析ステータス",
       analysisCoverage: "解析カバレッジ",
       analysisJobs: "解析ジョブ",
+      aiSuggestions: "AI提案",
       businessContext: "ビジネスコンテキスト",
       architecturePane: "アーキテクチャ",
     },
@@ -311,6 +336,13 @@ export const workspaceCopyByLocale = {
       averageDuration: "平均所要時間",
       failureRate: "失敗率",
       recoverySuccessRate: "復帰成功率",
+      noAiSuggestionsYet: "AI提案はまだありません。",
+      aiSuggestionRationale: "根拠",
+      aiSuggestionCategory: "カテゴリ",
+      aiSuggestionConfidence: "確信度",
+      aiDecisionAdopted: "採用済み",
+      aiDecisionHolding: "保留中",
+      aiDecisionNone: "未判断",
       semanticKind: "種類",
       semanticSignature: "シグネチャ",
       semanticBody: "本文",
@@ -343,6 +375,9 @@ export const workspaceCopyByLocale = {
       refreshing: "再読み込み中...",
       retryInitialAnalysis: "初回解析を再試行",
       retryingInitialAnalysis: "再試行中...",
+      adoptSuggestion: "採用",
+      holdSuggestion: "保留",
+      clearSuggestionDecision: "解除",
     },
     reviewGroupStatus: {
       unread: "未確認",
@@ -396,6 +431,17 @@ export const workspaceCopyByLocale = {
       running: "実行中",
       succeeded: "成功",
       failed: "失敗",
+    },
+    aiSuggestionCategory: {
+      semantic: "セマンティック",
+      architecture: "アーキテクチャ",
+      business: "ビジネス",
+      general: "一般",
+    },
+    aiSuggestionConfidence: {
+      high: "高",
+      medium: "中",
+      low: "低",
     },
     businessContextSourceType: {
       github_issue: "GitHub Issue",
@@ -525,6 +571,28 @@ export function formatAnalysisJobStatus(
   return (
     copy.analysisJobStatus[status as AnalysisJobStatus] ??
     status.replaceAll("_", " ")
+  );
+}
+
+export function formatAiSuggestionCategory(
+  category: string,
+  locale: WorkspaceLocale,
+): string {
+  const copy = workspaceCopyByLocale[locale];
+  return (
+    copy.aiSuggestionCategory[category as AiSuggestionCategory] ??
+    category.replaceAll("_", " ")
+  );
+}
+
+export function formatAiSuggestionConfidence(
+  confidence: string,
+  locale: WorkspaceLocale,
+): string {
+  const copy = workspaceCopyByLocale[locale];
+  return (
+    copy.aiSuggestionConfidence[confidence as AiSuggestionConfidence] ??
+    confidence.replaceAll("_", " ")
   );
 }
 

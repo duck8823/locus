@@ -439,6 +439,28 @@
   gap: 4px;
 }
 
+.aiSuggestionList {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.aiSuggestionCard {
+  border: 1px solid rgba(154, 167, 209, 0.16);
+  border-radius: 12px;
+  background: rgba(11, 16, 32, 0.5);
+  padding: 10px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.aiSuggestionRationaleList {
+  list-style: disc;
+  margin-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
 .unsupportedFileItem {
   border: 1px solid rgba(154, 167, 209, 0.14);
   border-radius: 10px;
