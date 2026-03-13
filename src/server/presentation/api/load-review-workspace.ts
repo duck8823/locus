@@ -55,17 +55,6 @@ function buildAiSuggestionFailureFallback(params: {
   ];
 }
 
-function resolveAiSuggestionsWithFallback(params: {
-  payload: AiSuggestionPayload;
-  providerSuggestions: AiSuggestion[];
-}): AiSuggestion[] {
-  if (params.providerSuggestions.length > 0) {
-    return params.providerSuggestions;
-  }
-
-  return generateAiSuggestionsFromPayload(params.payload);
-}
-
 export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceInput): Promise<ReviewWorkspaceDto> {
   const { reviewSessionRepository, analysisJobScheduler, businessContextProvider, aiSuggestionProvider } =
     getDependencies();
@@ -178,15 +167,16 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
   let aiSuggestions: AiSuggestion[];
 
   try {
-    const providerSuggestions = await aiSuggestionProvider.generateSuggestions({
+    aiSuggestions = await aiSuggestionProvider.generateSuggestions({
       payload: aiSuggestionPayload,
-    });
-    aiSuggestions = resolveAiSuggestionsWithFallback({
-      payload: aiSuggestionPayload,
-      providerSuggestions,
     });
   } catch (error) {
     const errorType = classifyAiSuggestionProviderError(error);
+    console.error("ai_suggestion_provider_failed", {
+      reviewId: workspace.reviewId,
+      errorType,
+      message: error instanceof Error ? error.message : String(error),
+    });
 
     try {
       aiSuggestions = generateAiSuggestionsFromPayload(aiSuggestionPayload);

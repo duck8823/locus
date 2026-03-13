@@ -326,6 +326,7 @@ describe("loadReviewWorkspaceDto", () => {
   });
 
   it("falls back to deterministic suggestions when provider returns temporary failure", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     generateSuggestionsMock.mockRejectedValueOnce(
       new AiSuggestionProviderTemporaryError("rate limited"),
     );
@@ -336,6 +337,23 @@ describe("loadReviewWorkspaceDto", () => {
       suggestionId: "baseline-manual-review",
       category: "general",
     });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "ai_suggestion_provider_failed",
+      expect.objectContaining({
+        reviewId: "review-1",
+        errorType: "temporary",
+        message: "rate limited",
+      }),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("accepts an empty suggestion response from provider as valid output", async () => {
+    generateSuggestionsMock.mockResolvedValueOnce([]);
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.aiSuggestions).toEqual([]);
   });
 
   it("injects analysis-history snapshots and derived dogfooding metrics", async () => {
