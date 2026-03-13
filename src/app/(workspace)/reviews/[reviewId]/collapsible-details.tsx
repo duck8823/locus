@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const COLLAPSIBLE_STORAGE_PREFIX = "locus-collapsible";
 
@@ -19,6 +19,18 @@ export function resolveCollapsibleOpenState(input: {
   defaultOpen: boolean;
 }): boolean {
   return input.manualOpen ?? input.defaultOpen;
+}
+
+export function resolveManualOpenOnToggle(input: {
+  hasManualToggleIntent: boolean;
+  nextOpen: boolean;
+  previousManualOpen: boolean | null;
+}): boolean | null {
+  if (!input.hasManualToggleIntent) {
+    return input.previousManualOpen;
+  }
+
+  return input.nextOpen;
 }
 
 function resolveStorageRecordKey(storageKey: string): string {
@@ -111,6 +123,7 @@ export function CollapsibleDetails({
   children,
 }: CollapsibleDetailsProps) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
+  const manualToggleIntentRef = useRef(false);
   const open = resolveCollapsibleOpenState({ manualOpen, defaultOpen });
 
   useEffect(() => {
@@ -137,15 +150,37 @@ export function CollapsibleDetails({
       open={open}
       onToggle={(event) => {
         const nextOpen = event.currentTarget.open;
-        setManualOpen(nextOpen);
+        const hasManualToggleIntent = manualToggleIntentRef.current;
+        manualToggleIntentRef.current = false;
+        const nextManualOpen = resolveManualOpenOnToggle({
+          hasManualToggleIntent,
+          nextOpen,
+          previousManualOpen: manualOpen,
+        });
+        setManualOpen(nextManualOpen);
+
+        if (nextManualOpen === manualOpen) {
+          return;
+        }
+
         writePersistedManualOpen({
           storage: readLocalStorageSafely(),
           storageKey: storageKey ?? null,
-          manualOpen: nextOpen,
+          manualOpen: nextManualOpen,
         });
       }}
     >
-      <summary className={summaryClassName}>
+      <summary
+        className={summaryClassName}
+        onClickCapture={() => {
+          manualToggleIntentRef.current = true;
+        }}
+        onKeyDownCapture={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            manualToggleIntentRef.current = true;
+          }
+        }}
+      >
         {summary}
       </summary>
       <div className={contentClassName}>{children}</div>
