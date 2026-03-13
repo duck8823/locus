@@ -1,6 +1,7 @@
 import { GetReviewWorkspaceUseCase } from "@/server/application/usecases/get-review-workspace";
 import { buildAiSuggestionPayload } from "@/server/application/ai/build-ai-suggestion-payload";
 import { generateAiSuggestionsFromPayload } from "@/server/application/ai/generate-ai-suggestions";
+import { resolveGitHubIssueContextAccess } from "@/server/application/services/resolve-github-issue-context-access";
 import { getDependencies } from "@/server/composition/dependencies";
 import { loadActiveInitialAnalysisJob } from "@/server/presentation/api/load-active-initial-analysis-job";
 import { loadActiveManualReanalysisJob } from "@/server/presentation/api/load-active-manual-reanalysis-job";
@@ -14,7 +15,12 @@ export interface LoadReviewWorkspaceInput {
 }
 
 export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceInput): Promise<ReviewWorkspaceDto> {
-  const { reviewSessionRepository, analysisJobScheduler, businessContextProvider } = getDependencies();
+  const {
+    reviewSessionRepository,
+    analysisJobScheduler,
+    businessContextProvider,
+    connectionTokenRepository,
+  } = getDependencies();
   const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository });
   const reviewSession = await useCase.execute({ reviewId });
   const activeInitialAnalysisJob = await loadActiveInitialAnalysisJob({
@@ -37,13 +43,29 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     message: null,
     occurredAt: null,
   };
-  const businessContext = await businessContextProvider.loadSnapshotForReview({
-    reviewId: reviewRecord.reviewId,
-    repositoryName: reviewRecord.repositoryName,
-    branchLabel: reviewRecord.branchLabel,
-    title: reviewRecord.title,
-    source: reviewRecord.source ?? null,
-  }).catch((error) => {
+  const businessContext = await (async () => {
+    const githubIssueContextAccess =
+      reviewRecord.source?.provider === "github"
+        ? await resolveGitHubIssueContextAccess({
+            reviewerId: reviewRecord.viewerName,
+            connectionTokenRepository,
+          })
+        : {
+            accessToken: null,
+            grantedScopes: [],
+          };
+
+    return businessContextProvider.loadSnapshotForReview({
+      reviewerId: reviewRecord.viewerName,
+      reviewId: reviewRecord.reviewId,
+      repositoryName: reviewRecord.repositoryName,
+      branchLabel: reviewRecord.branchLabel,
+      title: reviewRecord.title,
+      githubIssueAccessToken: githubIssueContextAccess.accessToken,
+      githubIssueGrantedScopes: githubIssueContextAccess.grantedScopes,
+      source: reviewRecord.source ?? null,
+    });
+  })().catch((error) => {
     const occurredAt = new Date().toISOString();
     businessContextDiagnostics.status = "fallback";
     businessContextDiagnostics.retryable = true;
