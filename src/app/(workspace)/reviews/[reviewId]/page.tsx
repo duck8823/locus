@@ -641,7 +641,12 @@ export default async function ReviewWorkspacePage({
                 idleLabel={copy.actions.reloadNow}
                 pendingLabel={copy.actions.refreshing}
               />
-              <p className={styles.analysisHintText}>{copy.text.autoRefreshHint}</p>
+              <details className={styles.inlineHintDetails} data-testid="analysis-refresh-hint">
+                <summary className={styles.inlineHintSummary}>
+                  {copy.text.analysisHintSummary}
+                </summary>
+                <p className={styles.analysisHintText}>{copy.text.autoRefreshHint}</p>
+              </details>
             </div>
           </div>
           <CollapsibleDetails
@@ -868,7 +873,12 @@ export default async function ReviewWorkspacePage({
               </span>
             }
           >
-            <p className={styles.muted}>{copy.text.businessContextHint}</p>
+            <details className={styles.inlineHintDetails} data-testid="business-context-hint">
+              <summary className={styles.inlineHintSummary}>
+                {copy.text.businessContextHintSummary}
+              </summary>
+              <p className={styles.analysisHintText}>{copy.text.businessContextHint}</p>
+            </details>
             {workspace.businessContext.diagnostics.status === "fallback" ? (
               <div className={styles.workspaceAlert}>
                 <p>{copy.text.businessContextFallback}</p>

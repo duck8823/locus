@@ -69,6 +69,44 @@ test("localizes generated workspace copy when japanese locale is selected", asyn
   ).toBeVisible();
 });
 
+test("keeps verbose hints behind expandable summaries with EN/JA labels", async ({ page }) => {
+  await openSeedWorkspace(page);
+
+  const analysisHint = page.getByTestId("analysis-refresh-hint");
+  const businessContextHint = page.getByTestId("business-context-hint");
+
+  await expect(analysisHint.getByText("Auto-refresh details")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Auto-refresh runs only while analysis is active (paused in background tabs).",
+    ),
+  ).not.toBeVisible();
+  await analysisHint.getByText("Auto-refresh details").click();
+  await expect(
+    page.getByText(
+      "Auto-refresh runs only while analysis is active (paused in background tabs).",
+    ),
+  ).toBeVisible();
+
+  await page.getByText(/Business context|ビジネスコンテキスト/).first().click();
+  await expect(businessContextHint.getByText("How links are inferred")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Phase 2 bridge: this panel shows requirement/spec links related to the current review.",
+    ),
+  ).not.toBeVisible();
+  await businessContextHint.getByText("How links are inferred").click();
+  await expect(
+    page.getByText(
+      "Phase 2 bridge: this panel shows requirement/spec links related to the current review.",
+    ),
+  ).toBeVisible();
+
+  await page.getByTestId("workspace-locale-ja").click();
+  await expect(analysisHint.getByText("自動更新の補足")).toBeVisible();
+  await expect(businessContextHint.getByText("リンク推定の補足")).toBeVisible();
+});
+
 test("keeps review status changes after reload", async ({ page }) => {
   await openSeedWorkspace(page);
 
