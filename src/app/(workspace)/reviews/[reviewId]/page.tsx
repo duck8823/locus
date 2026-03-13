@@ -85,6 +85,10 @@ function formatNullablePercent(value: number | null): string {
   return formatted.endsWith(".0") ? `${formatted.slice(0, -2)}%` : `${formatted}%`;
 }
 
+function compactTextItems(items: Array<string | null | undefined>): string[] {
+  return items.filter((item): item is string => typeof item === "string" && item.length > 0);
+}
+
 function calculateAnalysisProgressPercent(params: {
   analysisProcessedFiles: number | null;
   analysisTotalFiles: number | null;
@@ -429,24 +433,36 @@ export default async function ReviewWorkspacePage({
                               {formatSemanticChangeType(change.changeType, workspaceLocale)}
                             </span>
                           </div>
-                          <p className={styles.semanticChangeMeta}>
-                            {copy.text.semanticKind}: {formatSemanticSymbolKind(change.symbolKind, workspaceLocale)}
-                            {change.signatureSummary
-                              ? ` · ${copy.text.semanticSignature}: ${change.signatureSummary}`
-                              : ""}
-                            {change.bodySummary
-                              ? ` · ${copy.text.semanticBody}: ${
-                                  formatSemanticBodySummary(change.bodySummary, workspaceLocale) ??
-                                  change.bodySummary
-                                }`
-                              : ""}
-                          </p>
-                          <p className={styles.semanticChangeMeta}>
-                            {copy.text.semanticFocus}: {focusView.focusLabel}
-                            {focusView.spanDeltaLabel
-                              ? ` · ${copy.text.semanticSpanDelta}: ${focusView.spanDeltaLabel}`
-                              : ""}
-                          </p>
+                          <ul className={styles.metaChipList}>
+                            {compactTextItems([
+                              `${copy.text.semanticKind}: ${formatSemanticSymbolKind(change.symbolKind, workspaceLocale)}`,
+                              change.signatureSummary
+                                ? `${copy.text.semanticSignature}: ${change.signatureSummary}`
+                                : null,
+                              change.bodySummary
+                                ? `${copy.text.semanticBody}: ${
+                                    formatSemanticBodySummary(change.bodySummary, workspaceLocale) ??
+                                    change.bodySummary
+                                  }`
+                                : null,
+                            ]).map((item) => (
+                              <li key={`${change.semanticChangeId}-meta-${item}`} className={styles.metaChip}>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
+                          <ul className={styles.metaChipList}>
+                            {compactTextItems([
+                              `${copy.text.semanticFocus}: ${focusView.focusLabel}`,
+                              focusView.spanDeltaLabel
+                                ? `${copy.text.semanticSpanDelta}: ${focusView.spanDeltaLabel}`
+                                : null,
+                            ]).map((item) => (
+                              <li key={`${change.semanticChangeId}-focus-${item}`} className={styles.metaChip}>
+                                {item}
+                              </li>
+                            ))}
+                          </ul>
                           <CollapsibleDetails
                             className={styles.semanticLocationDetails}
                             summaryClassName={styles.semanticLocationSummary}
@@ -706,8 +722,12 @@ export default async function ReviewWorkspacePage({
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
-            defaultOpen={workspace.aiSuggestions.length > 0}
-            summary={<span className={styles.muted}>{copy.section.aiSuggestions}</span>}
+            defaultOpen={false}
+            summary={
+              <span className={styles.muted}>
+                {copy.section.aiSuggestions} ({workspace.aiSuggestions.length})
+              </span>
+            }
           >
             <AiSuggestionPanel
               reviewId={workspace.reviewId}
@@ -720,9 +740,11 @@ export default async function ReviewWorkspacePage({
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
-            defaultOpen={workspace.analysisHistory.length > 0}
+            defaultOpen={false}
             summary={
-              <span className={styles.muted}>{copy.section.analysisJobs}</span>
+              <span className={styles.muted}>
+                {copy.section.analysisJobs} ({workspace.analysisHistory.length})
+              </span>
             }
           >
             <p className={styles.muted}>
@@ -766,9 +788,11 @@ export default async function ReviewWorkspacePage({
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
-            defaultOpen={workspace.unsupportedSummary.totalCount > 0}
+            defaultOpen={false}
             summary={
-              <span className={styles.muted}>{copy.section.analysisCoverage}</span>
+              <span className={styles.muted}>
+                {copy.section.analysisCoverage} ({workspace.unsupportedSummary.totalCount})
+              </span>
             }
           >
             {workspace.analysisTotalFiles !== null &&
@@ -826,8 +850,12 @@ export default async function ReviewWorkspacePage({
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
-            defaultOpen={workspace.businessContext.items.length > 0}
-            summary={<span className={styles.muted}>{copy.section.businessContext}</span>}
+            defaultOpen={workspace.businessContext.diagnostics.status === "fallback"}
+            summary={
+              <span className={styles.muted}>
+                {copy.section.businessContext} ({workspace.businessContext.items.length})
+              </span>
+            }
           >
             <p className={styles.muted}>{copy.text.businessContextHint}</p>
             {workspace.businessContext.diagnostics.status === "fallback" ? (
@@ -875,24 +903,33 @@ export default async function ReviewWorkspacePage({
                         </span>
                       )}
                     </div>
-                    <p className={styles.muted}>
-                      {copy.text.businessContextSource}:{" "}
-                      {formatBusinessContextSourceType(
-                        contextItem.sourceType,
-                        workspaceLocale,
-                      )}{" "}
-                      · {copy.text.businessContextStatus}:{" "}
-                      {formatBusinessContextStatus(contextItem.status, workspaceLocale)}
-                      {" · "}
-                      {copy.text.businessContextConfidence}:{" "}
-                      {formatBusinessContextConfidence(contextItem.confidence, workspaceLocale)}
-                      {" · "}
-                      {copy.text.businessContextInferenceSource}:{" "}
-                      {formatBusinessContextInferenceSource(
-                        contextItem.inferenceSource,
-                        workspaceLocale,
-                      )}
-                    </p>
+                    <ul className={styles.metaChipList}>
+                      {compactTextItems([
+                        `${copy.text.businessContextSource}: ${formatBusinessContextSourceType(
+                          contextItem.sourceType,
+                          workspaceLocale,
+                        )}`,
+                        `${copy.text.businessContextStatus}: ${formatBusinessContextStatus(
+                          contextItem.status,
+                          workspaceLocale,
+                        )}`,
+                        `${copy.text.businessContextConfidence}: ${formatBusinessContextConfidence(
+                          contextItem.confidence,
+                          workspaceLocale,
+                        )}`,
+                        `${copy.text.businessContextInferenceSource}: ${formatBusinessContextInferenceSource(
+                          contextItem.inferenceSource,
+                          workspaceLocale,
+                        )}`,
+                      ]).map((item) => (
+                        <li
+                          key={`${contextItem.contextId}-meta-${item}`}
+                          className={styles.metaChip}
+                        >
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
                     {contextItem.summary ? (
                       <p className={styles.muted}>
                         {formatBusinessContextSummary(contextItem.summary, workspaceLocale)}
