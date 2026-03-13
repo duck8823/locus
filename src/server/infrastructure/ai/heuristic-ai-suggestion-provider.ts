@@ -6,7 +6,9 @@ import {
   type AiSuggestionProvider,
 } from "@/server/application/ports/ai-suggestion-provider";
 
-type SuggestionGenerator = (payload: AiSuggestionPayload) => AiSuggestion[];
+type SuggestionGenerator = (
+  payload: AiSuggestionPayload,
+) => AiSuggestion[] | Promise<AiSuggestion[]>;
 
 function toClassifiedProviderError(error: unknown): Error {
   if (
@@ -36,7 +38,7 @@ export class HeuristicAiSuggestionProvider implements AiSuggestionProvider {
 
   async generateSuggestions(input: { payload: AiSuggestionPayload }): Promise<AiSuggestion[]> {
     try {
-      return this.suggestionGenerator(input.payload);
+      return await this.suggestionGenerator(input.payload);
     } catch (error) {
       throw toClassifiedProviderError(error);
     }

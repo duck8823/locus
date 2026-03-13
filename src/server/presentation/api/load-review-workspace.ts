@@ -38,11 +38,12 @@ function buildAiSuggestionFailureFallback(params: {
   payload: AiSuggestionPayload;
   errorType: AiSuggestionProviderErrorType;
 }): AiSuggestion[] {
-  const rationale = [toProviderErrorSummary(params.errorType)];
-
-  if (params.payload.semanticContext.fallbackMessage) {
-    rationale.push(params.payload.semanticContext.fallbackMessage);
-  }
+  const contextFallbackMessages = [
+    params.payload.semanticContext.fallbackMessage,
+    params.payload.architectureContext.fallbackMessage,
+    params.payload.businessContext.fallbackMessage,
+  ].filter((message): message is string => !!message);
+  const rationale = [toProviderErrorSummary(params.errorType), ...contextFallbackMessages];
 
   return [
     {

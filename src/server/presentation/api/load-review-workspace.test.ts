@@ -339,6 +339,7 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.aiSuggestions[0]).toMatchObject({
       suggestionId: "ai-provider-fallback-manual-review",
       category: "general",
+      rationale: expect.arrayContaining(["AI suggestion provider temporary error"]),
     });
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       "ai_suggestion_provider_failed",
@@ -363,6 +364,7 @@ describe("loadReviewWorkspaceDto", () => {
       suggestionId: "ai-provider-fallback-manual-review",
       category: "general",
       confidence: "low",
+      rationale: expect.arrayContaining(["AI suggestion provider permanent error"]),
     });
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       "ai_suggestion_provider_failed",
