@@ -6,10 +6,13 @@ describe("StubBusinessContextProvider", () => {
     const provider = new StubBusinessContextProvider();
 
     const snapshot = await provider.loadSnapshotForReview({
+      reviewerId: "demo-reviewer",
       reviewId: "review-1",
       repositoryName: "octocat/locus",
       branchLabel: "feature/128-profile-validation -> main",
       title: "Ref #128: Improve updateProfile validation",
+      githubIssueAccessToken: null,
+      githubIssueGrantedScopes: [],
       source: {
         provider: "github",
         owner: "octocat",
@@ -36,11 +39,14 @@ describe("StubBusinessContextProvider", () => {
     const provider = new StubBusinessContextProvider();
 
     const snapshot = await provider.loadSnapshotForReview({
+      reviewerId: "demo-reviewer",
       reviewId: "review-2",
       repositoryName: "octocat/locus",
       branchLabel: "feature/92-follow-up -> main",
       title:
         "Implements octocat/locus#91 and mirrors https://github.com/octocat/locus/issues/91 plus keeps #92 follow-up",
+      githubIssueAccessToken: null,
+      githubIssueGrantedScopes: [],
       source: {
         provider: "github",
         owner: "octocat",
@@ -75,10 +81,13 @@ describe("StubBusinessContextProvider", () => {
     const provider = new StubBusinessContextProvider();
 
     const snapshot = await provider.loadSnapshotForReview({
+      reviewerId: "demo-reviewer",
       reviewId: "review-3",
       repositoryName: "octocat/locus",
       branchLabel: "feature/777-cleanup -> main",
       title: "Fixes #777 by hardening OAuth callback retries",
+      githubIssueAccessToken: null,
+      githubIssueGrantedScopes: [],
       source: {
         provider: "github",
         owner: "octocat",
@@ -109,10 +118,13 @@ describe("StubBusinessContextProvider", () => {
     const provider = new StubBusinessContextProvider();
 
     const snapshot = await provider.loadSnapshotForReview({
+      reviewerId: "demo-reviewer",
       reviewId: "review-4",
       repositoryName: "octocat/locus",
       branchLabel: "feature/451-review-map-improvements -> main",
       title: "Improve review map rendering",
+      githubIssueAccessToken: null,
+      githubIssueGrantedScopes: [],
       source: {
         provider: "github",
         owner: "octocat",
@@ -138,10 +150,13 @@ describe("StubBusinessContextProvider", () => {
     const provider = new StubBusinessContextProvider();
 
     const snapshot = await provider.loadSnapshotForReview({
+      reviewerId: "demo-reviewer",
       reviewId: "review-5",
       repositoryName: "seed/demo",
       branchLabel: "seed/default -> main",
       title: "Seed review",
+      githubIssueAccessToken: null,
+      githubIssueGrantedScopes: [],
       source: {
         provider: "seed_fixture",
         fixtureId: "default",

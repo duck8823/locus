@@ -110,7 +110,10 @@ export class GitHubIssueContextProvider implements IssueContextProvider {
       return null;
     }
 
-    const accessToken = resolveAccessToken(input.accessToken) ?? this.token;
+    const accessToken =
+      input.accessToken === undefined
+        ? this.token
+        : resolveAccessToken(input.accessToken);
     const response = await this.requestJson<GitHubIssueApiResponse>({
       path: `/repos/${encodeURIComponent(input.reference.owner)}/${encodeURIComponent(input.reference.repository)}/issues/${input.reference.issueNumber}`,
       accessToken,
