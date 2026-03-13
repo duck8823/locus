@@ -25,6 +25,20 @@ function resolveStorageRecordKey(storageKey: string): string {
   return `${COLLAPSIBLE_STORAGE_PREFIX}:${storageKey}`;
 }
 
+function reportStoragePersistenceError(input: {
+  context: string;
+  error: unknown;
+}): void {
+  if (process.env.NODE_ENV === "production") {
+    return;
+  }
+
+  console.warn(
+    `[CollapsibleDetails] Failed to ${input.context} persisted panel state.`,
+    input.error,
+  );
+}
+
 function readLocalStorageSafely(): Storage | null {
   if (typeof window === "undefined") {
     return null;
@@ -32,7 +46,8 @@ function readLocalStorageSafely(): Storage | null {
 
   try {
     return window.localStorage;
-  } catch {
+  } catch (error) {
+    reportStoragePersistenceError({ context: "access", error });
     return null;
   }
 }
@@ -57,7 +72,8 @@ export function readPersistedManualOpen(input: {
     }
 
     return null;
-  } catch {
+  } catch (error) {
+    reportStoragePersistenceError({ context: "read", error });
     return null;
   }
 }
@@ -80,8 +96,8 @@ export function writePersistedManualOpen(input: {
     }
 
     input.storage.setItem(recordKey, input.manualOpen ? "open" : "closed");
-  } catch {
-    // best-effort persistence
+  } catch (error) {
+    reportStoragePersistenceError({ context: "write", error });
   }
 }
 
@@ -103,6 +119,7 @@ export function CollapsibleDetails({
       storageKey: storageKey ?? null,
     });
     let canceled = false;
+    // Avoid setState-in-effect lint while keeping hydration-safe persisted state restore.
     queueMicrotask(() => {
       if (!canceled) {
         setManualOpen(persistedManualOpen);
