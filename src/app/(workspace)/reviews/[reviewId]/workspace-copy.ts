@@ -460,7 +460,7 @@ export const workspaceCopyByLocale = {
     businessContextInferenceSource: {
       issue_url: "Issue URL参照",
       repo_shorthand: "owner/repo#issue 記法",
-      same_repo_shorthand: "同一repo #issue 記法",
+      same_repo_shorthand: "同一リポジトリ #issue 記法",
       same_repo_closing_keyword: "close/fix/resolve 記法",
       branch_pattern: "ブランチ名規約",
       pull_request_fallback: "PR情報フォールバック",

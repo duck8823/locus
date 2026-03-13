@@ -445,8 +445,11 @@ export default async function ReviewWorkspacePage({
                                     change.bodySummary
                                   }`
                                 : null,
-                            ]).map((item) => (
-                              <li key={`${change.semanticChangeId}-meta-${item}`} className={styles.metaChip}>
+                            ]).map((item, index) => (
+                              <li
+                                key={`${change.semanticChangeId}-meta-${index}`}
+                                className={styles.metaChip}
+                              >
                                 {item}
                               </li>
                             ))}
@@ -457,8 +460,11 @@ export default async function ReviewWorkspacePage({
                               focusView.spanDeltaLabel
                                 ? `${copy.text.semanticSpanDelta}: ${focusView.spanDeltaLabel}`
                                 : null,
-                            ]).map((item) => (
-                              <li key={`${change.semanticChangeId}-focus-${item}`} className={styles.metaChip}>
+                            ]).map((item, index) => (
+                              <li
+                                key={`${change.semanticChangeId}-focus-${index}`}
+                                className={styles.metaChip}
+                              >
                                 {item}
                               </li>
                             ))}
@@ -921,9 +927,9 @@ export default async function ReviewWorkspacePage({
                           contextItem.inferenceSource,
                           workspaceLocale,
                         )}`,
-                      ]).map((item) => (
+                      ]).map((item, index) => (
                         <li
-                          key={`${contextItem.contextId}-meta-${item}`}
+                          key={`${contextItem.contextId}-meta-${index}`}
                           className={styles.metaChip}
                         >
                           {item}

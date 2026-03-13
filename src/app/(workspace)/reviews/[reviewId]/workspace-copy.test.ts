@@ -37,7 +37,7 @@ describe("workspace-copy", () => {
     expect(formatBusinessContextConfidence("high", "ja")).toBe("高");
     expect(formatBusinessContextInferenceSource("branch_pattern", "ja")).toBe("ブランチ名規約");
     expect(formatBusinessContextInferenceSource("same_repo_shorthand", "ja")).toBe(
-      "同一repo #issue 記法",
+      "同一リポジトリ #issue 記法",
     );
     expect(workspaceCopyByLocale.ja.text.semanticFocus).toBe("注目点");
     expect(workspaceCopyByLocale.en.text.semanticSpanDelta).toBe("span delta");
