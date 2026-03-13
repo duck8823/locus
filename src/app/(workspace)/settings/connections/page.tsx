@@ -119,7 +119,7 @@ const copyByLocale = {
     stateSourceLabel: "状態ソース",
     capabilitiesLabel: "機能",
     supportsWebhook: "Webhook",
-    supportsIssueContext: "Issueコンテキスト",
+    supportsIssueContext: "Issue コンテキスト",
     transitionLabel: "状態変更",
     transitionButton: "適用",
     oauthConnectButton: "GitHub OAuthで接続",
@@ -127,10 +127,10 @@ const copyByLocale = {
     manualOverrideSummary: "詳細: 手動状態変更（上級者向け）",
     manualOverrideDescription:
       "プロトタイプ検証用です。通常は OAuth フローを優先してください。",
-    transitionUnavailable: "現在の状態では、この provider の状態変更はできません。",
+    transitionUnavailable: "現在の状態では、このプロバイダーの状態変更はできません。",
     connectedAccountInputLabel: "接続アカウント名（任意）",
     connectedAccountPlaceholder: "例: duck8823",
-    providerNotesLabel: "providerメモ",
+    providerNotesLabel: "プロバイダーメモ",
     transitionHistoryLabel: "最近の状態変更",
     noTransitionHistory: "状態変更履歴はまだありません。",
     changedAtLabel: "変更時刻",
@@ -180,7 +180,7 @@ const copyByLocale = {
     },
     providerDescriptionByKey: {
       github:
-        "次段で OAuth を実装予定。ここでは provider 識別子と状態遷移を固定します。",
+        "次段で OAuth を実装予定。ここではプロバイダー識別子と状態遷移を固定します。",
       confluence:
         "コンテキストオーバーレイ連携は、ホスト連携フロー安定化後に実装します。",
       jira:
