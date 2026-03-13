@@ -12,6 +12,9 @@ function reseedDemoData() {
 
 async function openSeedWorkspace(page: Page) {
   await page.goto("/");
+  await page.evaluate(() => {
+    window.localStorage.clear();
+  });
   await page.getByTestId("open-seed-demo").click();
   await expect(page).toHaveURL(workspacePathPattern);
 }
@@ -97,7 +100,6 @@ test("persists AI suggestion decisions after reload", async ({ page }) => {
   await expect(page.getByText(/Adopted|採用済み/).first()).toBeVisible();
 
   await page.reload();
-  await page.getByText(/AI suggestions|AI提案/).first().click();
   await expect(page.getByText(/Adopted|採用済み/).first()).toBeVisible();
 });
 
@@ -109,6 +111,20 @@ test("keeps dense detail sections collapsed on first render", async ({ page }) =
 
   await page.getByText(/AI suggestions|AI提案/).first().click();
   await expect(page.getByRole("button", { name: /Adopt|採用/ }).first()).toBeVisible();
+});
+
+test("persists reanalysis panel open state after reload", async ({ page }) => {
+  await openSeedWorkspace(page);
+
+  const reanalysisSummary = page.getByText(/Reanalysis status|再解析ステータス/).first();
+  const reanalysisIdleText = page.getByText(/Not requested yet|未リクエスト/).first();
+
+  await expect(reanalysisIdleText).not.toBeVisible();
+  await reanalysisSummary.click();
+  await expect(reanalysisIdleText).toBeVisible();
+
+  await page.reload();
+  await expect(reanalysisIdleText).toBeVisible();
 });
 
 test("keeps review detail pane readable on narrow viewport", async ({ page }) => {

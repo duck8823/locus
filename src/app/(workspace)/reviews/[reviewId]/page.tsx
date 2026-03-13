@@ -649,6 +649,7 @@ export default async function ReviewWorkspacePage({
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
             defaultOpen={workspace.reanalysisStatus !== "idle"}
+            storageKey={`review:${workspace.reviewId}:panel:reanalysis-status`}
             summary={
               <span className={styles.muted}>{copy.section.reanalysisStatus}</span>
             }
@@ -729,6 +730,7 @@ export default async function ReviewWorkspacePage({
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
             defaultOpen={false}
+            storageKey={`review:${workspace.reviewId}:panel:ai-suggestions`}
             summary={
               <span className={styles.muted}>
                 {copy.section.aiSuggestions} ({workspace.aiSuggestions.length})
@@ -747,6 +749,7 @@ export default async function ReviewWorkspacePage({
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
             defaultOpen={false}
+            storageKey={`review:${workspace.reviewId}:panel:analysis-jobs`}
             summary={
               <span className={styles.muted}>
                 {copy.section.analysisJobs} ({workspace.analysisHistory.length})
@@ -795,6 +798,7 @@ export default async function ReviewWorkspacePage({
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
             defaultOpen={false}
+            storageKey={`review:${workspace.reviewId}:panel:analysis-coverage`}
             summary={
               <span className={styles.muted}>
                 {copy.section.analysisCoverage} ({workspace.unsupportedSummary.totalCount})
@@ -857,6 +861,7 @@ export default async function ReviewWorkspacePage({
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
             defaultOpen={workspace.businessContext.diagnostics.status === "fallback"}
+            storageKey={`review:${workspace.reviewId}:panel:business-context`}
             summary={
               <span className={styles.muted}>
                 {copy.section.businessContext} ({workspace.businessContext.items.length})
