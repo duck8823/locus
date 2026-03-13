@@ -65,12 +65,12 @@ UserService.updateProfile()         UserService.updateProfile()
 | 機能 | 概要 | 状態 |
 |---|---|---|
 | アーキテクチャミニマップ v0 | 直近 upstream/downstream と change group 遷移を表示 | 🟡 Prototype |
-| セマンティックDiff | ASTベースの関数・メソッド単位の変更可視化 | 🔴 計画中 |
-| ビジネスロジックコンテキスト | Confluence・GitHub Issues/Projects連携 | 🔴 計画中 |
-| AIレビュー補助 | コンテキストを持ったLLMによるレビュー | 🔴 計画中 |
+| セマンティックDiff | ASTベースの関数・メソッド単位の変更可視化（TS/JS先行） | 🟡 Prototype |
+| ビジネスロジックコンテキスト | GitHub Issueコンテキストのブリッジ + fallback diagnostics（Confluenceは計画中） | 🟡 Prototype |
+| AIレビュー補助 | ワークスペース内提案パネル + ヒューリスティックProvider（LLM provider adapter は計画中） | 🟡 Prototype |
 | Web review workspace v0 | Next.js 製レビューシェルとレイヤ境界、stub ナビゲーション | 🟡 Prototype |
 | レビュー進捗トラッキング | 大きなPRで迷子にならない | 🟡 Prototype |
-| プラガブル接続 | GitHub（初期実装）、GitLab・Bitbucket（プラグイン） | 🔴 計画中 |
+| プラガブル接続 | GitHub先行の契約境界 + Plugin SDK/runtime プロトタイプ | 🟡 Prototype |
 
 ## プラガブル設計
 
@@ -85,13 +85,17 @@ Locusは最初から拡張可能な設計で作られています：
 
 ## プロジェクトの現状
 
-現在のリポジトリには **実行可能な Web シェルのプロトタイプ** があります。より深い解析スライスは、引き続き設計ドキュメント主導で進めます。
+現在のリポジトリには **コアレビュー導線を通しで実行できるプロトタイプ** があります。一方で、製品化と外部統合の強化はこれから進めます。
 
 すでに動くもの:
 - Next.js App Router の Web シェル
 - `src/server/**` 配下のレイヤードサーバースケルトン
 - 選択中の change group と進捗状態を保持できる file-backed demo review session
 - 実際の PR ファイルを semantic analysis に流し込める GitHub pull request snapshot adapter
+- parser adapter 経由のセマンティック差分グルーピング（TS/JS先行）
+- live GitHub Issue context + fallback diagnostics を持つ business-context bridge
+- ヒューリスティック provider を使う AI提案パネルと採否保持
+- 将来拡張向けの Plugin SDK/runtime プロトタイプ境界
 - presentation / application 境界を通る route handler / server action
 
 すでに決まっていること:
@@ -102,7 +106,8 @@ Locusは最初から拡張可能な設計で作られています：
 
 意図的にまだ固定していないこと:
 - 解析言語ごとの長期的な parser family
-- Web シェルの後に載せる最初の semantic-diff スパイク対象言語
+- 本番品質での外部統合（Confluence/Jira、追加コードホスト）
+- 本番運用向けの LLM provider 接続とガードレール
 - MVP 検証に不要な本番インフラ詳細
 
 ### ローカル開発
@@ -192,26 +197,25 @@ npm run demo:data:reseed   # 基本ディレクトリと空のジョブキュー
 
 ## ロードマップ
 
-### MVP
-- GitHub連携
-- Web review workspace v0
-- AI自動生成アーキテクチャマップ
-- セマンティックDiff（関数・メソッド単位）
-- レビュー進捗トラッキング
+### MVP（プロトタイプトラック）
+- ✅ GitHub ingestion + review workspace フロー
+- ✅ セマンティック差分グルーピング（TS/JS先行）
+- ✅ アーキテクチャミニマップ v0
+- ✅ レビュー進捗の永続化
 
-### Phase 2
-- Confluence・GitHub Issues/Projects連携
-- ビジネスロジックコンテキストオーバーレイ
-- AIレビュー補助（全システムコンテキスト付き）
+### Phase 2（製品化・統合）
+- ⏳ Confluence など要件コンテキスト統合の拡張
+- ⏳ LLM provider adapter を使った AIレビュー補助の接続
+- ⏳ live context / analysis 運用の信頼性強化
 
-### Phase 3
-- コミュニティ拡張向けプラグインSDK
-- 追加コードホスト対応
-- UI/UXの洗練
+### Phase 3（エコシステム・運用スケール）
+- ⏳ 追加コードホストアダプタ（GitLab / Bitbucket）
+- ⏳ Plugin エコシステムのハードニング
+- ⏳ 本番移行ハードニング（migration、SLO、セキュリティ運用）
 
 ## コントリビュート
 
-Locusは現在、企画フェーズにあります。フィードバック・アイデア・議論を歓迎します。
+Locusは現在、プロトタイプフェーズにあります。フィードバック・アイデア・議論を歓迎します。
 
 - [Issue](https://github.com/duck8823/locus/issues) を開いてアイデアや問題を共有してください
 - コントリビューションガイドは [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) を参照（英語版: [CONTRIBUTING.md](CONTRIBUTING.md)）

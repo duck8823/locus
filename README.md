@@ -60,12 +60,12 @@ With full knowledge of your system's architecture and the linked specifications,
 | Feature | Description | Status |
 |---|---|---|
 | Architecture Minimap v0 | Immediate upstream/downstream mini-map with change-group navigation | 🟡 Prototype |
-| Semantic Diff | AST-based, function-level change visualization | 🔴 Planned |
-| Business Logic Context | Confluence & GitHub Issues/Projects integration | 🔴 Planned |
-| AI Review Assistant | Context-aware review powered by LLMs | 🔴 Planned |
+| Semantic Diff | AST-based, function-level change visualization (TS/JS-first) | 🟡 Prototype |
+| Business Logic Context | GitHub issue-context bridge with fallback diagnostics (Confluence planned) | 🟡 Prototype |
+| AI Review Assistant | In-workspace suggestion panel with heuristic provider (LLM adapters planned) | 🟡 Prototype |
 | Web Review Workspace v0 | Next.js review shell with layered server boundaries and stub navigation | 🟡 Prototype |
 | Review Progress Tracking | Never lose your place in a large PR | 🟡 Prototype |
-| Pluggable Connections | GitHub (first), GitLab, Bitbucket (via plugins) | 🔴 Planned |
+| Pluggable Connections | Plugin SDK/runtime boundary with GitHub-first contracts | 🟡 Prototype |
 
 ## Pluggable by Design
 
@@ -80,13 +80,17 @@ All external integrations use OAuth, so Locus works with your existing authentic
 
 ## Project Status
 
-This repository now has a **runnable web-shell prototype**, while the deeper analysis slices remain documentation-led.
+This repository now has a **runnable end-to-end prototype** across the core review flow, while productization and external integrations remain in progress.
 
 Already runnable today:
 - a Next.js App Router web shell
 - a layered `src/server/**` backend skeleton
 - a file-backed demo review session that preserves selected change group and status
 - a GitHub pull-request snapshot adapter that can ingest real PR files into semantic analysis
+- parser-adapter based semantic grouping (TS/JS-first)
+- business-context bridge with live GitHub issue-context fetch + fallback diagnostics
+- AI suggestion panel with heuristic provider and decision persistence
+- plugin SDK/runtime prototype boundary for future code-host/context extensions
 - route handlers and server actions that exercise the presentation/application boundary
 
 What is already decided:
@@ -97,7 +101,8 @@ What is already decided:
 
 What is intentionally still open:
 - the long-term parser family per analysis language
-- which languages ship in the first semantic-diff spike after the web shell exists
+- production-ready external integrations (Confluence/Jira, additional code hosts)
+- LLM-backed suggestion providers with production safeguards
 - production infrastructure details that are unnecessary for MVP validation
 
 ### Local development
@@ -187,26 +192,25 @@ npm run demo:data:reseed   # recreate baseline directories + empty job queue
 
 ## Roadmap
 
-### MVP
-- GitHub integration
-- Web review workspace v0
-- AI-generated architecture map
-- Semantic diff (function-level)
-- Review progress tracking
+### MVP (prototype track)
+- ✅ GitHub ingestion + review workspace flow
+- ✅ Semantic change grouping (TS/JS-first)
+- ✅ Architecture minimap v0
+- ✅ Review progress persistence
 
-### Phase 2
-- Confluence & GitHub Issues/Projects integration
-- Business logic context overlay
-- AI review assistant (with full system context)
+### Phase 2 (productization & integration)
+- ⏳ Confluence / richer requirement-context integration
+- ⏳ LLM-backed AI review assistant providers
+- ⏳ Reliability hardening for live context + analysis operations
 
-### Phase 3
-- Plugin SDK for community extensions
-- Additional code host support
-- Refined UI/UX
+### Phase 3 (ecosystem & scale)
+- ⏳ Additional code host adapters (GitLab / Bitbucket)
+- ⏳ Plugin ecosystem hardening
+- ⏳ Production rollout hardening (migration, SLO, security operations)
 
 ## Contributing
 
-Locus is in the planning phase. Feedback, ideas, and discussion are very welcome.
+Locus is in the prototype phase. Feedback, ideas, and discussion are very welcome.
 
 - Open an [Issue](https://github.com/duck8823/locus/issues) to share thoughts or report problems
 - See [CONTRIBUTING.md](CONTRIBUTING.md) or [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) for contribution guidelines
