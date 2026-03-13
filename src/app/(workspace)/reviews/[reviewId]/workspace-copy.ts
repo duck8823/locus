@@ -74,6 +74,7 @@ export const workspaceCopyByLocale = {
       initialAnalysisFailed: "Initial analysis failed.",
       firstRunMayTakeLonger:
         "First run may take longer while local cache is empty.",
+      analysisHintSummary: "Auto-refresh details",
       autoRefreshHint:
         "Auto-refresh runs only while analysis is active (paused in background tabs).",
       notRequestedYet: "Not requested yet",
@@ -94,6 +95,7 @@ export const workspaceCopyByLocale = {
       showingFirstEntriesPrefix: "Showing first",
       showingFirstEntriesSuffix: "entries.",
       hiddenEntriesSuffix: "additional file(s) were omitted.",
+      businessContextHintSummary: "How links are inferred",
       businessContextHint:
         "Phase 2 bridge: this panel shows requirement/spec links related to the current review.",
       noBusinessContextItems: "No requirement links were found.",
@@ -295,6 +297,7 @@ export const workspaceCopyByLocale = {
       initialAnalysisFailed: "初回解析に失敗しました。",
       firstRunMayTakeLonger:
         "初回はローカルキャッシュがないため時間がかかる場合があります。",
+      analysisHintSummary: "自動更新の補足",
       autoRefreshHint:
         "解析中のみ自動更新します（非アクティブタブでは一時停止）。",
       notRequestedYet: "未リクエスト",
@@ -315,6 +318,7 @@ export const workspaceCopyByLocale = {
       showingFirstEntriesPrefix: "先頭",
       showingFirstEntriesSuffix: "件を表示中。",
       hiddenEntriesSuffix: "件は省略しています。",
+      businessContextHintSummary: "リンク推定の補足",
       businessContextHint:
         "Phase 2 ブリッジとして、このレビューに関連する要件/仕様リンクを表示します。",
       noBusinessContextItems: "関連する要件リンクは見つかりませんでした。",
