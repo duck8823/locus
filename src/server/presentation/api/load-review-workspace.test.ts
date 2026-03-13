@@ -80,6 +80,9 @@ describe("loadReviewWorkspaceDto", () => {
     getDependenciesMock.mockReturnValue({
       reviewSessionRepository: {},
       analysisJobScheduler: {},
+      connectionTokenRepository: {
+        findTokenByReviewerId: vi.fn().mockResolvedValue(null),
+      },
       businessContextProvider: {
         loadSnapshotForReview: loadSnapshotForReviewMock,
       },
@@ -94,6 +97,7 @@ describe("loadReviewWorkspaceDto", () => {
         repositoryName: "duck8823/locus",
         branchLabel: "feature/123-scope -> main",
         title: "Demo workspace",
+        viewerName: "demo-reviewer",
         source: null,
       }),
     });
@@ -193,10 +197,13 @@ describe("loadReviewWorkspaceDto", () => {
     expect(
       getDependenciesMock.mock.results[0]?.value.businessContextProvider.loadSnapshotForReview,
     ).toHaveBeenCalledWith({
+      reviewerId: "demo-reviewer",
       reviewId: "review-1",
       repositoryName: "duck8823/locus",
       branchLabel: "feature/123-scope -> main",
       title: "Demo workspace",
+      githubIssueAccessToken: null,
+      githubIssueGrantedScopes: [],
       source: null,
     });
   });
@@ -229,6 +236,9 @@ describe("loadReviewWorkspaceDto", () => {
     getDependenciesMock.mockReturnValueOnce({
       reviewSessionRepository: {},
       analysisJobScheduler: {},
+      connectionTokenRepository: {
+        findTokenByReviewerId: vi.fn().mockResolvedValue(null),
+      },
       businessContextProvider: {
         loadSnapshotForReview: loadSnapshotForReviewMock,
       },
@@ -307,6 +317,9 @@ describe("loadReviewWorkspaceDto", () => {
     getDependenciesMock.mockReturnValueOnce({
       reviewSessionRepository: {},
       analysisJobScheduler: {},
+      connectionTokenRepository: {
+        findTokenByReviewerId: vi.fn().mockResolvedValue(null),
+      },
       businessContextProvider: {
         loadSnapshotForReview: vi.fn().mockRejectedValue(new Error("context timeout")),
       },
@@ -383,6 +396,55 @@ describe("loadReviewWorkspaceDto", () => {
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
 
     expect(dto.aiSuggestions).toEqual([]);
+  });
+
+  it("falls back when GitHub OAuth token scope is insufficient for issue-context fetch", async () => {
+    const loadSnapshotForReviewMock = vi.fn();
+    getDependenciesMock.mockReturnValueOnce({
+      reviewSessionRepository: {},
+      analysisJobScheduler: {},
+      connectionTokenRepository: {
+        findTokenByReviewerId: vi.fn().mockResolvedValue({
+          reviewerId: "demo-reviewer",
+          provider: "github",
+          accessToken: "oauth-access-token",
+          tokenType: "bearer",
+          scope: "read:org",
+          refreshToken: null,
+          expiresAt: null,
+          updatedAt: "2026-03-13T00:00:00.000Z",
+        }),
+      },
+      businessContextProvider: {
+        loadSnapshotForReview: loadSnapshotForReviewMock,
+      },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
+      },
+    });
+    executeMock.mockResolvedValueOnce({
+      id: "review-session",
+      toRecord: () => ({
+        reviewId: "review-1",
+        repositoryName: "duck8823/locus",
+        branchLabel: "feature/123-scope -> main",
+        title: "Demo workspace",
+        viewerName: "demo-reviewer",
+        source: {
+          provider: "github",
+          owner: "duck8823",
+          repository: "locus",
+          pullRequestNumber: 123,
+        },
+      }),
+    });
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(loadSnapshotForReviewMock).not.toHaveBeenCalled();
+    expect(dto.businessContext.provider).toBe("fallback");
+    expect(dto.businessContext.diagnostics.status).toBe("fallback");
+    expect(dto.businessContext.diagnostics.message).toContain("missing issue-read scope");
   });
 
   it("injects analysis-history snapshots and derived dogfooding metrics", async () => {

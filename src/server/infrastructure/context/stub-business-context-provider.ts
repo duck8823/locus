@@ -243,10 +243,13 @@ function toIssueConfidence(reference: ExtractedIssueReference): "high" | "medium
 
 export class StubBusinessContextProvider implements BusinessContextProvider {
   async loadSnapshotForReview(input: {
+    reviewerId: string;
     reviewId: string;
     repositoryName: string;
     branchLabel: string;
     title: string;
+    githubIssueAccessToken: string | null;
+    githubIssueGrantedScopes: string[];
     source: {
       provider: "github";
       owner: string;
