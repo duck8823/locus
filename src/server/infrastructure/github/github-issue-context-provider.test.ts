@@ -102,4 +102,44 @@ describe("GitHubIssueContextProvider", () => {
       }),
     ).resolves.toBeNull();
   });
+
+  it("uses configured fallback token only when accessToken is undefined", async () => {
+    const authorizationValues: Array<string | null> = [];
+    const provider = new GitHubIssueContextProvider({
+      token: "server-level-token",
+      apiBaseUrl: "https://api.github.local",
+      fetchImpl: async (_input, init) => {
+        const headers = new Headers(init?.headers);
+        authorizationValues.push(headers.get("Authorization"));
+        return createJsonResponse({
+          number: 66,
+          title: "Auth behavior",
+          body: null,
+          state: "open",
+          html_url: "https://github.com/acme/locus/issues/66",
+          updated_at: "2026-03-12T00:00:00.000Z",
+        });
+      },
+    });
+
+    await provider.fetchIssue({
+      reference: {
+        provider: "github",
+        owner: "acme",
+        repository: "locus",
+        issueNumber: 66,
+      },
+    });
+    await provider.fetchIssue({
+      reference: {
+        provider: "github",
+        owner: "acme",
+        repository: "locus",
+        issueNumber: 66,
+      },
+      accessToken: null,
+    });
+
+    expect(authorizationValues).toEqual(["Bearer server-level-token", null]);
+  });
 });
