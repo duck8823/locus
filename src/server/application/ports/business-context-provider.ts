@@ -26,10 +26,13 @@ export interface BusinessContextSnapshot {
 
 export interface BusinessContextProvider {
   loadSnapshotForReview(input: {
+    reviewerId: string;
     reviewId: string;
     repositoryName: string;
     branchLabel: string;
     title: string;
+    githubIssueAccessToken: string | null;
+    githubIssueGrantedScopes: string[];
     source: ReviewSessionSource | null;
   }): Promise<BusinessContextSnapshot>;
 }
