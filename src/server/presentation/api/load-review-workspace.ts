@@ -20,6 +20,8 @@ export interface LoadReviewWorkspaceInput {
   reviewId: string;
 }
 
+const AI_PROVIDER_FALLBACK_SUGGESTION_ID = "ai-provider-fallback-manual-review";
+
 function toProviderErrorSummary(errorType: AiSuggestionProviderErrorType): string {
   if (errorType === "temporary") {
     return "AI suggestion provider temporary error";
@@ -35,21 +37,22 @@ function toProviderErrorSummary(errorType: AiSuggestionProviderErrorType): strin
 function buildAiSuggestionFailureFallback(params: {
   payload: AiSuggestionPayload;
   errorType: AiSuggestionProviderErrorType;
-  error: unknown;
 }): AiSuggestion[] {
+  const rationale = [toProviderErrorSummary(params.errorType)];
+
+  if (params.payload.semanticContext.fallbackMessage) {
+    rationale.push(params.payload.semanticContext.fallbackMessage);
+  }
+
   return [
     {
-      suggestionId: "ai-provider-fallback-manual-review",
+      suggestionId: AI_PROVIDER_FALLBACK_SUGGESTION_ID,
       category: "general",
       confidence: "low",
       headline: "AI provider fallback applied",
       recommendation:
         "Primary AI provider failed. Continue with baseline checks while provider diagnostics are investigated.",
-      rationale: [
-        toProviderErrorSummary(params.errorType),
-        params.error instanceof Error ? params.error.message : "Unknown provider failure.",
-        params.payload.semanticContext.fallbackMessage ?? "Semantic context was limited.",
-      ],
+      rationale,
     },
   ];
 }
@@ -179,7 +182,6 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     aiSuggestions = buildAiSuggestionFailureFallback({
       payload: aiSuggestionPayload,
       errorType,
-      error,
     });
   }
 

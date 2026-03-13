@@ -54,7 +54,10 @@ vi.mock("@/server/presentation/formatters/effective-reanalysis-state", () => ({
 
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
 import { generateAiSuggestionsFromPayload } from "@/server/application/ai/generate-ai-suggestions";
-import { AiSuggestionProviderTemporaryError } from "@/server/application/ports/ai-suggestion-provider";
+import {
+  AiSuggestionProviderPermanentError,
+  AiSuggestionProviderTemporaryError,
+} from "@/server/application/ports/ai-suggestion-provider";
 
 describe("loadReviewWorkspaceDto", () => {
   beforeEach(() => {
@@ -343,6 +346,30 @@ describe("loadReviewWorkspaceDto", () => {
         reviewId: "review-1",
         errorType: "temporary",
         message: "rate limited",
+      }),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("returns provider-failure fallback suggestion when provider returns permanent failure", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    generateSuggestionsMock.mockRejectedValueOnce(
+      new AiSuggestionProviderPermanentError("invalid response schema"),
+    );
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.aiSuggestions[0]).toMatchObject({
+      suggestionId: "ai-provider-fallback-manual-review",
+      category: "general",
+      confidence: "low",
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "ai_suggestion_provider_failed",
+      expect.objectContaining({
+        reviewId: "review-1",
+        errorType: "permanent",
+        message: "invalid response schema",
       }),
     );
     consoleErrorSpy.mockRestore();
