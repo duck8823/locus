@@ -360,7 +360,7 @@ export const workspaceCopyByLocale = {
       workspaceErrorNextAction:
         "継続する場合は接続状態とログを確認してください。",
       businessContextFallback:
-        "Business Context の取得に失敗したため、フォールバックスナップショットを表示しています。",
+        "ビジネスコンテキストの取得に失敗したため、フォールバックスナップショットを表示しています。",
       businessContextFallbackRetryHint:
         "「今すぐ再読み込み」で再取得できます。",
     },
@@ -458,13 +458,13 @@ export const workspaceCopyByLocale = {
       low: "低",
     },
     businessContextInferenceSource: {
-      issue_url: "Issue URL",
-      repo_shorthand: "owner/repo#issue",
-      same_repo_shorthand: "#issue 形式",
-      same_repo_closing_keyword: "close/fix/resolve 形式",
-      branch_pattern: "ブランチ規約",
-      pull_request_fallback: "PR番号フォールバック",
-      none: "なし",
+      issue_url: "Issue URL参照",
+      repo_shorthand: "owner/repo#issue 記法",
+      same_repo_shorthand: "同一リポジトリ #issue 記法",
+      same_repo_closing_keyword: "close/fix/resolve 記法",
+      branch_pattern: "ブランチ名規約",
+      pull_request_fallback: "PR情報フォールバック",
+      none: "推定なし",
     },
   },
 } as const;

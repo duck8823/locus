@@ -35,7 +35,10 @@ describe("workspace-copy", () => {
     expect(formatBusinessContextSourceType("github_issue", "ja")).toBe("GitHub Issue");
     expect(formatBusinessContextStatus("candidate", "ja")).toBe("候補");
     expect(formatBusinessContextConfidence("high", "ja")).toBe("高");
-    expect(formatBusinessContextInferenceSource("branch_pattern", "ja")).toBe("ブランチ規約");
+    expect(formatBusinessContextInferenceSource("branch_pattern", "ja")).toBe("ブランチ名規約");
+    expect(formatBusinessContextInferenceSource("same_repo_shorthand", "ja")).toBe(
+      "同一リポジトリ #issue 記法",
+    );
     expect(workspaceCopyByLocale.ja.text.semanticFocus).toBe("注目点");
     expect(workspaceCopyByLocale.en.text.semanticSpanDelta).toBe("span delta");
     expect(workspaceCopyByLocale.ja.text.semanticLocationDetails).toBe("位置情報");
@@ -89,5 +92,8 @@ describe("workspace-copy", () => {
         "ja",
       ),
     ).toContain("Confluence 連携は後続フェーズで対応予定");
+    expect(workspaceCopyByLocale.ja.text.businessContextFallback).toContain(
+      "ビジネスコンテキストの取得に失敗",
+    );
   });
 });

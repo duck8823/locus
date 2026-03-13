@@ -60,6 +60,7 @@ test("localizes generated workspace copy when japanese locale is selected", asyn
   await expect(
     page.getByText("src/core/email-validator.ts のセマンティック差分").first(),
   ).toBeVisible();
+  await page.getByText(/AI suggestions|AI提案/).first().click();
   await expect(
     page.getByText("削除されたシンボルの呼び出し元を確認").first(),
   ).toBeVisible();
@@ -89,13 +90,25 @@ test("keeps review status changes after reload", async ({ page }) => {
 test("persists AI suggestion decisions after reload", async ({ page }) => {
   await openSeedWorkspace(page);
 
+  await page.getByText(/AI suggestions|AI提案/).first().click();
   const adoptButton = page.getByRole("button", { name: /Adopt|採用/ }).first();
   await expect(adoptButton).toBeVisible();
   await adoptButton.click();
   await expect(page.getByText(/Adopted|採用済み/).first()).toBeVisible();
 
   await page.reload();
+  await page.getByText(/AI suggestions|AI提案/).first().click();
   await expect(page.getByText(/Adopted|採用済み/).first()).toBeVisible();
+});
+
+test("keeps dense detail sections collapsed on first render", async ({ page }) => {
+  await openSeedWorkspace(page);
+
+  await expect(page.getByRole("button", { name: /Adopt|採用/ }).first()).not.toBeVisible();
+  await expect(page.getByText(/Average duration|平均所要時間/)).not.toBeVisible();
+
+  await page.getByText(/AI suggestions|AI提案/).first().click();
+  await expect(page.getByRole("button", { name: /Adopt|採用/ }).first()).toBeVisible();
 });
 
 test("keeps review detail pane readable on narrow viewport", async ({ page }) => {
@@ -234,4 +247,19 @@ test("keeps settings layout readable on narrow viewport", async ({ page }) => {
     () => document.documentElement.scrollWidth > window.innerWidth + 1,
   );
   expect(hasHorizontalOverflow).toBe(false);
+});
+
+test("uses japanese labels consistently in connections workspace", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("marketing-locale-ja").click();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(
+    "PR レビュー画面をすぐに開けます。",
+  );
+
+  await page.goto("/settings/connections");
+
+  await expect(page.getByRole("heading", { level: 1, name: "接続設定" })).toBeVisible();
+  await expect(page.getByText("プロバイダーメモ").first()).toBeVisible();
+  await expect(page.getByText(/Issue コンテキスト/).first()).toBeVisible();
+  await expect(page.getByText(/このプロバイダーの状態変更はできません。/).first()).toBeVisible();
 });
