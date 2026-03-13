@@ -20,7 +20,7 @@ export interface BusinessContextItem {
 
 export interface BusinessContextSnapshot {
   generatedAt: string;
-  provider: "stub";
+  provider: "stub" | "github_live";
   items: BusinessContextItem[];
 }
 
