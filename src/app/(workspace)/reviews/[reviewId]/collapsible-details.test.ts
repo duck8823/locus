@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   readPersistedManualOpen,
   resolveCollapsibleOpenState,
-  resolveManualOpenOnToggle,
   writePersistedManualOpen,
 } from "./collapsible-details";
 
@@ -25,42 +24,6 @@ describe("resolveCollapsibleOpenState", () => {
   it("prioritizes user-closed state", () => {
     expect(
       resolveCollapsibleOpenState({ manualOpen: false, defaultOpen: true }),
-    ).toBe(false);
-  });
-});
-
-describe("resolveManualOpenOnToggle", () => {
-  it("keeps previous manual state when toggle is not user-initiated", () => {
-    expect(
-      resolveManualOpenOnToggle({
-        hasManualToggleIntent: false,
-        nextOpen: true,
-        previousManualOpen: null,
-      }),
-    ).toBeNull();
-    expect(
-      resolveManualOpenOnToggle({
-        hasManualToggleIntent: false,
-        nextOpen: false,
-        previousManualOpen: true,
-      }),
-    ).toBe(true);
-  });
-
-  it("captures the latest state when toggle is user-initiated", () => {
-    expect(
-      resolveManualOpenOnToggle({
-        hasManualToggleIntent: true,
-        nextOpen: true,
-        previousManualOpen: null,
-      }),
-    ).toBe(true);
-    expect(
-      resolveManualOpenOnToggle({
-        hasManualToggleIntent: true,
-        nextOpen: false,
-        previousManualOpen: true,
-      }),
     ).toBe(false);
   });
 });

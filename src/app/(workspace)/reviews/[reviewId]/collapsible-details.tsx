@@ -21,18 +21,6 @@ export function resolveCollapsibleOpenState(input: {
   return input.manualOpen ?? input.defaultOpen;
 }
 
-export function resolveManualOpenOnToggle(input: {
-  hasManualToggleIntent: boolean;
-  nextOpen: boolean;
-  previousManualOpen: boolean | null;
-}): boolean | null {
-  if (!input.hasManualToggleIntent) {
-    return input.previousManualOpen;
-  }
-
-  return input.nextOpen;
-}
-
 function resolveStorageRecordKey(storageKey: string): string {
   return `${COLLAPSIBLE_STORAGE_PREFIX}:${storageKey}`;
 }
@@ -114,12 +102,15 @@ export function CollapsibleDetails({
       storage: readLocalStorageSafely(),
       storageKey: storageKey ?? null,
     });
-    const frameId = window.requestAnimationFrame(() => {
-      setManualOpen(persistedManualOpen);
+    let canceled = false;
+    queueMicrotask(() => {
+      if (!canceled) {
+        setManualOpen(persistedManualOpen);
+      }
     });
 
     return () => {
-      window.cancelAnimationFrame(frameId);
+      canceled = true;
     };
   }, [storageKey]);
 
