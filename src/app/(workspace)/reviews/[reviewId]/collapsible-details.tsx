@@ -1,6 +1,8 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+
+const COLLAPSIBLE_STORAGE_PREFIX = "locus-collapsible";
 
 interface CollapsibleDetailsProps {
   className?: string;
@@ -8,6 +10,7 @@ interface CollapsibleDetailsProps {
   contentClassName?: string;
   summary: ReactNode;
   defaultOpen?: boolean;
+  storageKey?: string;
   children: ReactNode;
 }
 
@@ -30,41 +33,111 @@ export function resolveManualOpenOnToggle(input: {
   return input.nextOpen;
 }
 
+function resolveStorageRecordKey(storageKey: string): string {
+  return `${COLLAPSIBLE_STORAGE_PREFIX}:${storageKey}`;
+}
+
+function readLocalStorageSafely(): Storage | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function readPersistedManualOpen(input: {
+  storage: Storage | null;
+  storageKey: string | null;
+}): boolean | null {
+  if (!input.storage || !input.storageKey) {
+    return null;
+  }
+
+  try {
+    const rawValue = input.storage.getItem(resolveStorageRecordKey(input.storageKey));
+
+    if (rawValue === "open") {
+      return true;
+    }
+
+    if (rawValue === "closed") {
+      return false;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function writePersistedManualOpen(input: {
+  storage: Storage | null;
+  storageKey: string | null;
+  manualOpen: boolean | null;
+}): void {
+  if (!input.storage || !input.storageKey) {
+    return;
+  }
+
+  const recordKey = resolveStorageRecordKey(input.storageKey);
+
+  try {
+    if (input.manualOpen === null) {
+      input.storage.removeItem(recordKey);
+      return;
+    }
+
+    input.storage.setItem(recordKey, input.manualOpen ? "open" : "closed");
+  } catch {
+    // best-effort persistence
+  }
+}
+
 export function CollapsibleDetails({
   className,
   summaryClassName,
   contentClassName,
   summary,
   defaultOpen = false,
+  storageKey,
   children,
 }: CollapsibleDetailsProps) {
   const [manualOpen, setManualOpen] = useState<boolean | null>(null);
-  const hasManualToggleIntentRef = useRef(false);
   const open = resolveCollapsibleOpenState({ manualOpen, defaultOpen });
+
+  useEffect(() => {
+    const persistedManualOpen = readPersistedManualOpen({
+      storage: readLocalStorageSafely(),
+      storageKey: storageKey ?? null,
+    });
+    const frameId = window.requestAnimationFrame(() => {
+      setManualOpen(persistedManualOpen);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [storageKey]);
 
   return (
     <details
       className={className}
       open={open}
       onToggle={(event) => {
-        const shouldPersistManualState = hasManualToggleIntentRef.current;
-        hasManualToggleIntentRef.current = false;
         const nextOpen = event.currentTarget.open;
-        setManualOpen((previousManualOpen) =>
-          resolveManualOpenOnToggle({
-            hasManualToggleIntent: shouldPersistManualState,
-            nextOpen,
-            previousManualOpen,
-          }),
-        );
+        setManualOpen(nextOpen);
+        writePersistedManualOpen({
+          storage: readLocalStorageSafely(),
+          storageKey: storageKey ?? null,
+          manualOpen: nextOpen,
+        });
       }}
     >
-      <summary
-        className={summaryClassName}
-        onClick={() => {
-          hasManualToggleIntentRef.current = true;
-        }}
-      >
+      <summary className={summaryClassName}>
         {summary}
       </summary>
       <div className={contentClassName}>{children}</div>
