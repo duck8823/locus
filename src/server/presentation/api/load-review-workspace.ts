@@ -4,6 +4,7 @@ import {
   type AiSuggestion,
   type AiSuggestionPayload,
 } from "@/server/application/ai/ai-suggestion-types";
+import { LiveBusinessContextUnavailableError } from "@/server/application/errors/live-business-context-unavailable-error";
 import {
   classifyAiSuggestionProviderError,
   type AiSuggestionProviderErrorType,
@@ -115,6 +116,13 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     businessContextDiagnostics.message =
       error instanceof Error ? error.message : "Unknown business-context loading failure.";
     businessContextDiagnostics.occurredAt = occurredAt;
+
+    if (error instanceof LiveBusinessContextUnavailableError) {
+      return {
+        ...error.fallbackSnapshot,
+        generatedAt: occurredAt,
+      };
+    }
 
     return {
       generatedAt: occurredAt,
