@@ -681,6 +681,11 @@
     flex-direction: column;
   }
 
+  .inlineHintDetails {
+    flex: none;
+    width: 100%;
+  }
+
   .analysisHintText {
     flex: 1 1 auto;
   }
