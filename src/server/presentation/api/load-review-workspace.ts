@@ -4,7 +4,6 @@ import {
   type AiSuggestion,
   type AiSuggestionPayload,
 } from "@/server/application/ai/ai-suggestion-types";
-import { generateAiSuggestionsFromPayload } from "@/server/application/ai/generate-ai-suggestions";
 import {
   classifyAiSuggestionProviderError,
   type AiSuggestionProviderErrorType,
@@ -177,16 +176,11 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       errorType,
       message: error instanceof Error ? error.message : String(error),
     });
-
-    try {
-      aiSuggestions = generateAiSuggestionsFromPayload(aiSuggestionPayload);
-    } catch {
-      aiSuggestions = buildAiSuggestionFailureFallback({
-        payload: aiSuggestionPayload,
-        errorType,
-        error,
-      });
-    }
+    aiSuggestions = buildAiSuggestionFailureFallback({
+      payload: aiSuggestionPayload,
+      errorType,
+      error,
+    });
   }
 
   return {

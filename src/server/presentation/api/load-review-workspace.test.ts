@@ -325,7 +325,7 @@ describe("loadReviewWorkspaceDto", () => {
     });
   });
 
-  it("falls back to deterministic suggestions when provider returns temporary failure", async () => {
+  it("returns provider-failure fallback suggestion when provider returns temporary failure", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     generateSuggestionsMock.mockRejectedValueOnce(
       new AiSuggestionProviderTemporaryError("rate limited"),
@@ -334,7 +334,7 @@ describe("loadReviewWorkspaceDto", () => {
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
 
     expect(dto.aiSuggestions[0]).toMatchObject({
-      suggestionId: "baseline-manual-review",
+      suggestionId: "ai-provider-fallback-manual-review",
       category: "general",
     });
     expect(consoleErrorSpy).toHaveBeenCalledWith(
