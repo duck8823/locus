@@ -341,6 +341,72 @@ describe("loadReviewWorkspaceDto", () => {
     });
   });
 
+  it("maps live-provider business context payloads on workspace load path", async () => {
+    getDependenciesMock.mockReturnValueOnce({
+      reviewSessionRepository: {},
+      analysisJobScheduler: {},
+      connectionTokenRepository: {
+        findTokenByReviewerId: vi.fn().mockResolvedValue({
+          reviewerId: "demo-reviewer",
+          provider: "github",
+          accessToken: "oauth-access-token",
+          tokenType: "bearer",
+          scope: "repo read:org",
+          refreshToken: null,
+          expiresAt: null,
+          updatedAt: "2026-03-13T00:00:00.000Z",
+        }),
+      },
+      businessContextProvider: {
+        loadSnapshotForReview: vi.fn().mockResolvedValue({
+          generatedAt: "2026-03-13T00:00:00.000Z",
+          provider: "github_live",
+          items: [
+            {
+              contextId: "ctx-gh-66",
+              sourceType: "github_issue",
+              status: "linked",
+              confidence: "high",
+              inferenceSource: "repo_shorthand",
+              title: "Live issue title",
+              summary: "Live issue body from GitHub.",
+              href: "https://github.com/duck8823/locus/issues/66",
+            },
+          ],
+        }),
+      },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
+      },
+    });
+    executeMock.mockResolvedValueOnce({
+      id: "review-session",
+      toRecord: () => ({
+        reviewId: "review-1",
+        repositoryName: "duck8823/locus",
+        branchLabel: "feature/66-live-context -> main",
+        title: "Live context PR",
+        viewerName: "demo-reviewer",
+        source: {
+          provider: "github",
+          owner: "duck8823",
+          repository: "locus",
+          pullRequestNumber: 66,
+        },
+      }),
+    });
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.businessContext.provider).toBe("github_live");
+    expect(dto.businessContext.items[0]).toMatchObject({
+      sourceType: "github_issue",
+      title: "Live issue title",
+      summary: expect.stringContaining("Live issue body"),
+      href: "https://github.com/duck8823/locus/issues/66",
+    });
+  });
+
   it("returns provider-failure fallback suggestion when provider returns temporary failure", async () => {
     const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     generateSuggestionsMock.mockRejectedValueOnce(

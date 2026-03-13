@@ -186,7 +186,7 @@ export interface ReviewWorkspaceBusinessContextItemDto {
 
 export interface ReviewWorkspaceBusinessContextDto {
   generatedAt: string;
-  provider: "stub" | "fallback";
+  provider: "stub" | "github_live" | "fallback";
   diagnostics: {
     status: "ok" | "fallback";
     retryable: boolean;
