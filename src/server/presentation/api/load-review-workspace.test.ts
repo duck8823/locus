@@ -8,6 +8,7 @@ const {
   loadActiveManualReanalysisJobMock,
   loadAnalysisJobHistoryMock,
   resolveEffectiveReanalysisStateMock,
+  generateSuggestionsMock,
 } = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
   executeMock: vi.fn(),
@@ -16,6 +17,7 @@ const {
   loadActiveManualReanalysisJobMock: vi.fn(),
   loadAnalysisJobHistoryMock: vi.fn(),
   resolveEffectiveReanalysisStateMock: vi.fn(),
+  generateSuggestionsMock: vi.fn(),
 }));
 
 vi.mock("@/server/composition/dependencies", () => ({
@@ -51,6 +53,8 @@ vi.mock("@/server/presentation/formatters/effective-reanalysis-state", () => ({
 }));
 
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
+import { generateAiSuggestionsFromPayload } from "@/server/application/ai/generate-ai-suggestions";
+import { AiSuggestionProviderTemporaryError } from "@/server/application/ports/ai-suggestion-provider";
 
 describe("loadReviewWorkspaceDto", () => {
   beforeEach(() => {
@@ -61,6 +65,10 @@ describe("loadReviewWorkspaceDto", () => {
     loadActiveManualReanalysisJobMock.mockReset();
     loadAnalysisJobHistoryMock.mockReset();
     resolveEffectiveReanalysisStateMock.mockReset();
+    generateSuggestionsMock.mockReset();
+    generateSuggestionsMock.mockImplementation(async ({ payload }) =>
+      generateAiSuggestionsFromPayload(payload),
+    );
     const loadSnapshotForReviewMock = vi.fn().mockResolvedValue({
       generatedAt: "2026-03-12T00:00:00.000Z",
       provider: "stub",
@@ -71,6 +79,9 @@ describe("loadReviewWorkspaceDto", () => {
       analysisJobScheduler: {},
       businessContextProvider: {
         loadSnapshotForReview: loadSnapshotForReviewMock,
+      },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
       },
     });
     executeMock.mockResolvedValue({
@@ -218,6 +229,9 @@ describe("loadReviewWorkspaceDto", () => {
       businessContextProvider: {
         loadSnapshotForReview: loadSnapshotForReviewMock,
       },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
+      },
     });
 
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
@@ -293,6 +307,9 @@ describe("loadReviewWorkspaceDto", () => {
       businessContextProvider: {
         loadSnapshotForReview: vi.fn().mockRejectedValue(new Error("context timeout")),
       },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
+      },
     });
 
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
@@ -305,6 +322,19 @@ describe("loadReviewWorkspaceDto", () => {
       status: "unavailable",
       sourceType: "github_issue",
       inferenceSource: "none",
+    });
+  });
+
+  it("falls back to deterministic suggestions when provider returns temporary failure", async () => {
+    generateSuggestionsMock.mockRejectedValueOnce(
+      new AiSuggestionProviderTemporaryError("rate limited"),
+    );
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.aiSuggestions[0]).toMatchObject({
+      suggestionId: "baseline-manual-review",
+      category: "general",
     });
   });
 

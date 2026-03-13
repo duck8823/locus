@@ -1,6 +1,11 @@
 import { GetReviewWorkspaceUseCase } from "@/server/application/usecases/get-review-workspace";
 import { buildAiSuggestionPayload } from "@/server/application/ai/build-ai-suggestion-payload";
+import {
+  type AiSuggestion,
+  type AiSuggestionPayload,
+} from "@/server/application/ai/ai-suggestion-types";
 import { generateAiSuggestionsFromPayload } from "@/server/application/ai/generate-ai-suggestions";
+import { classifyAiSuggestionProviderError } from "@/server/application/ports/ai-suggestion-provider";
 import { getDependencies } from "@/server/composition/dependencies";
 import { loadActiveInitialAnalysisJob } from "@/server/presentation/api/load-active-initial-analysis-job";
 import { loadActiveManualReanalysisJob } from "@/server/presentation/api/load-active-manual-reanalysis-job";
@@ -13,8 +18,54 @@ export interface LoadReviewWorkspaceInput {
   reviewId: string;
 }
 
+function toProviderErrorSummary(errorType: ReturnType<typeof classifyAiSuggestionProviderError>): string {
+  if (errorType === "temporary") {
+    return "AI suggestion provider temporary error";
+  }
+
+  if (errorType === "permanent") {
+    return "AI suggestion provider permanent error";
+  }
+
+  return "AI suggestion provider unknown error";
+}
+
+function buildAiSuggestionFailureFallback(params: {
+  payload: AiSuggestionPayload;
+  errorType: ReturnType<typeof classifyAiSuggestionProviderError>;
+  error: unknown;
+}): AiSuggestion[] {
+  return [
+    {
+      suggestionId: "ai-provider-fallback-manual-review",
+      category: "general",
+      confidence: "low",
+      headline: "AI provider fallback applied",
+      recommendation:
+        "Primary AI provider failed. Continue with baseline checks while provider diagnostics are investigated.",
+      rationale: [
+        toProviderErrorSummary(params.errorType),
+        params.error instanceof Error ? params.error.message : "Unknown provider failure.",
+        params.payload.semanticContext.fallbackMessage ?? "Semantic context was limited.",
+      ],
+    },
+  ];
+}
+
+function resolveAiSuggestionsWithFallback(params: {
+  payload: AiSuggestionPayload;
+  providerSuggestions: AiSuggestion[];
+}): AiSuggestion[] {
+  if (params.providerSuggestions.length > 0) {
+    return params.providerSuggestions;
+  }
+
+  return generateAiSuggestionsFromPayload(params.payload);
+}
+
 export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceInput): Promise<ReviewWorkspaceDto> {
-  const { reviewSessionRepository, analysisJobScheduler, businessContextProvider } = getDependencies();
+  const { reviewSessionRepository, analysisJobScheduler, businessContextProvider, aiSuggestionProvider } =
+    getDependencies();
   const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository });
   const reviewSession = await useCase.execute({ reviewId });
   const activeInitialAnalysisJob = await loadActiveInitialAnalysisJob({
@@ -121,7 +172,27 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       href: item.href,
     })),
   });
-  const aiSuggestions = generateAiSuggestionsFromPayload(aiSuggestionPayload);
+  const aiSuggestions = await aiSuggestionProvider
+    .generateSuggestions({ payload: aiSuggestionPayload })
+    .then((providerSuggestions) =>
+      resolveAiSuggestionsWithFallback({
+        payload: aiSuggestionPayload,
+        providerSuggestions,
+      }),
+    )
+    .catch((error) => {
+      const errorType = classifyAiSuggestionProviderError(error);
+
+      try {
+        return generateAiSuggestionsFromPayload(aiSuggestionPayload);
+      } catch {
+        return buildAiSuggestionFailureFallback({
+          payload: aiSuggestionPayload,
+          errorType,
+          error,
+        });
+      }
+    });
 
   return {
     ...workspace,
