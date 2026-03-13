@@ -3,7 +3,7 @@ import type {
   PersistedConnectionToken,
 } from "@/server/application/ports/connection-token-repository";
 
-export const REQUIRED_GITHUB_ISSUE_READ_SCOPES = ["repo", "public_repo"] as const;
+export const REQUIRED_GITHUB_ISSUE_READ_SCOPES = ["repo"] as const;
 const ALTERNATIVE_GITHUB_ISSUE_READ_SCOPES = ["issues:read", "read:issues"] as const;
 
 export class GitHubIssueContextScopeInsufficientError extends Error {

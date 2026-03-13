@@ -65,7 +65,7 @@ describe("resolveGitHubIssueContextAccess", () => {
       provider: "github",
       accessToken: "oauth-access-token",
       tokenType: "bearer",
-      scope: "public_repo,read:org",
+      scope: "repo,read:org",
       refreshToken: null,
       expiresAt: null,
       updatedAt: "2026-03-13T00:00:00.000Z",
@@ -78,7 +78,7 @@ describe("resolveGitHubIssueContextAccess", () => {
       }),
     ).resolves.toEqual({
       accessToken: "oauth-access-token",
-      grantedScopes: ["public_repo", "read:org"],
+      grantedScopes: ["repo", "read:org"],
     });
   });
 
@@ -117,8 +117,33 @@ describe("resolveGitHubIssueContextAccess", () => {
     ).rejects.toMatchObject({
       name: "GitHubIssueContextScopeInsufficientError",
       message: expect.stringContaining("missing issue-read scope"),
-      requiredAnyOfScopes: ["repo", "public_repo"],
+      requiredAnyOfScopes: ["repo"],
       grantedScopes: ["read:org"],
+    });
+  });
+
+  it("rejects public_repo-only scope because private-repository reads require repo scope", async () => {
+    const connectionTokenRepository = new InMemoryConnectionTokenRepository();
+    await connectionTokenRepository.upsertToken({
+      reviewerId: "reviewer-1",
+      provider: "github",
+      accessToken: "oauth-access-token",
+      tokenType: "bearer",
+      scope: "public_repo",
+      refreshToken: null,
+      expiresAt: null,
+      updatedAt: "2026-03-13T00:00:00.000Z",
+    });
+
+    await expect(
+      resolveGitHubIssueContextAccess({
+        reviewerId: "reviewer-1",
+        connectionTokenRepository,
+      }),
+    ).rejects.toMatchObject({
+      name: "GitHubIssueContextScopeInsufficientError",
+      requiredAnyOfScopes: ["repo"],
+      grantedScopes: ["public_repo"],
     });
   });
 
