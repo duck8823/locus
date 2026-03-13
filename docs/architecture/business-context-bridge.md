@@ -43,7 +43,7 @@ export interface ReviewWorkspaceBusinessContextItemDto {
 
 export interface ReviewWorkspaceBusinessContextDto {
   generatedAt: string
-  provider: "stub" | "fallback"
+  provider: "stub" | "github_live" | "fallback"
   diagnostics: {
     status: "ok" | "fallback"
     retryable: boolean
@@ -84,7 +84,8 @@ export interface ReviewWorkspaceBusinessContextDto {
 
 ## Failure Handling (H3-4)
 
-- When context loading fails, API returns `provider: "fallback"` with a deterministic unavailable item.
+- If live GitHub enrichment fails but stub inference is available, API keeps stub-derived items and returns `provider: "fallback"`.
+- If provider loading fails before any fallback snapshot is available, API returns `provider: "fallback"` with a deterministic unavailable item.
 - `diagnostics` includes:
   - `status: "fallback"`
   - `retryable` flag for UI

@@ -43,7 +43,7 @@ export interface ReviewWorkspaceBusinessContextItemDto {
 
 export interface ReviewWorkspaceBusinessContextDto {
   generatedAt: string
-  provider: "stub" | "fallback"
+  provider: "stub" | "github_live" | "fallback"
   diagnostics: {
     status: "ok" | "fallback"
     retryable: boolean
@@ -84,7 +84,8 @@ export interface ReviewWorkspaceBusinessContextDto {
 
 ## 失敗時ハンドリング (H3-4)
 
-- context 読み込み失敗時は API が `provider: "fallback"` を返し、決定的な unavailable 行を返す。
+- live GitHub enrich が失敗しても stub 推定が利用可能な場合は、stub 候補行を保持したまま `provider: "fallback"` を返す。
+- fallback snapshot も得られない失敗時は、API が `provider: "fallback"` を返し、決定的な unavailable 行を返す。
 - `diagnostics` で次を返す:
   - `status: "fallback"`
   - UI 再試行可否の `retryable`

@@ -4,6 +4,7 @@ import type {
   BusinessContextSnapshot,
 } from "@/server/application/ports/business-context-provider";
 import type { IssueContextProvider } from "@/server/application/ports/issue-context-provider";
+import { LiveBusinessContextUnavailableError } from "@/server/application/errors/live-business-context-unavailable-error";
 import { LiveBusinessContextProvider } from "@/server/infrastructure/context/live-business-context-provider";
 
 function createFallbackSnapshot(): BusinessContextSnapshot {
@@ -99,7 +100,7 @@ describe("LiveBusinessContextProvider", () => {
     });
   });
 
-  it("falls back to stub snapshot when live fetch fails", async () => {
+  it("throws typed unavailable error with fallback snapshot when live fetch fails", async () => {
     const fallbackSnapshot = createFallbackSnapshot();
     const fallbackProvider: BusinessContextProvider = {
       loadSnapshotForReview: vi.fn().mockResolvedValue(fallbackSnapshot),
@@ -113,9 +114,20 @@ describe("LiveBusinessContextProvider", () => {
       issueContextProvider,
     });
 
-    const snapshot = await provider.loadSnapshotForReview(createInput());
+    let thrownError: unknown;
 
-    expect(snapshot).toEqual(fallbackSnapshot);
+    try {
+      await provider.loadSnapshotForReview(createInput());
+    } catch (error) {
+      thrownError = error;
+    }
+
+    expect(thrownError).toBeInstanceOf(LiveBusinessContextUnavailableError);
+
+    if (thrownError instanceof LiveBusinessContextUnavailableError) {
+      expect(thrownError.fallbackSnapshot).toEqual(fallbackSnapshot);
+      expect(thrownError.message).toContain("Live business-context fetch failed");
+    }
   });
 
   it("returns stub snapshot for non-github sources", async () => {

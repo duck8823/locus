@@ -3,6 +3,7 @@ import type {
   BusinessContextProvider,
   BusinessContextSnapshot,
 } from "@/server/application/ports/business-context-provider";
+import { LiveBusinessContextUnavailableError } from "@/server/application/errors/live-business-context-unavailable-error";
 import type {
   IssueContextProvider,
   IssueContextRecord,
@@ -244,8 +245,15 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
         provider: "github_live",
         items: enrichedItems,
       };
-    } catch {
-      return fallbackSnapshot;
+    } catch (error) {
+      throw new LiveBusinessContextUnavailableError({
+        fallbackSnapshot,
+        message:
+          error instanceof Error && error.message.trim().length > 0
+            ? `Live business-context fetch failed: ${error.message}`
+            : "Live business-context fetch failed.",
+        cause: error,
+      });
     }
   }
 }

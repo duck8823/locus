@@ -58,6 +58,7 @@ import {
   AiSuggestionProviderPermanentError,
   AiSuggestionProviderTemporaryError,
 } from "@/server/application/ports/ai-suggestion-provider";
+import { LiveBusinessContextUnavailableError } from "@/server/application/errors/live-business-context-unavailable-error";
 
 describe("loadReviewWorkspaceDto", () => {
   beforeEach(() => {
@@ -339,6 +340,62 @@ describe("loadReviewWorkspaceDto", () => {
       sourceType: "github_issue",
       inferenceSource: "none",
     });
+  });
+
+  it("preserves stub candidates when live business-context provider returns typed unavailable error", async () => {
+    getDependenciesMock.mockReturnValueOnce({
+      reviewSessionRepository: {},
+      analysisJobScheduler: {},
+      connectionTokenRepository: {
+        findTokenByReviewerId: vi.fn().mockResolvedValue(null),
+      },
+      businessContextProvider: {
+        loadSnapshotForReview: vi.fn().mockRejectedValue(
+          new LiveBusinessContextUnavailableError({
+            message: "Live business-context fetch failed: GitHub API timeout",
+            fallbackSnapshot: {
+              generatedAt: "2026-03-13T00:00:00.000Z",
+              provider: "stub",
+              items: [
+                {
+                  contextId: "ctx-gh-66",
+                  sourceType: "github_issue",
+                  status: "candidate",
+                  confidence: "medium",
+                  inferenceSource: "branch_pattern",
+                  title: "Candidate issue: duck8823/locus#66",
+                  summary: "Detected from branch naming convention.",
+                  href: "https://github.com/duck8823/locus/issues/66",
+                },
+              ],
+            },
+          }),
+        ),
+      },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
+      },
+    });
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.businessContext.provider).toBe("fallback");
+    expect(dto.businessContext.diagnostics.status).toBe("fallback");
+    expect(dto.businessContext.diagnostics.message).toBe(
+      "Live business-context fetch failed: GitHub API timeout",
+    );
+    expect(dto.businessContext.items).toEqual([
+      {
+        contextId: "ctx-gh-66",
+        sourceType: "github_issue",
+        status: "candidate",
+        confidence: "medium",
+        inferenceSource: "branch_pattern",
+        title: "Candidate issue: duck8823/locus#66",
+        summary: "Detected from branch naming convention.",
+        href: "https://github.com/duck8823/locus/issues/66",
+      },
+    ]);
   });
 
   it("maps live-provider business context payloads on workspace load path", async () => {
