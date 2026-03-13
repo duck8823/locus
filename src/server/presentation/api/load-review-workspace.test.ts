@@ -8,6 +8,7 @@ const {
   loadActiveManualReanalysisJobMock,
   loadAnalysisJobHistoryMock,
   resolveEffectiveReanalysisStateMock,
+  generateSuggestionsMock,
 } = vi.hoisted(() => ({
   getDependenciesMock: vi.fn(),
   executeMock: vi.fn(),
@@ -16,6 +17,7 @@ const {
   loadActiveManualReanalysisJobMock: vi.fn(),
   loadAnalysisJobHistoryMock: vi.fn(),
   resolveEffectiveReanalysisStateMock: vi.fn(),
+  generateSuggestionsMock: vi.fn(),
 }));
 
 vi.mock("@/server/composition/dependencies", () => ({
@@ -51,6 +53,11 @@ vi.mock("@/server/presentation/formatters/effective-reanalysis-state", () => ({
 }));
 
 import { loadReviewWorkspaceDto } from "@/server/presentation/api/load-review-workspace";
+import { generateAiSuggestionsFromPayload } from "@/server/application/ai/generate-ai-suggestions";
+import {
+  AiSuggestionProviderPermanentError,
+  AiSuggestionProviderTemporaryError,
+} from "@/server/application/ports/ai-suggestion-provider";
 
 describe("loadReviewWorkspaceDto", () => {
   beforeEach(() => {
@@ -61,6 +68,10 @@ describe("loadReviewWorkspaceDto", () => {
     loadActiveManualReanalysisJobMock.mockReset();
     loadAnalysisJobHistoryMock.mockReset();
     resolveEffectiveReanalysisStateMock.mockReset();
+    generateSuggestionsMock.mockReset();
+    generateSuggestionsMock.mockImplementation(async ({ payload }) =>
+      generateAiSuggestionsFromPayload(payload),
+    );
     const loadSnapshotForReviewMock = vi.fn().mockResolvedValue({
       generatedAt: "2026-03-12T00:00:00.000Z",
       provider: "stub",
@@ -74,6 +85,9 @@ describe("loadReviewWorkspaceDto", () => {
       },
       businessContextProvider: {
         loadSnapshotForReview: loadSnapshotForReviewMock,
+      },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
       },
     });
     executeMock.mockResolvedValue({
@@ -228,6 +242,9 @@ describe("loadReviewWorkspaceDto", () => {
       businessContextProvider: {
         loadSnapshotForReview: loadSnapshotForReviewMock,
       },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
+      },
     });
 
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
@@ -306,6 +323,9 @@ describe("loadReviewWorkspaceDto", () => {
       businessContextProvider: {
         loadSnapshotForReview: vi.fn().mockRejectedValue(new Error("context timeout")),
       },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
+      },
     });
 
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
@@ -319,6 +339,63 @@ describe("loadReviewWorkspaceDto", () => {
       sourceType: "github_issue",
       inferenceSource: "none",
     });
+  });
+
+  it("returns provider-failure fallback suggestion when provider returns temporary failure", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    generateSuggestionsMock.mockRejectedValueOnce(
+      new AiSuggestionProviderTemporaryError("rate limited"),
+    );
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.aiSuggestions[0]).toMatchObject({
+      suggestionId: "ai-provider-fallback-manual-review",
+      category: "general",
+      rationale: expect.arrayContaining(["AI suggestion provider temporary error"]),
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "ai_suggestion_provider_failed",
+      expect.objectContaining({
+        reviewId: "review-1",
+        errorType: "temporary",
+        message: "rate limited",
+      }),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("returns provider-failure fallback suggestion when provider returns permanent failure", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    generateSuggestionsMock.mockRejectedValueOnce(
+      new AiSuggestionProviderPermanentError("invalid response schema"),
+    );
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.aiSuggestions[0]).toMatchObject({
+      suggestionId: "ai-provider-fallback-manual-review",
+      category: "general",
+      confidence: "low",
+      rationale: expect.arrayContaining(["AI suggestion provider permanent error"]),
+    });
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "ai_suggestion_provider_failed",
+      expect.objectContaining({
+        reviewId: "review-1",
+        errorType: "permanent",
+        message: "invalid response schema",
+      }),
+    );
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("accepts an empty suggestion response from provider as valid output", async () => {
+    generateSuggestionsMock.mockResolvedValueOnce([]);
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.aiSuggestions).toEqual([]);
   });
 
   it("falls back when GitHub OAuth token scope is insufficient for issue-context fetch", async () => {
@@ -340,6 +417,9 @@ describe("loadReviewWorkspaceDto", () => {
       },
       businessContextProvider: {
         loadSnapshotForReview: loadSnapshotForReviewMock,
+      },
+      aiSuggestionProvider: {
+        generateSuggestions: generateSuggestionsMock,
       },
     });
     executeMock.mockResolvedValueOnce({

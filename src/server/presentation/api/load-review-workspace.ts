@@ -1,6 +1,13 @@
 import { GetReviewWorkspaceUseCase } from "@/server/application/usecases/get-review-workspace";
 import { buildAiSuggestionPayload } from "@/server/application/ai/build-ai-suggestion-payload";
-import { generateAiSuggestionsFromPayload } from "@/server/application/ai/generate-ai-suggestions";
+import {
+  type AiSuggestion,
+  type AiSuggestionPayload,
+} from "@/server/application/ai/ai-suggestion-types";
+import {
+  classifyAiSuggestionProviderError,
+  type AiSuggestionProviderErrorType,
+} from "@/server/application/ports/ai-suggestion-provider";
 import { resolveGitHubIssueContextAccess } from "@/server/application/services/resolve-github-issue-context-access";
 import { getDependencies } from "@/server/composition/dependencies";
 import { loadActiveInitialAnalysisJob } from "@/server/presentation/api/load-active-initial-analysis-job";
@@ -14,12 +21,48 @@ export interface LoadReviewWorkspaceInput {
   reviewId: string;
 }
 
+const AI_PROVIDER_FALLBACK_SUGGESTION_ID = "ai-provider-fallback-manual-review";
+const PROVIDER_ERROR_LABEL: Record<AiSuggestionProviderErrorType, string> = {
+  temporary: "AI suggestion provider temporary error",
+  permanent: "AI suggestion provider permanent error",
+  unknown: "AI suggestion provider unknown error",
+};
+
+function toProviderErrorSummary(errorType: AiSuggestionProviderErrorType): string {
+  return PROVIDER_ERROR_LABEL[errorType];
+}
+
+function buildAiSuggestionFailureFallback(params: {
+  payload: AiSuggestionPayload;
+  errorType: AiSuggestionProviderErrorType;
+}): AiSuggestion[] {
+  const contextFallbackMessages = [
+    params.payload.semanticContext.fallbackMessage,
+    params.payload.architectureContext.fallbackMessage,
+    params.payload.businessContext.fallbackMessage,
+  ].filter((message): message is string => !!message);
+  const rationale = [toProviderErrorSummary(params.errorType), ...contextFallbackMessages];
+
+  return [
+    {
+      suggestionId: AI_PROVIDER_FALLBACK_SUGGESTION_ID,
+      category: "general",
+      confidence: "low",
+      headline: "AI provider fallback applied",
+      recommendation:
+        "Primary AI provider failed. Continue with baseline checks while provider diagnostics are investigated.",
+      rationale,
+    },
+  ];
+}
+
 export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceInput): Promise<ReviewWorkspaceDto> {
   const {
     reviewSessionRepository,
     analysisJobScheduler,
     businessContextProvider,
     connectionTokenRepository,
+    aiSuggestionProvider,
   } = getDependencies();
   const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository });
   const reviewSession = await useCase.execute({ reviewId });
@@ -143,7 +186,24 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       href: item.href,
     })),
   });
-  const aiSuggestions = generateAiSuggestionsFromPayload(aiSuggestionPayload);
+  let aiSuggestions: AiSuggestion[];
+
+  try {
+    aiSuggestions = await aiSuggestionProvider.generateSuggestions({
+      payload: aiSuggestionPayload,
+    });
+  } catch (error) {
+    const errorType = classifyAiSuggestionProviderError(error);
+    console.error("ai_suggestion_provider_failed", {
+      reviewId: workspace.reviewId,
+      errorType,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    aiSuggestions = buildAiSuggestionFailureFallback({
+      payload: aiSuggestionPayload,
+      errorType,
+    });
+  }
 
   return {
     ...workspace,
