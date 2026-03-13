@@ -42,6 +42,12 @@ describe("workspace-copy", () => {
     expect(workspaceCopyByLocale.ja.text.semanticFocus).toBe("注目点");
     expect(workspaceCopyByLocale.en.text.semanticSpanDelta).toBe("span delta");
     expect(workspaceCopyByLocale.ja.text.semanticLocationDetails).toBe("位置情報");
+    expect(workspaceCopyByLocale.en.text.analysisHintSummary).toBe("Auto-refresh details");
+    expect(workspaceCopyByLocale.ja.text.analysisHintSummary).toBe("自動更新の補足");
+    expect(workspaceCopyByLocale.en.text.businessContextHintSummary).toBe(
+      "How links are inferred",
+    );
+    expect(workspaceCopyByLocale.ja.text.businessContextHintSummary).toBe("リンク推定の補足");
   });
 
   it("localizes known generated workspace text in japanese", () => {
