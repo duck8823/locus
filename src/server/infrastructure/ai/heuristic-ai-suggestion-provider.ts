@@ -15,6 +15,7 @@ function toClassifiedProviderError(error: unknown): Error {
     error instanceof AiSuggestionProviderTemporaryError ||
     error instanceof AiSuggestionProviderPermanentError
   ) {
+    // Keep provider-classified errors unchanged to avoid losing original semantics.
     return error;
   }
 

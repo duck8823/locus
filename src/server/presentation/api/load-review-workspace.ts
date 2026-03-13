@@ -21,17 +21,14 @@ export interface LoadReviewWorkspaceInput {
 }
 
 const AI_PROVIDER_FALLBACK_SUGGESTION_ID = "ai-provider-fallback-manual-review";
+const PROVIDER_ERROR_LABEL: Record<AiSuggestionProviderErrorType, string> = {
+  temporary: "AI suggestion provider temporary error",
+  permanent: "AI suggestion provider permanent error",
+  unknown: "AI suggestion provider unknown error",
+};
 
 function toProviderErrorSummary(errorType: AiSuggestionProviderErrorType): string {
-  if (errorType === "temporary") {
-    return "AI suggestion provider temporary error";
-  }
-
-  if (errorType === "permanent") {
-    return "AI suggestion provider permanent error";
-  }
-
-  return "AI suggestion provider unknown error";
+  return PROVIDER_ERROR_LABEL[errorType];
 }
 
 function buildAiSuggestionFailureFallback(params: {
