@@ -5,7 +5,10 @@ import {
   type AiSuggestionPayload,
 } from "@/server/application/ai/ai-suggestion-types";
 import { generateAiSuggestionsFromPayload } from "@/server/application/ai/generate-ai-suggestions";
-import { classifyAiSuggestionProviderError } from "@/server/application/ports/ai-suggestion-provider";
+import {
+  classifyAiSuggestionProviderError,
+  type AiSuggestionProviderErrorType,
+} from "@/server/application/ports/ai-suggestion-provider";
 import { getDependencies } from "@/server/composition/dependencies";
 import { loadActiveInitialAnalysisJob } from "@/server/presentation/api/load-active-initial-analysis-job";
 import { loadActiveManualReanalysisJob } from "@/server/presentation/api/load-active-manual-reanalysis-job";
@@ -18,7 +21,7 @@ export interface LoadReviewWorkspaceInput {
   reviewId: string;
 }
 
-function toProviderErrorSummary(errorType: ReturnType<typeof classifyAiSuggestionProviderError>): string {
+function toProviderErrorSummary(errorType: AiSuggestionProviderErrorType): string {
   if (errorType === "temporary") {
     return "AI suggestion provider temporary error";
   }
@@ -32,7 +35,7 @@ function toProviderErrorSummary(errorType: ReturnType<typeof classifyAiSuggestio
 
 function buildAiSuggestionFailureFallback(params: {
   payload: AiSuggestionPayload;
-  errorType: ReturnType<typeof classifyAiSuggestionProviderError>;
+  errorType: AiSuggestionProviderErrorType;
   error: unknown;
 }): AiSuggestion[] {
   return [
@@ -172,27 +175,29 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       href: item.href,
     })),
   });
-  const aiSuggestions = await aiSuggestionProvider
-    .generateSuggestions({ payload: aiSuggestionPayload })
-    .then((providerSuggestions) =>
-      resolveAiSuggestionsWithFallback({
-        payload: aiSuggestionPayload,
-        providerSuggestions,
-      }),
-    )
-    .catch((error) => {
-      const errorType = classifyAiSuggestionProviderError(error);
+  let aiSuggestions: AiSuggestion[];
 
-      try {
-        return generateAiSuggestionsFromPayload(aiSuggestionPayload);
-      } catch {
-        return buildAiSuggestionFailureFallback({
-          payload: aiSuggestionPayload,
-          errorType,
-          error,
-        });
-      }
+  try {
+    const providerSuggestions = await aiSuggestionProvider.generateSuggestions({
+      payload: aiSuggestionPayload,
     });
+    aiSuggestions = resolveAiSuggestionsWithFallback({
+      payload: aiSuggestionPayload,
+      providerSuggestions,
+    });
+  } catch (error) {
+    const errorType = classifyAiSuggestionProviderError(error);
+
+    try {
+      aiSuggestions = generateAiSuggestionsFromPayload(aiSuggestionPayload);
+    } catch {
+      aiSuggestions = buildAiSuggestionFailureFallback({
+        payload: aiSuggestionPayload,
+        errorType,
+        error,
+      });
+    }
+  }
 
   return {
     ...workspace,
