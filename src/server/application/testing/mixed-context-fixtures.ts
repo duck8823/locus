@@ -16,6 +16,8 @@ const MIXED_CONTEXT_ITEMS: readonly BusinessContextItem[] = [
   },
   {
     contextId: "ctx-jira-linked-321",
+    // NOTE: Presentation contract is provider-neutral (`github_issue` | `confluence_page`).
+    // Jira-style rows are intentionally represented as `github_issue` until DTO expansion is approved.
     sourceType: "github_issue",
     status: "linked",
     confidence: "high",
@@ -46,6 +48,7 @@ const MIXED_CONTEXT_ITEMS: readonly BusinessContextItem[] = [
   },
   {
     contextId: "ctx-jira-candidate-998",
+    // NOTE: keep provider-neutral sourceType for backward compatibility with current DTO contract.
     sourceType: "github_issue",
     status: "candidate",
     confidence: "medium",
