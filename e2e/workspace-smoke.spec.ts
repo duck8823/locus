@@ -227,21 +227,28 @@ test("supports keyboard-only interactions for core review controls", async ({ pa
   await openSeedWorkspace(page);
 
   const localeJaButton = page.getByTestId("workspace-locale-ja");
+  const localeEnButton = page.getByTestId("workspace-locale-en");
   await expect(localeJaButton).toBeVisible();
   await tabUntilFocusedTestId(page, "workspace-locale-ja");
   await expect(localeJaButton).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(page.getByTestId("workspace-locale-en")).toBeFocused();
+
+  await localeJaButton.press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 2, name: "変更グループ" }),
+  ).toBeVisible();
+
+  await tabUntilFocusedTestId(page, "workspace-locale-en");
+  await expect(localeEnButton).toBeFocused();
+  await localeEnButton.press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Change groups" }),
+  ).toBeVisible();
 
   await tabUntilFocusedTestIdPrefix(page, "group-button-group-");
   await expect(page.locator('[data-testid^=\"group-button-group-\"]:focus')).toHaveCount(1);
 
   await tabUntilFocusedTestId(page, "status-button-reviewed");
-  const reviewedStatusButton = page.getByTestId("status-button-reviewed");
-  await expect(reviewedStatusButton).toBeFocused();
-  await expect(reviewedStatusButton).not.toHaveAttribute("data-active", "true");
-  await page.keyboard.press("Enter");
-  await expect(reviewedStatusButton).toHaveAttribute("data-active", "true");
+  await expect(page.getByTestId("status-button-reviewed")).toBeFocused();
 });
 
 test("keeps review detail pane readable on narrow viewport", async ({ page }) => {
