@@ -323,6 +323,18 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
       failureRatePercent: null,
       recoverySuccessRatePercent: null,
     },
+    queueHealth: {
+      status: "healthy",
+      queuedJobs: 0,
+      runningJobs: 0,
+      staleRunningJobs: 0,
+      failedTerminalJobs: 0,
+      lastFailedJob: null,
+      diagnostics: {
+        staleRunningThresholdMs: 10 * 60 * 1000,
+        reasonCodes: [],
+      },
+    },
     aiSuggestionPayload: null,
     aiSuggestions: [],
     reanalysisStatus: record.reanalysisStatus ?? "idle",
