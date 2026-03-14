@@ -653,6 +653,7 @@ export default async function ReviewWorkspacePage({
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
+            summaryTestId="reanalysis-status-summary"
             defaultOpen={workspace.reanalysisStatus !== "idle"}
             storageKey={`review:${workspace.reviewId}:panel:reanalysis-status`}
             summary={
@@ -734,6 +735,7 @@ export default async function ReviewWorkspacePage({
             className={styles.collapsibleDetail}
             summaryClassName={styles.collapsibleSummary}
             contentClassName={styles.collapsibleContent}
+            summaryTestId="ai-suggestions-summary"
             defaultOpen={false}
             storageKey={`review:${workspace.reviewId}:panel:ai-suggestions`}
             summary={
