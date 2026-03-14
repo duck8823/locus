@@ -47,8 +47,20 @@ export interface ReviewWorkspaceBusinessContextDto {
   diagnostics: {
     status: "ok" | "fallback"
     retryable: boolean
+    reasonCode:
+      | "timeout"
+      | "network"
+      | "rate_limit"
+      | "auth"
+      | "not_found"
+      | "upstream_5xx"
+      | "client_error"
+      | "unknown"
+      | null
     message: string | null
     occurredAt: string | null
+    cacheHit: boolean | null
+    fallbackReason: "stale_cache" | "live_fetch_failed" | null
   }
   items: ReviewWorkspaceBusinessContextItemDto[]
 }
@@ -89,8 +101,10 @@ export interface ReviewWorkspaceBusinessContextDto {
 - `diagnostics` で次を返す:
   - `status: "fallback"`
   - UI 再試行可否の `retryable`
+  - 正規化された `reasonCode`（`timeout`, `network`, `auth` など）
   - 取得できる範囲の `message`
   - 発生時刻 `occurredAt`
+  - 運用診断向けの `cacheHit`, `fallbackReason`
 - UI は「今すぐ再読み込み」を案内しつつ、ワークスペース本体は継続利用可能にする。
 
 ## 拡張ポリシー
