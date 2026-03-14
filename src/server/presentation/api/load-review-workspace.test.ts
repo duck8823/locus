@@ -129,6 +129,7 @@ describe("loadReviewWorkspaceDto", () => {
         diagnostics: {
           status: "ok",
           retryable: true,
+          reasonCode: null,
           message: null,
           occurredAt: null,
           cacheHit: null,
@@ -221,6 +222,7 @@ describe("loadReviewWorkspaceDto", () => {
       diagnostics: {
         status: "ok",
         retryable: true,
+        reasonCode: null,
         message: null,
         occurredAt: null,
         cacheHit: null,
@@ -367,6 +369,7 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.businessContext.diagnostics).toEqual({
       status: "ok",
       retryable: true,
+      reasonCode: null,
       message: null,
       occurredAt: null,
       cacheHit: null,
@@ -474,6 +477,7 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.businessContext.provider).toBe("fallback");
     expect(dto.businessContext.diagnostics.status).toBe("fallback");
     expect(dto.businessContext.diagnostics.retryable).toBe(true);
+    expect(dto.businessContext.diagnostics.reasonCode).toBe("timeout");
     expect(dto.businessContext.diagnostics.message).toBe("context timeout");
     expect(dto.businessContext.diagnostics.cacheHit).toBe(false);
     expect(dto.businessContext.diagnostics.fallbackReason).toBe("live_fetch_failed");
@@ -527,6 +531,8 @@ describe("loadReviewWorkspaceDto", () => {
 
     expect(dto.businessContext.provider).toBe("fallback");
     expect(dto.businessContext.diagnostics.status).toBe("fallback");
+    expect(dto.businessContext.diagnostics.retryable).toBe(true);
+    expect(dto.businessContext.diagnostics.reasonCode).toBe("timeout");
     expect(dto.businessContext.diagnostics.message).toBe(
       "Live business-context fetch failed: GitHub API timeout",
     );
@@ -611,6 +617,7 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.businessContext.diagnostics).toEqual({
       status: "ok",
       retryable: true,
+      reasonCode: null,
       message: null,
       occurredAt: null,
       cacheHit: false,
@@ -727,6 +734,8 @@ describe("loadReviewWorkspaceDto", () => {
     expect(loadSnapshotForReviewMock).not.toHaveBeenCalled();
     expect(dto.businessContext.provider).toBe("fallback");
     expect(dto.businessContext.diagnostics.status).toBe("fallback");
+    expect(dto.businessContext.diagnostics.retryable).toBe(false);
+    expect(dto.businessContext.diagnostics.reasonCode).toBe("auth");
     expect(dto.businessContext.diagnostics.message).toContain("missing issue-read scope");
   });
 

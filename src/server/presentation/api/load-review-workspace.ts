@@ -10,6 +10,7 @@ import {
   type AiSuggestionProviderErrorType,
 } from "@/server/application/ports/ai-suggestion-provider";
 import { resolveGitHubIssueContextAccess } from "@/server/application/services/resolve-github-issue-context-access";
+import { classifyIntegrationFailure } from "@/server/application/services/classify-integration-failure";
 import { DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS } from "@/server/application/constants/analysis-job-queue-policy";
 import { getDependencies } from "@/server/composition/dependencies";
 import { loadActiveInitialAnalysisJob } from "@/server/presentation/api/load-active-initial-analysis-job";
@@ -108,6 +109,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
   const businessContextDiagnostics: ReviewWorkspaceDto["businessContext"]["diagnostics"] = {
     status: "ok",
     retryable: true,
+    reasonCode: null,
     message: null,
     occurredAt: null,
     cacheHit: null,
@@ -137,17 +139,29 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     });
   })().catch((error) => {
     const occurredAt = new Date().toISOString();
+    const failureClassification = classifyIntegrationFailure(error);
     businessContextDiagnostics.status = "fallback";
-    businessContextDiagnostics.retryable = true;
+    businessContextDiagnostics.retryable = failureClassification.retryable;
+    businessContextDiagnostics.reasonCode = failureClassification.reasonCode;
     businessContextDiagnostics.message =
       error instanceof Error ? error.message : "Unknown business-context loading failure.";
     businessContextDiagnostics.occurredAt = occurredAt;
 
     if (error instanceof LiveBusinessContextUnavailableError) {
+      businessContextDiagnostics.retryable = error.retryable;
+      businessContextDiagnostics.reasonCode =
+        error.reasonCode ?? businessContextDiagnostics.reasonCode;
       businessContextDiagnostics.cacheHit =
         error.cacheHit ?? error.fallbackSnapshot.diagnostics.cacheHit ?? false;
       businessContextDiagnostics.fallbackReason =
         error.fallbackReason ?? error.fallbackSnapshot.diagnostics.fallbackReason ?? "live_fetch_failed";
+      console.warn("business_context_fallback", {
+        reviewId,
+        retryable: businessContextDiagnostics.retryable,
+        reasonCode: businessContextDiagnostics.reasonCode,
+        fallbackReason: businessContextDiagnostics.fallbackReason,
+        message: businessContextDiagnostics.message,
+      });
       return {
         ...error.fallbackSnapshot,
         generatedAt: occurredAt,
@@ -156,6 +170,13 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
 
     businessContextDiagnostics.cacheHit = false;
     businessContextDiagnostics.fallbackReason = "live_fetch_failed";
+    console.warn("business_context_fallback", {
+      reviewId,
+      retryable: businessContextDiagnostics.retryable,
+      reasonCode: businessContextDiagnostics.reasonCode,
+      fallbackReason: businessContextDiagnostics.fallbackReason,
+      message: businessContextDiagnostics.message,
+    });
 
     return {
       generatedAt: occurredAt,

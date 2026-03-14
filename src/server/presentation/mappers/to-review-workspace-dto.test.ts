@@ -287,6 +287,7 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.businessContext.diagnostics).toEqual({
       status: "ok",
       retryable: true,
+      reasonCode: null,
       message: null,
       occurredAt: null,
       cacheHit: null,
@@ -346,6 +347,7 @@ describe("toReviewWorkspaceDto", () => {
     expect(dto.businessContext.diagnostics).toEqual({
       status: "ok",
       retryable: true,
+      reasonCode: null,
       message: null,
       occurredAt: null,
       cacheHit: null,
