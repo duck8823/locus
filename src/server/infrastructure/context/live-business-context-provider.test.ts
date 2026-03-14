@@ -420,6 +420,49 @@ describe("LiveBusinessContextProvider", () => {
     });
   });
 
+  it("does not use stale cache when terminal failure is non-retryable", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi
+        .fn()
+        .mockResolvedValueOnce({
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          issueNumber: 66,
+          title: "Initially cached issue",
+          body: "Cached body",
+          state: "open",
+          labels: [],
+          author: { login: "octocat" },
+          htmlUrl: "https://github.com/octocat/locus/issues/66",
+          updatedAt: "2026-03-14T00:00:00.000Z",
+        })
+        .mockRejectedValue(new Error("GitHub issue API failed (403): forbidden")),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    let nowMs = Date.parse("2026-03-14T00:00:00.000Z");
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      cacheTtlMs: 1_000,
+      staleCacheTtlMs: 20_000,
+      maxFetchAttempts: 2,
+      initialBackoffMs: 0,
+      now: () => nowMs,
+      sleep: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await provider.loadSnapshotForReview(createInput());
+    nowMs += 5_000;
+
+    await expect(provider.loadSnapshotForReview(createInput())).rejects.toBeInstanceOf(
+      LiveBusinessContextUnavailableError,
+    );
+  });
+
   it("evicts oldest cache entries when max cache size is exceeded", async () => {
     const fallbackProvider: BusinessContextProvider = {
       loadSnapshotForReview: vi

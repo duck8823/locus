@@ -383,7 +383,11 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
       }
     }
 
-    if (cachedState?.state === "stale") {
+    const canFallbackToStaleCache =
+      cachedState?.state === "stale" &&
+      (lastError === undefined || isRetryableIssueFetchError(lastError));
+
+    if (canFallbackToStaleCache) {
       return {
         issue: cachedState.issue,
         cacheHit: true,
