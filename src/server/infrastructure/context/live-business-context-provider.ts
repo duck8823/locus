@@ -33,7 +33,7 @@ function toIssueCacheKey(input: {
     return `anon:${toIssueReferenceKey(input.reference)}`;
   }
 
-  const tokenHash = createHash("sha256").update(input.accessToken).digest("hex").slice(0, 16);
+  const tokenHash = createHash("sha256").update(input.accessToken).digest("hex");
 
   return `token:${tokenHash}:${toIssueReferenceKey(input.reference)}`;
 }
@@ -203,6 +203,16 @@ function isRetryableIssueFetchError(error: unknown): boolean {
     }
 
     if (typeof current === "object") {
+      const statusLike =
+        (current as { status?: unknown }).status ??
+        (current as { statusCode?: unknown }).statusCode ??
+        (current as { response?: { status?: unknown } }).response?.status;
+      const status = typeof statusLike === "number" ? statusLike : null;
+
+      if (status === 429 || (status !== null && status >= 500 && status < 600)) {
+        return true;
+      }
+
       const code = (current as { code?: unknown }).code;
 
       if (typeof code === "string" && retryableCodes.has(code.toUpperCase())) {
