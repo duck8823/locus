@@ -40,6 +40,29 @@ function createFallbackSnapshot(): BusinessContextSnapshot {
   };
 }
 
+function createFallbackSnapshotWithIssue(issueNumber: number): BusinessContextSnapshot {
+  return {
+    generatedAt: "2026-03-14T00:00:00.000Z",
+    provider: "stub",
+    diagnostics: {
+      cacheHit: null,
+      fallbackReason: null,
+    },
+    items: [
+      {
+        contextId: `ctx-${issueNumber}`,
+        sourceType: "github_issue",
+        status: "linked",
+        confidence: "high",
+        inferenceSource: "repo_shorthand",
+        title: `Linked issue: octocat/locus#${issueNumber}`,
+        summary: `Detected issue ${issueNumber}.`,
+        href: `https://github.com/octocat/locus/issues/${issueNumber}`,
+      },
+    ],
+  };
+}
+
 function createInput() {
   return {
     reviewerId: "demo-reviewer",
@@ -298,5 +321,44 @@ describe("LiveBusinessContextProvider", () => {
       cacheHit: true,
       fallbackReason: "stale_cache",
     });
+  });
+
+  it("evicts oldest cache entries when max cache size is exceeded", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi
+        .fn()
+        .mockResolvedValueOnce(createFallbackSnapshotWithIssue(66))
+        .mockResolvedValueOnce(createFallbackSnapshotWithIssue(67))
+        .mockResolvedValueOnce(createFallbackSnapshotWithIssue(66)),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi.fn().mockImplementation(async ({ reference }) => ({
+        provider: "github",
+        owner: reference.owner,
+        repository: reference.repository,
+        issueNumber: reference.issueNumber,
+        title: `Issue ${reference.issueNumber}`,
+        body: `Body ${reference.issueNumber}`,
+        state: "open",
+        labels: [],
+        author: { login: "octocat" },
+        htmlUrl: `https://github.com/${reference.owner}/${reference.repository}/issues/${reference.issueNumber}`,
+        updatedAt: "2026-03-14T00:00:00.000Z",
+      })),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      cacheTtlMs: 60_000,
+      staleCacheTtlMs: 300_000,
+      maxCacheEntries: 1,
+    });
+
+    await provider.loadSnapshotForReview(createInput());
+    await provider.loadSnapshotForReview(createInput());
+    await provider.loadSnapshotForReview(createInput());
+
+    expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(3);
   });
 });

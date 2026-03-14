@@ -225,13 +225,6 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       errorType,
     });
   }
-  const snapshotDiagnostics = (businessContext as {
-    diagnostics?: {
-      cacheHit?: boolean | null;
-      fallbackReason?: "stale_cache" | "live_fetch_failed" | null;
-    };
-  }).diagnostics;
-
   return {
     ...workspace,
     activeAnalysisJob: activeInitialAnalysisJob
@@ -255,10 +248,10 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       provider: businessContextDiagnostics.status === "fallback" ? "fallback" : businessContext.provider,
       diagnostics: {
         ...businessContextDiagnostics,
-        cacheHit: businessContextDiagnostics.cacheHit ?? snapshotDiagnostics?.cacheHit ?? null,
+        cacheHit: businessContextDiagnostics.cacheHit ?? businessContext.diagnostics.cacheHit ?? null,
         fallbackReason:
           businessContextDiagnostics.fallbackReason ??
-          snapshotDiagnostics?.fallbackReason ??
+          businessContext.diagnostics.fallbackReason ??
           null,
       },
       items: businessContext.items.map((item) => ({

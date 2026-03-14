@@ -173,6 +173,7 @@ export interface LiveBusinessContextProviderOptions {
   fallbackProvider?: BusinessContextProvider;
   cacheTtlMs?: number;
   staleCacheTtlMs?: number;
+  maxCacheEntries?: number;
   maxFetchAttempts?: number;
   initialBackoffMs?: number;
   now?: () => number;
@@ -184,6 +185,7 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
   private readonly fallbackProvider: BusinessContextProvider;
   private readonly cacheTtlMs: number;
   private readonly staleCacheTtlMs: number;
+  private readonly maxCacheEntries: number;
   private readonly maxFetchAttempts: number;
   private readonly initialBackoffMs: number;
   private readonly now: () => number;
@@ -198,6 +200,7 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
       this.cacheTtlMs,
       Math.floor(options.staleCacheTtlMs ?? 5 * 60_000),
     );
+    this.maxCacheEntries = Math.max(1, Math.floor(options.maxCacheEntries ?? 512));
     this.maxFetchAttempts = Math.max(1, Math.floor(options.maxFetchAttempts ?? 3));
     this.initialBackoffMs = Math.max(0, Math.floor(options.initialBackoffMs ?? 200));
     this.now = options.now ?? (() => Date.now());
@@ -234,10 +237,24 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
   }
 
   private cacheIssue(referenceKey: string, issue: IssueContextRecord | null) {
+    if (this.issueCache.has(referenceKey)) {
+      this.issueCache.delete(referenceKey);
+    }
+
     this.issueCache.set(referenceKey, {
       issue,
       cachedAtMs: this.now(),
     });
+
+    while (this.issueCache.size > this.maxCacheEntries) {
+      const oldestKey = this.issueCache.keys().next().value;
+
+      if (!oldestKey) {
+        break;
+      }
+
+      this.issueCache.delete(oldestKey);
+    }
   }
 
   private async fetchIssueWithResilience(input: {
