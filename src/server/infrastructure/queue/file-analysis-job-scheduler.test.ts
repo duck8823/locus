@@ -522,7 +522,7 @@ describe("FileAnalysisJobScheduler", () => {
         attempts += 1;
 
         if (attempts === 1) {
-          throw new Error("transient failure");
+          throw new Error("GitHub issue API failed (429): rate limit exceeded");
         }
       },
     });
@@ -542,6 +542,68 @@ describe("FileAnalysisJobScheduler", () => {
     expect(persisted.jobs[0]?.status).toBe("succeeded");
     expect(persisted.jobs[0]?.attempts).toBe(2);
     expect(persisted.jobs[0]?.lastError).toBeNull();
+  });
+
+  it("fails fast for terminal auth failures without consuming retry budget", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    let attempts = 0;
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      maxAttempts: 4,
+      onJob: async () => {
+        attempts += 1;
+        throw new Error("GitHub pull request API failed (401): unauthorized");
+      },
+    });
+
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-auth-failure",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "initial_ingestion",
+    });
+
+    await scheduler.drainNow();
+
+    expect(attempts).toBe(1);
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ status: string; attempts: number; lastError: string | null }>;
+    };
+    expect(persisted.jobs[0]?.status).toBe("failed");
+    expect(persisted.jobs[0]?.attempts).toBe(1);
+    expect(persisted.jobs[0]?.lastError).toContain("auth:");
+  });
+
+  it("fails fast for terminal not-found failures without consuming retry budget", async () => {
+    const dataDirectory = await createTempDataDirectory();
+    const filePath = path.join(dataDirectory, "jobs.json");
+    let attempts = 0;
+    const scheduler = new FileAnalysisJobScheduler({
+      dataDirectory: filePath,
+      autoRun: false,
+      maxAttempts: 4,
+      onJob: async () => {
+        attempts += 1;
+        throw new Error("GitHub pull request API failed (404): not found");
+      },
+    });
+
+    await scheduler.scheduleReviewAnalysis({
+      reviewId: "review-not-found-failure",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "manual_reanalysis",
+    });
+
+    await scheduler.drainNow();
+
+    expect(attempts).toBe(1);
+    const persisted = (await readJobsFile(filePath)) as {
+      jobs: Array<{ status: string; attempts: number; lastError: string | null }>;
+    };
+    expect(persisted.jobs[0]?.status).toBe("failed");
+    expect(persisted.jobs[0]?.attempts).toBe(1);
+    expect(persisted.jobs[0]?.lastError).toContain("not_found:");
   });
 
   it("recovers stale running jobs and executes them again", async () => {
@@ -711,7 +773,7 @@ describe("FileAnalysisJobScheduler", () => {
       maxAttempts: 0,
       onJob: async () => {
         attempts += 1;
-        throw new Error("always fails");
+        throw new Error("network timeout");
       },
     });
 
@@ -741,7 +803,7 @@ describe("FileAnalysisJobScheduler", () => {
       maxAttempts: 1.9,
       onJob: async () => {
         attempts += 1;
-        throw new Error("always fails");
+        throw new Error("network timeout");
       },
     });
 
