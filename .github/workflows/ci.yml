@@ -100,6 +100,7 @@ jobs:
             --min-recovery-success-rate-percent 30
 
       - name: Upload dogfooding metrics artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dogfooding-metrics
