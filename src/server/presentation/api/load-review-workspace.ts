@@ -79,6 +79,12 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     analysisJobScheduler,
     reviewId,
   });
+  if (analysisJobHistory.queueHealth.status === "degraded") {
+    console.warn("analysis_queue_health_degraded", {
+      reviewId,
+      ...analysisJobHistory.queueHealth,
+    });
+  }
   const workspace = toReviewWorkspaceDto(reviewSession);
   const reviewRecord = reviewSession.toRecord();
   const businessContextDiagnostics: ReviewWorkspaceDto["businessContext"]["diagnostics"] = {
@@ -239,6 +245,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       : null,
     analysisHistory: analysisJobHistory.history,
     dogfoodingMetrics: analysisJobHistory.metrics,
+    queueHealth: analysisJobHistory.queueHealth,
     aiSuggestionPayload,
     aiSuggestions,
     reanalysisStatus: effectiveReanalysisState.reanalysisStatus,

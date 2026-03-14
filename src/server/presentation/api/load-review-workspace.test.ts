@@ -120,6 +120,18 @@ describe("loadReviewWorkspaceDto", () => {
         failureRatePercent: null,
         recoverySuccessRatePercent: null,
       },
+      queueHealth: {
+        status: "healthy",
+        queuedJobs: 0,
+        runningJobs: 0,
+        staleRunningJobs: 0,
+        failedTerminalJobs: 0,
+        lastFailedJob: null,
+        diagnostics: {
+          staleRunningThresholdMs: 600000,
+          reasonCodes: [],
+        },
+      },
       aiSuggestionPayload: null,
       aiSuggestions: [],
       businessContext: {
@@ -143,6 +155,18 @@ describe("loadReviewWorkspaceDto", () => {
         averageDurationMs: null,
         failureRatePercent: null,
         recoverySuccessRatePercent: null,
+      },
+      queueHealth: {
+        status: "healthy",
+        queuedJobs: 0,
+        runningJobs: 0,
+        staleRunningJobs: 0,
+        failedTerminalJobs: 0,
+        lastFailedJob: null,
+        diagnostics: {
+          staleRunningThresholdMs: 600000,
+          reasonCodes: [],
+        },
       },
     });
     resolveEffectiveReanalysisStateMock.mockReturnValue({
@@ -177,6 +201,18 @@ describe("loadReviewWorkspaceDto", () => {
       averageDurationMs: null,
       failureRatePercent: null,
       recoverySuccessRatePercent: null,
+    });
+    expect(dto.queueHealth).toEqual({
+      status: "healthy",
+      queuedJobs: 0,
+      runningJobs: 0,
+      staleRunningJobs: 0,
+      failedTerminalJobs: 0,
+      lastFailedJob: null,
+      diagnostics: {
+        staleRunningThresholdMs: 600000,
+        reasonCodes: [],
+      },
     });
     expect(dto.aiSuggestionPayload).toMatchObject({
       review: {
@@ -223,6 +259,48 @@ describe("loadReviewWorkspaceDto", () => {
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
 
     expect(dto.activeAnalysisJob).toBeNull();
+  });
+
+  it("logs degraded queue-health diagnostics for ops visibility", async () => {
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    loadAnalysisJobHistoryMock.mockResolvedValueOnce({
+      history: [],
+      metrics: {
+        averageDurationMs: null,
+        failureRatePercent: null,
+        recoverySuccessRatePercent: null,
+      },
+      queueHealth: {
+        status: "degraded",
+        queuedJobs: 2,
+        runningJobs: 0,
+        staleRunningJobs: 1,
+        failedTerminalJobs: 1,
+        lastFailedJob: {
+          jobId: "job-1",
+          reason: "manual_reanalysis",
+          completedAt: "2026-03-12T00:00:04.000Z",
+          lastError: "temporary timeout",
+        },
+        diagnostics: {
+          staleRunningThresholdMs: 600000,
+          reasonCodes: ["queue_backlog", "stale_running_job", "terminal_failure_detected"],
+        },
+      },
+    });
+
+    await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      "analysis_queue_health_degraded",
+      expect.objectContaining({
+        reviewId: "review-1",
+        status: "degraded",
+        queuedJobs: 2,
+        staleRunningJobs: 1,
+      }),
+    );
+    consoleWarnSpy.mockRestore();
   });
 
   it("maps business-context confidence and inference-source fields", async () => {
@@ -285,6 +363,7 @@ describe("loadReviewWorkspaceDto", () => {
   });
 
   it("injects analysis-history snapshots and derived dogfooding metrics", async () => {
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     loadAnalysisJobHistoryMock.mockResolvedValueOnce({
       history: [
         {
@@ -303,6 +382,23 @@ describe("loadReviewWorkspaceDto", () => {
         averageDurationMs: 2500,
         failureRatePercent: 50,
         recoverySuccessRatePercent: 50,
+      },
+      queueHealth: {
+        status: "degraded",
+        queuedJobs: 1,
+        runningJobs: 0,
+        staleRunningJobs: 0,
+        failedTerminalJobs: 1,
+        lastFailedJob: {
+          jobId: "job-1",
+          reason: "manual_reanalysis",
+          completedAt: "2026-03-12T00:00:04.000Z",
+          lastError: "temporary timeout",
+        },
+        diagnostics: {
+          staleRunningThresholdMs: 600000,
+          reasonCodes: ["queue_backlog", "terminal_failure_detected"],
+        },
       },
     });
 
@@ -326,6 +422,24 @@ describe("loadReviewWorkspaceDto", () => {
       failureRatePercent: 50,
       recoverySuccessRatePercent: 50,
     });
+    expect(dto.queueHealth).toEqual({
+      status: "degraded",
+      queuedJobs: 1,
+      runningJobs: 0,
+      staleRunningJobs: 0,
+      failedTerminalJobs: 1,
+      lastFailedJob: {
+        jobId: "job-1",
+        reason: "manual_reanalysis",
+        completedAt: "2026-03-12T00:00:04.000Z",
+        lastError: "temporary timeout",
+      },
+      diagnostics: {
+        staleRunningThresholdMs: 600000,
+        reasonCodes: ["queue_backlog", "terminal_failure_detected"],
+      },
+    });
+    consoleWarnSpy.mockRestore();
   });
 
   it("falls back to diagnostic business context when provider throws", async () => {
@@ -624,6 +738,18 @@ describe("loadReviewWorkspaceDto", () => {
         failureRatePercent: 50,
         recoverySuccessRatePercent: 50,
       },
+      queueHealth: {
+        status: "healthy",
+        queuedJobs: 0,
+        runningJobs: 0,
+        staleRunningJobs: 0,
+        failedTerminalJobs: 0,
+        lastFailedJob: null,
+        diagnostics: {
+          staleRunningThresholdMs: 600000,
+          reasonCodes: [],
+        },
+      },
     });
 
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
@@ -667,6 +793,18 @@ describe("loadReviewWorkspaceDto", () => {
         averageDurationMs: 2500,
         failureRatePercent: 50,
         recoverySuccessRatePercent: 50,
+      },
+      queueHealth: {
+        status: "healthy",
+        queuedJobs: 0,
+        runningJobs: 0,
+        staleRunningJobs: 0,
+        failedTerminalJobs: 0,
+        lastFailedJob: null,
+        diagnostics: {
+          staleRunningThresholdMs: 600000,
+          reasonCodes: [],
+        },
       },
     });
 
