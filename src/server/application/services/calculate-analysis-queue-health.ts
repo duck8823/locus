@@ -1,4 +1,5 @@
 import type { AnalysisJobHistorySnapshot } from "@/server/application/ports/analysis-job-scheduler";
+import { DEFAULT_ANALYSIS_QUEUE_BACKLOG_GRACE_MS } from "@/server/application/constants/analysis-job-queue-policy";
 
 export type AnalysisQueueHealthReasonCode =
   | "queue_backlog"
@@ -32,10 +33,10 @@ function isStaleRunningJob(input: {
     return false;
   }
 
-  const startedAtEpochMs = Date.parse(input.job.startedAt ?? "");
+  const startedAtEpochMs = Date.parse(input.job.startedAt ?? input.job.queuedAt);
 
   if (Number.isNaN(startedAtEpochMs) || !Number.isFinite(input.nowMs)) {
-    return true;
+    return false;
   }
 
   return input.nowMs - startedAtEpochMs >= input.staleRunningThresholdMs;
@@ -45,7 +46,15 @@ export function calculateAnalysisQueueHealth(input: {
   history: AnalysisJobHistorySnapshot[];
   nowMs: number;
   staleRunningThresholdMs: number;
+  backlogGracePeriodMs?: number;
 }): AnalysisQueueHealthSnapshot {
+  const backlogGracePeriodMs =
+    typeof input.backlogGracePeriodMs === "number" &&
+    Number.isSafeInteger(input.backlogGracePeriodMs) &&
+    input.backlogGracePeriodMs >= 0
+      ? input.backlogGracePeriodMs
+      : DEFAULT_ANALYSIS_QUEUE_BACKLOG_GRACE_MS;
+  const queuedJobRecords = input.history.filter((job) => job.status === "queued");
   const queuedJobs = input.history.filter((job) => job.status === "queued").length;
   const runningJobs = input.history.filter((job) => job.status === "running").length;
   const staleRunningJobs = input.history.filter((job) =>
@@ -68,7 +77,22 @@ export function calculateAnalysisQueueHealth(input: {
     })[0] ?? null;
   const reasonCodes: AnalysisQueueHealthReasonCode[] = [];
 
-  if (queuedJobs > 0 && runningJobs === 0) {
+  const oldestQueuedEpochMs = queuedJobRecords
+    .map((job) => Date.parse(job.queuedAt))
+    .filter((epochMs) => Number.isFinite(epochMs))
+    .reduce<number | null>((oldest, epochMs) => {
+      if (oldest === null) {
+        return epochMs;
+      }
+
+      return Math.min(oldest, epochMs);
+    }, null);
+  const shouldMarkQueueBacklog =
+    queuedJobs > 0 &&
+    runningJobs === 0 &&
+    (oldestQueuedEpochMs === null || input.nowMs - oldestQueuedEpochMs >= backlogGracePeriodMs);
+
+  if (shouldMarkQueueBacklog) {
     reasonCodes.push("queue_backlog");
   }
 

@@ -72,7 +72,7 @@ function mapHistory(
 }
 
 function resolveStaleRunningThresholdMs(input: number | undefined): number {
-  if (!Number.isSafeInteger(input) || typeof input !== "number" || input < 1) {
+  if (typeof input !== "number" || !Number.isSafeInteger(input) || input < 1) {
     return DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS;
   }
 

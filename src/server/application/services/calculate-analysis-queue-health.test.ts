@@ -27,6 +27,32 @@ describe("calculateAnalysisQueueHealth", () => {
     expect(result.diagnostics.reasonCodes).toEqual([]);
   });
 
+  it("does not mark queue backlog during grace period", () => {
+    const result = calculateAnalysisQueueHealth({
+      history: [
+        {
+          jobId: "job-queued",
+          reviewId: "review-1",
+          requestedAt: "2026-03-12T00:00:00.000Z",
+          reason: "manual_reanalysis",
+          status: "queued",
+          queuedAt: "2026-03-12T00:00:00.000Z",
+          startedAt: null,
+          completedAt: null,
+          durationMs: null,
+          attempts: 0,
+          lastError: null,
+        },
+      ],
+      nowMs: Date.parse("2026-03-12T00:00:10.000Z"),
+      staleRunningThresholdMs: 60_000,
+      backlogGracePeriodMs: 30_000,
+    });
+
+    expect(result.status).toBe("healthy");
+    expect(result.diagnostics.reasonCodes).toEqual([]);
+  });
+
   it("marks degraded for stale-running jobs and queue backlog", () => {
     const result = calculateAnalysisQueueHealth({
       history: [
