@@ -2,6 +2,8 @@ import { execSync } from "node:child_process";
 import { test, expect, type Page } from "@playwright/test";
 
 const workspacePathPattern = /\/reviews\/demo-review$/;
+const openSeedDemoTestId = "open-seed-demo";
+const homeBootstrapMaxAttempts = 3;
 
 function reseedDemoData() {
   execSync("npm run demo:data:reseed", {
@@ -11,11 +13,29 @@ function reseedDemoData() {
 }
 
 async function openSeedWorkspace(page: Page) {
-  await page.goto("/");
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= homeBootstrapMaxAttempts; attempt += 1) {
+    try {
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      await expect(page.getByTestId(openSeedDemoTestId)).toBeVisible({ timeout: 15_000 });
+      lastError = null;
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt < homeBootstrapMaxAttempts) {
+        await page.waitForTimeout(300 * attempt);
+      }
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
   await page.evaluate(() => {
     window.localStorage.clear();
   });
-  await page.getByTestId("open-seed-demo").click();
+  await page.getByTestId(openSeedDemoTestId).click();
   await expect(page).toHaveURL(workspacePathPattern);
 }
 
