@@ -412,6 +412,11 @@ test("uses japanese labels consistently in connections workspace", async ({ page
 
   await expect(page.getByRole("heading", { level: 1, name: "接続設定" })).toBeVisible();
   await expect(page.getByText("プロバイダーメモ").first()).toBeVisible();
+  await expect(page.getByText(/認証方式: OAuth/).first()).toBeVisible();
+  await expect(page.getByText(/接続アカウント: なし/).first()).toBeVisible();
+  await expect(
+    page.getByText(/Webhook \((対応|未対応)\), Issue コンテキスト \((対応|未対応)\)/).first(),
+  ).toBeVisible();
   await expect(page.getByText(/Issue コンテキスト/).first()).toBeVisible();
   await expect(page.getByText(/このプロバイダーの状態変更はできません。/).first()).toBeVisible();
 });
