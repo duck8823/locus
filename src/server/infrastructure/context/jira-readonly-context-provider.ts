@@ -24,6 +24,7 @@ type FetchLike = typeof fetch;
 type JiraAuthScheme = "bearer" | "basic";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+const MAX_ADF_DEPTH = 24;
 
 function resolveBaseUrl(value: string | undefined): string | null {
   if (!value) {
@@ -73,14 +74,18 @@ function toSummary(value: unknown): string | null {
   return null;
 }
 
-function extractJiraDocumentText(node: unknown): string {
+function extractJiraDocumentText(node: unknown, depth = 0): string {
+  if (depth > MAX_ADF_DEPTH) {
+    return "";
+  }
+
   if (!node) {
     return "";
   }
 
   if (Array.isArray(node)) {
     return node
-      .map((entry) => extractJiraDocumentText(entry))
+      .map((entry) => extractJiraDocumentText(entry, depth + 1))
       .filter((entry) => entry.length > 0)
       .join(" ");
   }
@@ -111,7 +116,7 @@ function extractJiraDocumentText(node: unknown): string {
 
   if (Array.isArray(current.content)) {
     const childText = current.content
-      .map((child) => extractJiraDocumentText(child))
+      .map((child) => extractJiraDocumentText(child, depth + 1))
       .filter((entry) => entry.length > 0)
       .join(" ");
 
@@ -123,6 +128,13 @@ function extractJiraDocumentText(node: unknown): string {
   return segments.join(" ");
 }
 
+function sanitizeJqlTerm(value: string): string {
+  return value
+    .replace(/[+\-&|!(){}\[\]^~*?:\\]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function toJql(input: {
   repositoryName: string;
   branchLabel: string;
@@ -130,7 +142,7 @@ function toJql(input: {
 }): string {
   const terms = [input.repositoryName, input.branchLabel, input.title]
     .flatMap((value) => value.split(/\s+/))
-    .map((value) => value.trim())
+    .map((value) => sanitizeJqlTerm(value))
     .filter((value) => value.length > 0)
     .slice(0, 8)
     .map((value) => `"${value.replaceAll('"', '\\"')}"`);

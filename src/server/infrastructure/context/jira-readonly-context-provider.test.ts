@@ -138,6 +138,42 @@ describe("JiraReadonlyContextProvider", () => {
     });
   });
 
+  it("sanitizes reserved jql characters in generated query terms", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ issues: [] }),
+    });
+    const provider = new JiraReadonlyContextProvider({
+      apiBaseUrl: "https://jira.example.com",
+      fetchImpl,
+    });
+
+    await provider.searchIssuesForReviewContext({
+      reviewId: "review-1",
+      repositoryName: "duck8823/locus",
+      branchLabel: "feature/(123)-queue:*retry",
+      title: "Fix parser: [queue] {retry}?",
+      accessToken: "token",
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const requestInit = fetchImpl.mock.calls[0]?.[1];
+    const parsedBody =
+      typeof requestInit?.body === "string"
+        ? (JSON.parse(requestInit.body) as { jql?: string })
+        : null;
+    const quotedTerms = Array.from(
+      (parsedBody?.jql ?? "").matchAll(/"([^"]+)"/g),
+      (match) => match[1],
+    );
+
+    expect(quotedTerms.length).toBeGreaterThan(0);
+
+    for (const term of quotedTerms) {
+      expect(term).not.toMatch(/[+\-&|!(){}\[\]^~*?:\\]/);
+    }
+  });
+
   it("throws temporary typed error for retryable provider failures", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: false,
