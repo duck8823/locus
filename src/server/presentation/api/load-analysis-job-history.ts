@@ -2,6 +2,8 @@ import type {
   AnalysisJobHistorySnapshot,
   AnalysisJobScheduler,
 } from "@/server/application/ports/analysis-job-scheduler";
+import { DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS } from "@/server/application/constants/analysis-job-queue-policy";
+import { calculateAnalysisQueueHealth } from "@/server/application/services/calculate-analysis-queue-health";
 import type {
   ReviewWorkspaceAnalysisHistoryItemDto,
   ReviewWorkspaceDogfoodingMetricsDto,
@@ -13,8 +15,6 @@ export interface LoadAnalysisJobHistoryResult {
   metrics: ReviewWorkspaceDogfoodingMetricsDto;
   queueHealth: ReviewWorkspaceQueueHealthDto;
 }
-
-const DEFAULT_STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000;
 
 function toFixedOneDecimal(value: number): number {
   return Math.round(value * 10) / 10;
@@ -73,88 +73,10 @@ function mapHistory(
 
 function resolveStaleRunningThresholdMs(input: number | undefined): number {
   if (!Number.isSafeInteger(input) || typeof input !== "number" || input < 1) {
-    return DEFAULT_STALE_RUNNING_THRESHOLD_MS;
+    return DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS;
   }
 
   return input;
-}
-
-function isStaleRunningJob(input: {
-  job: AnalysisJobHistorySnapshot;
-  nowMs: number;
-  staleRunningThresholdMs: number;
-}): boolean {
-  if (input.job.status !== "running") {
-    return false;
-  }
-
-  const startedAtEpochMs = Date.parse(input.job.startedAt ?? "");
-
-  if (Number.isNaN(startedAtEpochMs) || !Number.isFinite(input.nowMs)) {
-    return true;
-  }
-
-  return input.nowMs - startedAtEpochMs >= input.staleRunningThresholdMs;
-}
-
-function calculateQueueHealth(input: {
-  history: AnalysisJobHistorySnapshot[];
-  nowMs: number;
-  staleRunningThresholdMs: number;
-}): ReviewWorkspaceQueueHealthDto {
-  const queuedJobs = input.history.filter((job) => job.status === "queued").length;
-  const runningJobs = input.history.filter((job) => job.status === "running").length;
-  const staleRunningJobs = input.history.filter((job) =>
-    isStaleRunningJob({
-      job,
-      nowMs: input.nowMs,
-      staleRunningThresholdMs: input.staleRunningThresholdMs,
-    }),
-  ).length;
-  const failedJobs = input.history.filter((job) => job.status === "failed");
-  const failedTerminalJobs = failedJobs.length;
-  const lastFailedJob = [...failedJobs]
-    .sort((left, right) => {
-      const leftEpochMs = Date.parse(left.completedAt ?? left.queuedAt);
-      const rightEpochMs = Date.parse(right.completedAt ?? right.queuedAt);
-      const normalizedLeftEpochMs = Number.isNaN(leftEpochMs) ? 0 : leftEpochMs;
-      const normalizedRightEpochMs = Number.isNaN(rightEpochMs) ? 0 : rightEpochMs;
-
-      return normalizedRightEpochMs - normalizedLeftEpochMs;
-    })[0] ?? null;
-  const reasonCodes: ReviewWorkspaceQueueHealthDto["diagnostics"]["reasonCodes"] = [];
-
-  if (queuedJobs > 0 && runningJobs === 0) {
-    reasonCodes.push("queue_backlog");
-  }
-
-  if (staleRunningJobs > 0) {
-    reasonCodes.push("stale_running_job");
-  }
-
-  if (failedTerminalJobs > 0) {
-    reasonCodes.push("terminal_failure_detected");
-  }
-
-  return {
-    status: reasonCodes.length > 0 ? "degraded" : "healthy",
-    queuedJobs,
-    runningJobs,
-    staleRunningJobs,
-    failedTerminalJobs,
-    lastFailedJob: lastFailedJob
-      ? {
-          jobId: lastFailedJob.jobId,
-          reason: lastFailedJob.reason,
-          completedAt: lastFailedJob.completedAt,
-          lastError: lastFailedJob.lastError,
-        }
-      : null,
-    diagnostics: {
-      staleRunningThresholdMs: input.staleRunningThresholdMs,
-      reasonCodes,
-    },
-  };
 }
 
 export async function loadAnalysisJobHistory(params: {
@@ -202,7 +124,7 @@ export async function loadAnalysisJobHistory(params: {
       failureRatePercent: calculateFailureRatePercent(rawHistory),
       recoverySuccessRatePercent: calculateRecoverySuccessRatePercent(rawHistory),
     },
-    queueHealth: calculateQueueHealth({
+    queueHealth: calculateAnalysisQueueHealth({
       history: rawHistory,
       nowMs,
       staleRunningThresholdMs,

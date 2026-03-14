@@ -10,6 +10,7 @@ import type {
   ScheduleAnalysisJobInput,
   ScheduledAnalysisJob,
 } from "@/server/application/ports/analysis-job-scheduler";
+import { DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS } from "@/server/application/constants/analysis-job-queue-policy";
 
 interface PersistedAnalysisJobRecord {
   jobId: string;
@@ -49,7 +50,6 @@ export interface FileAnalysisJobSchedulerOptions {
 
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_MAX_RETAINED_TERMINAL_JOBS = 500;
-const DEFAULT_STALE_RUNNING_MS = 10 * 60 * 1000;
 const DEFAULT_HISTORY_LIMIT = 20;
 
 function normalizeMinimumOneInteger(value: number | undefined, fallback: number): number {
@@ -120,7 +120,7 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
     );
     this.staleRunningMs = normalizeMinimumOneInteger(
       options.staleRunningMs,
-      DEFAULT_STALE_RUNNING_MS,
+      DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS,
     );
     this.autoRun = options.autoRun ?? true;
     this.onJob = options.onJob;
