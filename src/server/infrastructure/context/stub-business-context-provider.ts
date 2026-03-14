@@ -323,6 +323,10 @@ export class StubBusinessContextProvider implements BusinessContextProvider {
     return {
       generatedAt,
       provider: "stub",
+      diagnostics: {
+        cacheHit: null,
+        fallbackReason: null,
+      },
       items,
     };
   }

@@ -288,6 +288,8 @@ describe("toReviewWorkspaceDto", () => {
       retryable: true,
       message: null,
       occurredAt: null,
+      cacheHit: null,
+      fallbackReason: null,
     });
     expect(dto.businessContext.items).toEqual([]);
   });
@@ -344,6 +346,8 @@ describe("toReviewWorkspaceDto", () => {
       retryable: true,
       message: null,
       occurredAt: null,
+      cacheHit: null,
+      fallbackReason: null,
     });
     expect(dto.businessContext.items).toEqual([]);
 

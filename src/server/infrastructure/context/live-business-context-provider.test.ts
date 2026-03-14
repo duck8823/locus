@@ -11,6 +11,10 @@ function createFallbackSnapshot(): BusinessContextSnapshot {
   return {
     generatedAt: "2026-03-14T00:00:00.000Z",
     provider: "stub",
+    diagnostics: {
+      cacheHit: null,
+      fallbackReason: null,
+    },
     items: [
       {
         contextId: "ctx-1",
@@ -31,6 +35,29 @@ function createFallbackSnapshot(): BusinessContextSnapshot {
         title: "No Confluence page linked",
         summary: "Confluence linking is intentionally deferred.",
         href: null,
+      },
+    ],
+  };
+}
+
+function createFallbackSnapshotWithIssue(issueNumber: number): BusinessContextSnapshot {
+  return {
+    generatedAt: "2026-03-14T00:00:00.000Z",
+    provider: "stub",
+    diagnostics: {
+      cacheHit: null,
+      fallbackReason: null,
+    },
+    items: [
+      {
+        contextId: `ctx-${issueNumber}`,
+        sourceType: "github_issue",
+        status: "linked",
+        confidence: "high",
+        inferenceSource: "repo_shorthand",
+        title: `Linked issue: octocat/locus#${issueNumber}`,
+        summary: `Detected issue ${issueNumber}.`,
+        href: `https://github.com/octocat/locus/issues/${issueNumber}`,
       },
     ],
   };
@@ -83,6 +110,10 @@ describe("LiveBusinessContextProvider", () => {
     const snapshot = await provider.loadSnapshotForReview(createInput());
 
     expect(snapshot.provider).toBe("github_live");
+    expect(snapshot.diagnostics).toEqual({
+      cacheHit: false,
+      fallbackReason: null,
+    });
     expect(snapshot.items[0]).toMatchObject({
       sourceType: "github_issue",
       title: "Real issue title from GitHub",
@@ -126,6 +157,8 @@ describe("LiveBusinessContextProvider", () => {
 
     if (thrownError instanceof LiveBusinessContextUnavailableError) {
       expect(thrownError.fallbackSnapshot).toEqual(fallbackSnapshot);
+      expect(thrownError.cacheHit).toBe(false);
+      expect(thrownError.fallbackReason).toBe("live_fetch_failed");
       expect(thrownError.message).toContain("Live business-context fetch failed");
     }
   });
@@ -154,5 +187,318 @@ describe("LiveBusinessContextProvider", () => {
 
     expect(snapshot).toEqual(fallbackSnapshot);
     expect(issueContextProvider.fetchIssue).not.toHaveBeenCalled();
+  });
+
+  it("uses fresh cache on subsequent requests", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi.fn().mockResolvedValue({
+        provider: "github",
+        owner: "octocat",
+        repository: "locus",
+        issueNumber: 66,
+        title: "Cached issue title",
+        body: "Cached issue body",
+        state: "open",
+        labels: [],
+        author: { login: "octocat" },
+        htmlUrl: "https://github.com/octocat/locus/issues/66",
+        updatedAt: "2026-03-14T00:00:00.000Z",
+      }),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      cacheTtlMs: 60_000,
+      staleCacheTtlMs: 300_000,
+    });
+
+    const first = await provider.loadSnapshotForReview(createInput());
+    const second = await provider.loadSnapshotForReview(createInput());
+
+    expect(first.diagnostics).toEqual({
+      cacheHit: false,
+      fallbackReason: null,
+    });
+    expect(second.diagnostics).toEqual({
+      cacheHit: true,
+      fallbackReason: null,
+    });
+    expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not share cache entries across different access-token contexts", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi
+        .fn()
+        .mockResolvedValueOnce({
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          issueNumber: 66,
+          title: "Private issue title",
+          body: "private issue body",
+          state: "open",
+          labels: [],
+          author: { login: "octocat" },
+          htmlUrl: "https://github.com/octocat/locus/issues/66",
+          updatedAt: "2026-03-14T00:00:00.000Z",
+        })
+        .mockResolvedValueOnce(null),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      cacheTtlMs: 60_000,
+      staleCacheTtlMs: 300_000,
+    });
+
+    const firstSnapshot = await provider.loadSnapshotForReview({
+      ...createInput(),
+      githubIssueAccessToken: "oauth-access-token",
+    });
+    const secondSnapshot = await provider.loadSnapshotForReview({
+      ...createInput(),
+      githubIssueAccessToken: null,
+    });
+
+    expect(firstSnapshot.provider).toBe("github_live");
+    expect(secondSnapshot.provider).toBe("stub");
+    expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(2);
+    expect(issueContextProvider.fetchIssue).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ accessToken: "oauth-access-token" }),
+    );
+    expect(issueContextProvider.fetchIssue).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ accessToken: null }),
+    );
+  });
+
+  it("retries transient fetch failures with exponential backoff", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("GitHub issue API failed (503): timeout"))
+        .mockResolvedValue({
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          issueNumber: 66,
+          title: "Recovered issue title",
+          body: "Recovered issue body",
+          state: "open",
+          labels: [],
+          author: { login: "octocat" },
+          htmlUrl: "https://github.com/octocat/locus/issues/66",
+          updatedAt: "2026-03-14T00:00:00.000Z",
+        }),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      maxFetchAttempts: 3,
+      initialBackoffMs: 25,
+      sleep,
+    });
+
+    const snapshot = await provider.loadSnapshotForReview(createInput());
+
+    expect(snapshot.provider).toBe("github_live");
+    expect(snapshot.diagnostics).toEqual({
+      cacheHit: false,
+      fallbackReason: null,
+    });
+    expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(25);
+  });
+
+  it("retries transport failures surfaced as fetch TypeError with retryable cause code", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new TypeError("fetch failed", {
+            cause: {
+              code: "ENOTFOUND",
+            },
+          }),
+        )
+        .mockResolvedValue({
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          issueNumber: 66,
+          title: "Recovered issue title",
+          body: "Recovered issue body",
+          state: "open",
+          labels: [],
+          author: { login: "octocat" },
+          htmlUrl: "https://github.com/octocat/locus/issues/66",
+          updatedAt: "2026-03-14T00:00:00.000Z",
+        }),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      maxFetchAttempts: 3,
+      initialBackoffMs: 20,
+      sleep,
+    });
+
+    const snapshot = await provider.loadSnapshotForReview(createInput());
+
+    expect(snapshot.provider).toBe("github_live");
+    expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(20);
+  });
+
+  it("falls back to stale cache when retries fail after cache expiry", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi
+        .fn()
+        .mockResolvedValueOnce({
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          issueNumber: 66,
+          title: "Initially cached issue",
+          body: "Cached body",
+          state: "open",
+          labels: [],
+          author: { login: "octocat" },
+          htmlUrl: "https://github.com/octocat/locus/issues/66",
+          updatedAt: "2026-03-14T00:00:00.000Z",
+        })
+        .mockRejectedValue(new Error("GitHub issue API failed (503): upstream timeout")),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    let nowMs = Date.parse("2026-03-14T00:00:00.000Z");
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      cacheTtlMs: 1_000,
+      staleCacheTtlMs: 20_000,
+      maxFetchAttempts: 2,
+      initialBackoffMs: 0,
+      now: () => nowMs,
+      sleep: vi.fn().mockResolvedValue(undefined),
+    });
+
+    const firstSnapshot = await provider.loadSnapshotForReview(createInput());
+    nowMs += 5_000;
+    const secondSnapshot = await provider.loadSnapshotForReview(createInput());
+
+    expect(firstSnapshot.diagnostics).toEqual({
+      cacheHit: false,
+      fallbackReason: null,
+    });
+    expect(secondSnapshot.provider).toBe("github_live");
+    expect(secondSnapshot.diagnostics).toEqual({
+      cacheHit: true,
+      fallbackReason: "stale_cache",
+    });
+  });
+
+  it("does not use stale cache when terminal failure is non-retryable", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi
+        .fn()
+        .mockResolvedValueOnce({
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          issueNumber: 66,
+          title: "Initially cached issue",
+          body: "Cached body",
+          state: "open",
+          labels: [],
+          author: { login: "octocat" },
+          htmlUrl: "https://github.com/octocat/locus/issues/66",
+          updatedAt: "2026-03-14T00:00:00.000Z",
+        })
+        .mockRejectedValue(new Error("GitHub issue API failed (403): forbidden")),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    let nowMs = Date.parse("2026-03-14T00:00:00.000Z");
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      cacheTtlMs: 1_000,
+      staleCacheTtlMs: 20_000,
+      maxFetchAttempts: 2,
+      initialBackoffMs: 0,
+      now: () => nowMs,
+      sleep: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await provider.loadSnapshotForReview(createInput());
+    nowMs += 5_000;
+
+    await expect(provider.loadSnapshotForReview(createInput())).rejects.toBeInstanceOf(
+      LiveBusinessContextUnavailableError,
+    );
+  });
+
+  it("evicts oldest cache entries when max cache size is exceeded", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi
+        .fn()
+        .mockResolvedValueOnce(createFallbackSnapshotWithIssue(66))
+        .mockResolvedValueOnce(createFallbackSnapshotWithIssue(67))
+        .mockResolvedValueOnce(createFallbackSnapshotWithIssue(66)),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi.fn().mockImplementation(async ({ reference }) => ({
+        provider: "github",
+        owner: reference.owner,
+        repository: reference.repository,
+        issueNumber: reference.issueNumber,
+        title: `Issue ${reference.issueNumber}`,
+        body: `Body ${reference.issueNumber}`,
+        state: "open",
+        labels: [],
+        author: { login: "octocat" },
+        htmlUrl: `https://github.com/${reference.owner}/${reference.repository}/issues/${reference.issueNumber}`,
+        updatedAt: "2026-03-14T00:00:00.000Z",
+      })),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      cacheTtlMs: 60_000,
+      staleCacheTtlMs: 300_000,
+      maxCacheEntries: 1,
+    });
+
+    await provider.loadSnapshotForReview(createInput());
+    await provider.loadSnapshotForReview(createInput());
+    await provider.loadSnapshotForReview(createInput());
+
+    expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(3);
   });
 });

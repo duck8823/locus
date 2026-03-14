@@ -192,6 +192,8 @@ export interface ReviewWorkspaceBusinessContextDto {
     retryable: boolean;
     message: string | null;
     occurredAt: string | null;
+    cacheHit: boolean | null;
+    fallbackReason: "stale_cache" | "live_fetch_failed" | null;
   };
   items: ReviewWorkspaceBusinessContextItemDto[];
 }

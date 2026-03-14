@@ -76,6 +76,10 @@ describe("loadReviewWorkspaceDto", () => {
     const loadSnapshotForReviewMock = vi.fn().mockResolvedValue({
       generatedAt: "2026-03-12T00:00:00.000Z",
       provider: "stub",
+      diagnostics: {
+        cacheHit: null,
+        fallbackReason: null,
+      },
       items: [],
     });
     getDependenciesMock.mockReturnValue({
@@ -126,6 +130,8 @@ describe("loadReviewWorkspaceDto", () => {
           retryable: true,
           message: null,
           occurredAt: null,
+          cacheHit: null,
+          fallbackReason: null,
         },
         items: [],
       },
@@ -192,6 +198,8 @@ describe("loadReviewWorkspaceDto", () => {
         retryable: true,
         message: null,
         occurredAt: null,
+        cacheHit: null,
+        fallbackReason: null,
       },
       items: [],
     });
@@ -221,6 +229,10 @@ describe("loadReviewWorkspaceDto", () => {
     const loadSnapshotForReviewMock = vi.fn().mockResolvedValue({
       generatedAt: "2026-03-12T00:00:00.000Z",
       provider: "stub",
+      diagnostics: {
+        cacheHit: null,
+        fallbackReason: null,
+      },
       items: [
         {
           contextId: "ctx-1",
@@ -267,6 +279,8 @@ describe("loadReviewWorkspaceDto", () => {
       retryable: true,
       message: null,
       occurredAt: null,
+      cacheHit: null,
+      fallbackReason: null,
     });
   });
 
@@ -335,6 +349,8 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.businessContext.diagnostics.status).toBe("fallback");
     expect(dto.businessContext.diagnostics.retryable).toBe(true);
     expect(dto.businessContext.diagnostics.message).toBe("context timeout");
+    expect(dto.businessContext.diagnostics.cacheHit).toBe(false);
+    expect(dto.businessContext.diagnostics.fallbackReason).toBe("live_fetch_failed");
     expect(dto.businessContext.items[0]).toMatchObject({
       status: "unavailable",
       sourceType: "github_issue",
@@ -356,6 +372,10 @@ describe("loadReviewWorkspaceDto", () => {
             fallbackSnapshot: {
               generatedAt: "2026-03-13T00:00:00.000Z",
               provider: "stub",
+              diagnostics: {
+                cacheHit: null,
+                fallbackReason: null,
+              },
               items: [
                 {
                   contextId: "ctx-gh-66",
@@ -384,6 +404,8 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.businessContext.diagnostics.message).toBe(
       "Live business-context fetch failed: GitHub API timeout",
     );
+    expect(dto.businessContext.diagnostics.cacheHit).toBe(false);
+    expect(dto.businessContext.diagnostics.fallbackReason).toBe("live_fetch_failed");
     expect(dto.businessContext.items).toEqual([
       {
         contextId: "ctx-gh-66",
@@ -418,6 +440,10 @@ describe("loadReviewWorkspaceDto", () => {
         loadSnapshotForReview: vi.fn().mockResolvedValue({
           generatedAt: "2026-03-13T00:00:00.000Z",
           provider: "github_live",
+          diagnostics: {
+            cacheHit: false,
+            fallbackReason: null,
+          },
           items: [
             {
               contextId: "ctx-gh-66",
@@ -456,6 +482,14 @@ describe("loadReviewWorkspaceDto", () => {
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
 
     expect(dto.businessContext.provider).toBe("github_live");
+    expect(dto.businessContext.diagnostics).toEqual({
+      status: "ok",
+      retryable: true,
+      message: null,
+      occurredAt: null,
+      cacheHit: false,
+      fallbackReason: null,
+    });
     expect(dto.businessContext.items[0]).toMatchObject({
       sourceType: "github_issue",
       title: "Live issue title",

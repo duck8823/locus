@@ -86,6 +86,8 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     retryable: true,
     message: null,
     occurredAt: null,
+    cacheHit: null,
+    fallbackReason: null,
   };
   const businessContext = await (async () => {
     const githubIssueContextAccess =
@@ -118,15 +120,26 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     businessContextDiagnostics.occurredAt = occurredAt;
 
     if (error instanceof LiveBusinessContextUnavailableError) {
+      businessContextDiagnostics.cacheHit =
+        error.cacheHit ?? error.fallbackSnapshot.diagnostics.cacheHit ?? false;
+      businessContextDiagnostics.fallbackReason =
+        error.fallbackReason ?? error.fallbackSnapshot.diagnostics.fallbackReason ?? "live_fetch_failed";
       return {
         ...error.fallbackSnapshot,
         generatedAt: occurredAt,
       };
     }
 
+    businessContextDiagnostics.cacheHit = false;
+    businessContextDiagnostics.fallbackReason = "live_fetch_failed";
+
     return {
       generatedAt: occurredAt,
       provider: "stub" as const,
+      diagnostics: {
+        cacheHit: false,
+        fallbackReason: "live_fetch_failed" as const,
+      },
       items: [
         {
           contextId: `ctx-business-context-fallback-${reviewId}`,
@@ -212,7 +225,6 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       errorType,
     });
   }
-
   return {
     ...workspace,
     activeAnalysisJob: activeInitialAnalysisJob
@@ -234,7 +246,14 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     businessContext: {
       generatedAt: businessContext.generatedAt,
       provider: businessContextDiagnostics.status === "fallback" ? "fallback" : businessContext.provider,
-      diagnostics: businessContextDiagnostics,
+      diagnostics: {
+        ...businessContextDiagnostics,
+        cacheHit: businessContextDiagnostics.cacheHit ?? businessContext.diagnostics.cacheHit ?? null,
+        fallbackReason:
+          businessContextDiagnostics.fallbackReason ??
+          businessContext.diagnostics.fallbackReason ??
+          null,
+      },
       items: businessContext.items.map((item) => ({
         contextId: item.contextId,
         sourceType: item.sourceType,
