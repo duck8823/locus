@@ -100,9 +100,7 @@ export function calculateAnalysisQueueHealth(input: {
   const shouldMarkQueueBacklog =
     queuedJobs > 0 &&
     runningJobs === 0 &&
-    (oldestQueuedEpochMs === null ||
-      input.nowMs - oldestQueuedEpochMs >=
-        Math.max(backlogGracePeriodMs, input.staleRunningThresholdMs));
+    (oldestQueuedEpochMs === null || input.nowMs - oldestQueuedEpochMs >= backlogGracePeriodMs);
 
   if (shouldMarkQueueBacklog) {
     reasonCodes.push("queue_backlog");
