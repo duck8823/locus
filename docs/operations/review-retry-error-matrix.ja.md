@@ -2,6 +2,8 @@
 
 > English: [review-retry-error-matrix.md](review-retry-error-matrix.md)
 
+関連ランブック: [incident-response-runbook.ja.md](incident-response-runbook.ja.md)
+
 ## 目的
 
 再試行系エラーコードと、ユーザーに提示する復帰導線を一箇所で定義する。

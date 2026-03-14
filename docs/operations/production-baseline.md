@@ -2,6 +2,8 @@
 
 > 日本語: [production-baseline.ja.md](production-baseline.ja.md)
 
+Operations index: [README.md](README.md)
+
 ## Purpose
 
 Define a practical baseline for Issue #75 to move prototype persistence and operations toward a safer production posture.

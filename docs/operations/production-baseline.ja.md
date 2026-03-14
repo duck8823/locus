@@ -2,6 +2,8 @@
 
 > English: [production-baseline.md](production-baseline.md)
 
+運用ドキュメント一覧: [README.ja.md](README.ja.md)
+
 ## 目的
 
 Issue #75 に向け、現行プロトタイプの永続化と運用を、より安全な本番運用へ段階的に移行するための最小ベースラインを定義する。
