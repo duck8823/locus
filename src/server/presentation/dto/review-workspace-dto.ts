@@ -35,6 +35,24 @@ export interface ReviewWorkspaceDogfoodingMetricsDto {
   recoverySuccessRatePercent: number | null;
 }
 
+export interface ReviewWorkspaceQueueHealthDto {
+  status: "healthy" | "degraded";
+  queuedJobs: number;
+  runningJobs: number;
+  staleRunningJobs: number;
+  failedTerminalJobs: number;
+  lastFailedJob: {
+    jobId: string;
+    reason: "initial_ingestion" | "manual_reanalysis" | "code_host_webhook";
+    completedAt: string | null;
+    lastError: string | null;
+  } | null;
+  diagnostics: {
+    staleRunningThresholdMs: number;
+    reasonCodes: Array<"queue_backlog" | "stale_running_job" | "terminal_failure_detected">;
+  };
+}
+
 export interface ReviewWorkspaceAiSuggestionPayloadDto {
   generatedAt: string;
   review: {
@@ -218,6 +236,7 @@ export interface ReviewWorkspaceDto {
   activeAnalysisJob: ReviewWorkspaceActiveAnalysisJobDto | null;
   analysisHistory: ReviewWorkspaceAnalysisHistoryItemDto[];
   dogfoodingMetrics: ReviewWorkspaceDogfoodingMetricsDto;
+  queueHealth: ReviewWorkspaceQueueHealthDto | null;
   aiSuggestionPayload: ReviewWorkspaceAiSuggestionPayloadDto | null;
   aiSuggestions: ReviewWorkspaceAiSuggestionDto[];
   reanalysisStatus: ReviewReanalysisStatus;

@@ -145,6 +145,7 @@ describe("toReviewWorkspaceDto", () => {
       failureRatePercent: null,
       recoverySuccessRatePercent: null,
     });
+    expect(dto.queueHealth).toBeNull();
     expect(dto.aiSuggestionPayload).toBeNull();
     expect(dto.aiSuggestions).toEqual([]);
     expect(dto.reanalysisStatus).toBe("failed");
@@ -334,6 +335,7 @@ describe("toReviewWorkspaceDto", () => {
       failureRatePercent: null,
       recoverySuccessRatePercent: null,
     });
+    expect(dto.queueHealth).toBeNull();
     expect(dto.aiSuggestionPayload).toBeNull();
     expect(dto.aiSuggestions).toEqual([]);
     expect(dto.reanalysisStatus).toBe("idle");
