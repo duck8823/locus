@@ -185,6 +185,28 @@ test("persists reanalysis panel open state after reload", async ({ page }) => {
   await expect(reanalysisIdleText).toBeVisible();
 });
 
+test("supports keyboard-only interactions for core review controls", async ({ page }) => {
+  await openSeedWorkspace(page);
+
+  const reviewedStatusButton = page.getByTestId("status-button-reviewed");
+  await reviewedStatusButton.focus();
+  await page.keyboard.press("Enter");
+  await expect(reviewedStatusButton).toHaveAttribute("data-active", "true");
+
+  const reanalysisSummary = page.getByTestId("reanalysis-status-summary");
+  const reanalysisIdleText = page.getByText(/Not requested yet|未リクエスト/).first();
+  await expect(reanalysisIdleText).not.toBeVisible();
+  await reanalysisSummary.focus();
+  await page.keyboard.press("Enter");
+  await expect(reanalysisIdleText).toBeVisible();
+
+  const aiSuggestionSummary = page.getByTestId("ai-suggestions-summary");
+  await expect(page.getByRole("button", { name: /Adopt|採用/ }).first()).not.toBeVisible();
+  await aiSuggestionSummary.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("button", { name: /Adopt|採用/ }).first()).toBeVisible();
+});
+
 test("keeps review detail pane readable on narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openSeedWorkspace(page);
