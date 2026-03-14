@@ -171,8 +171,9 @@ function toContextDedupeKey(item: BusinessContextItem): string {
       try {
         const parsed = new URL(trimmedHref);
         const normalizedPath = parsed.pathname.replace(/\/+$/, "").toLowerCase();
+        const normalizedProtocol = parsed.protocol.toLowerCase();
 
-        return `url:${parsed.hostname.toLowerCase()}${normalizedPath}`;
+        return `url:${normalizedProtocol}//${parsed.hostname.toLowerCase()}${normalizedPath}`;
       } catch {
         return `raw:${trimmedHref.toLowerCase()}`;
       }
