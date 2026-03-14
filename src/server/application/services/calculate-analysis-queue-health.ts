@@ -55,7 +55,7 @@ export function calculateAnalysisQueueHealth(input: {
       ? input.backlogGracePeriodMs
       : DEFAULT_ANALYSIS_QUEUE_BACKLOG_GRACE_MS;
   const queuedJobRecords = input.history.filter((job) => job.status === "queued");
-  const queuedJobs = input.history.filter((job) => job.status === "queued").length;
+  const queuedJobs = queuedJobRecords.length;
   const runningJobs = input.history.filter((job) => job.status === "running").length;
   const staleRunningJobs = input.history.filter((job) =>
     isStaleRunningJob({
