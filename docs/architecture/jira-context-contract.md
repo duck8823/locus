@@ -12,6 +12,7 @@ Define a provider-neutral Jira issue-tracker adapter boundary with explicit capa
 - Typed transient/terminal error contract
 - Capability-flag model for GitHub / Confluence / Jira differentiation
 - Fallback diagnostics mapping to existing business-context diagnostics fields
+- Authentication-mode handling for OAuth bearer and Jira API token basic credentials
 
 Out of scope:
 - Jira issue create/update transitions
@@ -100,6 +101,8 @@ File:
 Behavior:
 - performs read-only `/rest/api/3/search`
 - maps issues into normalized records
+- flattens Jira ADF description payloads into summary text
+- supports `bearer` and `basic` authorization schemes
 - throws typed temporary/permanent errors with reason code
 
 ## Tests

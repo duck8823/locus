@@ -50,7 +50,25 @@ describe("JiraReadonlyContextProvider", () => {
               key: "LOC-123",
               fields: {
                 summary: "Harden queue diagnostics",
-                description: "Add retry reason code for queue health incidents.",
+                description: {
+                  type: "doc",
+                  version: 1,
+                  content: [
+                    {
+                      type: "paragraph",
+                      content: [
+                        {
+                          type: "text",
+                          text: "Add retry reason code",
+                        },
+                        {
+                          type: "text",
+                          text: "for queue health incidents.",
+                        },
+                      ],
+                    },
+                  ],
+                },
                 status: {
                   name: "In Progress",
                 },
@@ -84,6 +102,40 @@ describe("JiraReadonlyContextProvider", () => {
         updatedAt: "2026-03-13T22:00:00.000Z",
       },
     ]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      headers: expect.objectContaining({
+        Authorization: "Bearer token",
+      }),
+    });
+  });
+
+  it("supports basic authorization mode for jira api token credentials", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({ issues: [] }),
+    });
+    const provider = new JiraReadonlyContextProvider({
+      apiBaseUrl: "https://jira.example.com",
+      fetchImpl,
+      authScheme: "basic",
+    });
+
+    await provider.searchIssuesForReviewContext({
+      reviewId: "review-1",
+      repositoryName: "duck8823/locus",
+      branchLabel: "feature/123-context -> main",
+      title: "Demo PR",
+      accessToken: "reviewer@example.com:api-token",
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0]?.[1]).toMatchObject({
+      headers: expect.objectContaining({
+        Authorization: "Basic cmV2aWV3ZXJAZXhhbXBsZS5jb206YXBpLXRva2Vu",
+      }),
+    });
   });
 
   it("throws temporary typed error for retryable provider failures", async () => {

@@ -12,6 +12,7 @@ Jira issue-tracker adapter の provider 非依存境界を定義し、capability
 - transient / terminal を分けた typed error 契約
 - GitHub / Confluence / Jira の差分を表現できる capability flags モデル
 - 既存 business-context diagnostics フィールドへの fallback マッピング
+- OAuth bearer / Jira API token basic の認証方式取り扱い
 
 非対象:
 - Jira issue の作成/更新/遷移
@@ -100,6 +101,8 @@ provider 既定値:
 挙動:
 - read-only `/rest/api/3/search` を実行する
 - issue 応答を正規化 record へマッピングする
+- Jira の ADF description を summary テキストへ平坦化する
+- `bearer` / `basic` の authorization scheme をサポートする
 - 失敗を reason code 付き temporary/permanent typed error へ分類する
 
 ## テスト

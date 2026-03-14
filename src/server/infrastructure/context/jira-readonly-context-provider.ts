@@ -21,6 +21,7 @@ interface JiraSearchResponse {
 }
 
 type FetchLike = typeof fetch;
+type JiraAuthScheme = "bearer" | "basic";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -62,7 +63,64 @@ function toSummary(value: unknown): string | null {
     return normalized.length > 0 ? normalized.slice(0, 220) : null;
   }
 
+  if (typeof value === "object") {
+    const extracted = extractJiraDocumentText(value);
+    const normalized = extracted.replace(/\s+/g, " ").trim();
+
+    return normalized.length > 0 ? normalized.slice(0, 220) : null;
+  }
+
   return null;
+}
+
+function extractJiraDocumentText(node: unknown): string {
+  if (!node) {
+    return "";
+  }
+
+  if (Array.isArray(node)) {
+    return node
+      .map((entry) => extractJiraDocumentText(entry))
+      .filter((entry) => entry.length > 0)
+      .join(" ");
+  }
+
+  if (typeof node !== "object") {
+    return "";
+  }
+
+  const current = node as {
+    type?: unknown;
+    text?: unknown;
+    attrs?: { text?: unknown };
+    content?: unknown;
+  };
+  const segments: string[] = [];
+
+  if (typeof current.text === "string") {
+    segments.push(current.text);
+  }
+
+  if (typeof current.attrs?.text === "string") {
+    segments.push(current.attrs.text);
+  }
+
+  if (current.type === "hardBreak") {
+    segments.push("\n");
+  }
+
+  if (Array.isArray(current.content)) {
+    const childText = current.content
+      .map((child) => extractJiraDocumentText(child))
+      .filter((entry) => entry.length > 0)
+      .join(" ");
+
+    if (childText.length > 0) {
+      segments.push(childText);
+    }
+  }
+
+  return segments.join(" ");
 }
 
 function toJql(input: {
@@ -89,6 +147,22 @@ export interface JiraReadonlyContextProviderOptions {
   fetchImpl?: FetchLike;
   requestTimeoutMs?: number;
   defaultAccessToken?: string | null;
+  authScheme?: JiraAuthScheme;
+}
+
+function resolveAuthScheme(value: string | undefined): JiraAuthScheme {
+  return value?.toLowerCase() === "basic" ? "basic" : "bearer";
+}
+
+function buildAuthorizationHeaderValue(
+  accessToken: string,
+  authScheme: JiraAuthScheme,
+): string {
+  if (authScheme === "basic") {
+    return `Basic ${Buffer.from(accessToken).toString("base64")}`;
+  }
+
+  return `Bearer ${accessToken}`;
 }
 
 export class JiraReadonlyContextProvider implements JiraContextProvider {
@@ -96,6 +170,7 @@ export class JiraReadonlyContextProvider implements JiraContextProvider {
   private readonly fetchImpl: FetchLike;
   private readonly requestTimeoutMs: number;
   private readonly defaultAccessToken: string | null;
+  private readonly authScheme: JiraAuthScheme;
 
   constructor(options: JiraReadonlyContextProviderOptions = {}) {
     this.apiBaseUrl = resolveBaseUrl(
@@ -108,6 +183,9 @@ export class JiraReadonlyContextProvider implements JiraContextProvider {
     );
     this.defaultAccessToken = resolveAccessToken(
       options.defaultAccessToken ?? process.env.JIRA_ACCESS_TOKEN ?? null,
+    );
+    this.authScheme = resolveAuthScheme(
+      options.authScheme ?? process.env.JIRA_AUTH_SCHEME,
     );
   }
 
@@ -128,6 +206,11 @@ export class JiraReadonlyContextProvider implements JiraContextProvider {
     if (!accessToken) {
       return [];
     }
+
+    const authorizationHeaderValue = buildAuthorizationHeaderValue(
+      accessToken,
+      this.authScheme,
+    );
 
     const endpoint = `${this.apiBaseUrl}/rest/api/3/search`;
     const requestBody = JSON.stringify({
@@ -151,7 +234,7 @@ export class JiraReadonlyContextProvider implements JiraContextProvider {
         headers: {
           Accept: "application/json",
           "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          Authorization: authorizationHeaderValue,
         },
         body: requestBody,
         signal: abortController.signal,
