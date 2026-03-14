@@ -61,6 +61,13 @@ export interface ReviewWorkspaceBusinessContextDto {
     occurredAt: string | null
     cacheHit: boolean | null
     fallbackReason: "stale_cache" | "live_fetch_failed" | null
+    conflictReasonCodes: (
+      | "confidence_priority"
+      | "freshness_priority"
+      | "provider_priority"
+      | "status_priority"
+      | "stable_tie_breaker"
+    )[]
   }
   items: ReviewWorkspaceBusinessContextItemDto[]
 }
@@ -104,7 +111,7 @@ export interface ReviewWorkspaceBusinessContextDto {
   - 正規化された `reasonCode`（`timeout`, `network`, `auth` など）
   - 取得できる範囲の `message`
   - 発生時刻 `occurredAt`
-  - 運用診断向けの `cacheHit`, `fallbackReason`
+  - 運用診断向けの `cacheHit`, `fallbackReason`, `conflictReasonCodes`
 - UI は「今すぐ再読み込み」を案内しつつ、ワークスペース本体は継続利用可能にする。
 
 ## Provider Capability 境界 (H2-2)

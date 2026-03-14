@@ -326,6 +326,7 @@ export class StubBusinessContextProvider implements BusinessContextProvider {
       diagnostics: {
         cacheHit: null,
         fallbackReason: null,
+        conflictReasonCodes: [],
       },
       items,
     };

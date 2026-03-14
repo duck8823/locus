@@ -61,6 +61,13 @@ export interface ReviewWorkspaceBusinessContextDto {
     occurredAt: string | null
     cacheHit: boolean | null
     fallbackReason: "stale_cache" | "live_fetch_failed" | null
+    conflictReasonCodes: (
+      | "confidence_priority"
+      | "freshness_priority"
+      | "provider_priority"
+      | "status_priority"
+      | "stable_tie_breaker"
+    )[]
   }
   items: ReviewWorkspaceBusinessContextItemDto[]
 }
@@ -104,7 +111,7 @@ export interface ReviewWorkspaceBusinessContextDto {
   - normalized `reasonCode` (`timeout`, `network`, `auth`, etc.)
   - error `message` (best effort)
   - `occurredAt` timestamp
-  - `cacheHit` and `fallbackReason` for operational analysis
+  - `cacheHit`, `fallbackReason`, and `conflictReasonCodes` for operational analysis
 - UI shows retry guidance (`Reload now`) and keeps workspace usable.
 
 ## Provider Capability Boundary (H2-2)
