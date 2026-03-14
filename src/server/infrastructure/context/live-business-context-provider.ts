@@ -5,6 +5,10 @@ import type {
   BusinessContextSnapshot,
 } from "@/server/application/ports/business-context-provider";
 import { LiveBusinessContextUnavailableError } from "@/server/application/errors/live-business-context-unavailable-error";
+import {
+  classifyIntegrationFailure,
+  type IntegrationFailureClassification,
+} from "@/server/application/services/classify-integration-failure";
 import type {
   IssueContextProvider,
   IssueContextRecord,
@@ -158,78 +162,6 @@ interface CachedIssueEntry {
   cachedAtMs: number;
 }
 
-function isRetryableIssueFetchError(error: unknown): boolean {
-  const retryableCodes = new Set([
-    "ECONNABORTED",
-    "ECONNREFUSED",
-    "ECONNRESET",
-    "EHOSTUNREACH",
-    "EAI_AGAIN",
-    "ENETDOWN",
-    "ENETRESET",
-    "ENETUNREACH",
-    "ENOTFOUND",
-    "ETIMEDOUT",
-  ]);
-
-  const queue: unknown[] = [error];
-  const visited = new Set<unknown>();
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-
-    if (!current || visited.has(current)) {
-      continue;
-    }
-
-    visited.add(current);
-
-    if (current instanceof Error) {
-      if (current.name === "AbortError") {
-        return true;
-      }
-
-      if (/\(429\)|\(5\d\d\)/.test(current.message)) {
-        return true;
-      }
-
-      if (/timeout|ECONN|ENOTFOUND|EAI_AGAIN/i.test(current.message)) {
-        return true;
-      }
-
-      if (current instanceof TypeError && /fetch failed/i.test(current.message)) {
-        return true;
-      }
-    }
-
-    if (typeof current === "object") {
-      const statusLike =
-        (current as { status?: unknown }).status ??
-        (current as { statusCode?: unknown }).statusCode ??
-        (current as { response?: { status?: unknown } }).response?.status;
-      const status = typeof statusLike === "number" ? statusLike : null;
-
-      if (status === 429 || (status !== null && status >= 500 && status < 600)) {
-        return true;
-      }
-
-      const code = (current as { code?: unknown }).code;
-
-      if (typeof code === "string" && retryableCodes.has(code.toUpperCase())) {
-        return true;
-      }
-
-      const cause = (current as { cause?: unknown }).cause;
-
-      if (cause) {
-        queue.push(cause);
-      }
-    }
-  }
-
-  return false;
-}
-
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -348,6 +280,7 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
     }
 
     let lastError: unknown;
+    let lastFailureClassification: IntegrationFailureClassification | null = null;
 
     for (let attempt = 1; attempt <= this.maxFetchAttempts; attempt += 1) {
       try {
@@ -370,8 +303,9 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
         };
       } catch (error) {
         lastError = error;
+        lastFailureClassification = classifyIntegrationFailure(error);
 
-        if (attempt >= this.maxFetchAttempts || !isRetryableIssueFetchError(error)) {
+        if (attempt >= this.maxFetchAttempts || !lastFailureClassification.retryable) {
           break;
         }
 
@@ -385,7 +319,7 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
 
     const canFallbackToStaleCache =
       cachedState?.state === "stale" &&
-      (lastError === undefined || isRetryableIssueFetchError(lastError));
+      (lastFailureClassification === null || lastFailureClassification.retryable);
 
     if (canFallbackToStaleCache) {
       return {
@@ -504,10 +438,14 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
         items: enrichedItems,
       };
     } catch (error) {
+      const failureClassification = classifyIntegrationFailure(error);
+
       throw new LiveBusinessContextUnavailableError({
         fallbackSnapshot,
         cacheHit: false,
         fallbackReason: "live_fetch_failed",
+        retryable: failureClassification.retryable,
+        reasonCode: failureClassification.reasonCode,
         message:
           error instanceof Error && error.message.trim().length > 0
             ? `Live business-context fetch failed: ${error.message}`

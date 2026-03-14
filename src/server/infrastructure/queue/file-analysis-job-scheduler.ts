@@ -11,6 +11,7 @@ import type {
   ScheduledAnalysisJob,
 } from "@/server/application/ports/analysis-job-scheduler";
 import { DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS } from "@/server/application/constants/analysis-job-queue-policy";
+import { classifyIntegrationFailure } from "@/server/application/services/classify-integration-failure";
 
 interface PersistedAnalysisJobRecord {
   jobId: string;
@@ -409,12 +410,26 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
 
       const completedAt = new Date().toISOString();
       const errorMessage = toErrorMessage(error);
+      const failure = classifyIntegrationFailure(error);
+      const diagnosticErrorMessage = `${failure.reasonCode}: ${errorMessage}`;
+      const shouldRetry = failure.retryable && job.attempts < this.maxAttempts;
 
-      if (job.attempts >= this.maxAttempts) {
+      if (!shouldRetry) {
         job.status = "failed";
         job.completedAt = completedAt;
         job.durationMs = this.calculateDurationMs(startedAt, completedAt);
-        job.lastError = errorMessage;
+        job.lastError = diagnosticErrorMessage;
+        console.warn("analysis_job_failed", {
+          jobId: job.jobId,
+          reviewId: job.reviewId,
+          reason: job.reason,
+          attempts: job.attempts,
+          maxAttempts: this.maxAttempts,
+          retryable: failure.retryable,
+          failureClass: failure.failureClass,
+          reasonCode: failure.reasonCode,
+          message: errorMessage,
+        });
         return;
       }
 
@@ -422,8 +437,19 @@ export class FileAnalysisJobScheduler implements AnalysisJobScheduler {
       job.startedAt = null;
       job.completedAt = completedAt;
       job.durationMs = this.calculateDurationMs(startedAt, completedAt);
-      job.lastError = errorMessage;
+      job.lastError = diagnosticErrorMessage;
       job.queuedAt = completedAt;
+      console.warn("analysis_job_retry_scheduled", {
+        jobId: job.jobId,
+        reviewId: job.reviewId,
+        reason: job.reason,
+        attempts: job.attempts,
+        maxAttempts: this.maxAttempts,
+        retryable: failure.retryable,
+        failureClass: failure.failureClass,
+        reasonCode: failure.reasonCode,
+        message: errorMessage,
+      });
     });
   }
 

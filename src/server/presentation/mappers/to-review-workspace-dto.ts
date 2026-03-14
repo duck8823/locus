@@ -340,6 +340,7 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
       diagnostics: {
         status: "ok",
         retryable: true,
+        reasonCode: null,
         message: null,
         occurredAt: null,
         cacheHit: null,

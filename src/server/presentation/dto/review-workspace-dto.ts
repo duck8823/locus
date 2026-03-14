@@ -208,6 +208,16 @@ export interface ReviewWorkspaceBusinessContextDto {
   diagnostics: {
     status: "ok" | "fallback";
     retryable: boolean;
+    reasonCode:
+      | "timeout"
+      | "network"
+      | "rate_limit"
+      | "auth"
+      | "not_found"
+      | "upstream_5xx"
+      | "client_error"
+      | "unknown"
+      | null;
     message: string | null;
     occurredAt: string | null;
     cacheHit: boolean | null;

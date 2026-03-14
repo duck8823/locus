@@ -159,6 +159,8 @@ describe("LiveBusinessContextProvider", () => {
       expect(thrownError.fallbackSnapshot).toEqual(fallbackSnapshot);
       expect(thrownError.cacheHit).toBe(false);
       expect(thrownError.fallbackReason).toBe("live_fetch_failed");
+      expect(thrownError.retryable).toBe(true);
+      expect(thrownError.reasonCode).toBe("timeout");
       expect(thrownError.message).toContain("Live business-context fetch failed");
     }
   });
@@ -458,9 +460,47 @@ describe("LiveBusinessContextProvider", () => {
     await provider.loadSnapshotForReview(createInput());
     nowMs += 5_000;
 
-    await expect(provider.loadSnapshotForReview(createInput())).rejects.toBeInstanceOf(
-      LiveBusinessContextUnavailableError,
-    );
+    let thrown: unknown;
+
+    try {
+      await provider.loadSnapshotForReview(createInput());
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(LiveBusinessContextUnavailableError);
+
+    if (thrown instanceof LiveBusinessContextUnavailableError) {
+      expect(thrown.retryable).toBe(false);
+      expect(thrown.reasonCode).toBe("auth");
+    }
+  });
+
+  it("fails fast without retry on terminal not-found failures", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi.fn().mockRejectedValue(
+        new Error("GitHub issue API failed (404): not found"),
+      ),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      maxFetchAttempts: 4,
+      initialBackoffMs: 20,
+      sleep,
+    });
+
+    await expect(provider.loadSnapshotForReview(createInput())).rejects.toMatchObject({
+      reasonCode: "not_found",
+      retryable: false,
+    });
+    expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(1);
+    expect(sleep).not.toHaveBeenCalled();
   });
 
   it("evicts oldest cache entries when max cache size is exceeded", async () => {
