@@ -2,6 +2,8 @@
 
 > 日本語: [review-retry-error-matrix.ja.md](review-retry-error-matrix.ja.md)
 
+Related runbook: [incident-response-runbook.md](incident-response-runbook.md)
+
 ## Purpose
 
 Define a single mapping between retry-related error codes and user-facing recovery guidance.
