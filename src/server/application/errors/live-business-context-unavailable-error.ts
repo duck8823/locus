@@ -15,8 +15,9 @@ export class LiveBusinessContextUnavailableError extends Error {
     super(input.message ?? "Live business-context provider is temporarily unavailable.");
     this.name = "LiveBusinessContextUnavailableError";
     this.fallbackSnapshot = input.fallbackSnapshot;
-    this.cacheHit = input.cacheHit ?? null;
-    this.fallbackReason = input.fallbackReason ?? "live_fetch_failed";
+    this.cacheHit = input.cacheHit ?? input.fallbackSnapshot.diagnostics.cacheHit ?? null;
+    this.fallbackReason =
+      input.fallbackReason ?? input.fallbackSnapshot.diagnostics.fallbackReason ?? null;
     this.cause = input.cause;
   }
 }
