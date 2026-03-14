@@ -227,7 +227,8 @@ test("supports keyboard-only interactions for core review controls", async ({ pa
   await openSeedWorkspace(page);
 
   const localeJaButton = page.getByTestId("workspace-locale-ja");
-  await localeJaButton.focus();
+  await expect(localeJaButton).toBeVisible();
+  await tabUntilFocusedTestId(page, "workspace-locale-ja");
   await expect(localeJaButton).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(page.getByTestId("workspace-locale-en")).toBeFocused();
