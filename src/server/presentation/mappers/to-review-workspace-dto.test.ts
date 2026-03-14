@@ -145,18 +145,7 @@ describe("toReviewWorkspaceDto", () => {
       failureRatePercent: null,
       recoverySuccessRatePercent: null,
     });
-    expect(dto.queueHealth).toEqual({
-      status: "healthy",
-      queuedJobs: 0,
-      runningJobs: 0,
-      staleRunningJobs: 0,
-      failedTerminalJobs: 0,
-      lastFailedJob: null,
-      diagnostics: {
-        staleRunningThresholdMs: 600000,
-        reasonCodes: [],
-      },
-    });
+    expect(dto.queueHealth).toBeNull();
     expect(dto.aiSuggestionPayload).toBeNull();
     expect(dto.aiSuggestions).toEqual([]);
     expect(dto.reanalysisStatus).toBe("failed");
@@ -346,18 +335,7 @@ describe("toReviewWorkspaceDto", () => {
       failureRatePercent: null,
       recoverySuccessRatePercent: null,
     });
-    expect(dto.queueHealth).toEqual({
-      status: "healthy",
-      queuedJobs: 0,
-      runningJobs: 0,
-      staleRunningJobs: 0,
-      failedTerminalJobs: 0,
-      lastFailedJob: null,
-      diagnostics: {
-        staleRunningThresholdMs: 600000,
-        reasonCodes: [],
-      },
-    });
+    expect(dto.queueHealth).toBeNull();
     expect(dto.aiSuggestionPayload).toBeNull();
     expect(dto.aiSuggestions).toEqual([]);
     expect(dto.reanalysisStatus).toBe("idle");

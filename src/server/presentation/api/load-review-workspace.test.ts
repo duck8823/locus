@@ -120,18 +120,7 @@ describe("loadReviewWorkspaceDto", () => {
         failureRatePercent: null,
         recoverySuccessRatePercent: null,
       },
-      queueHealth: {
-        status: "healthy",
-        queuedJobs: 0,
-        runningJobs: 0,
-        staleRunningJobs: 0,
-        failedTerminalJobs: 0,
-        lastFailedJob: null,
-        diagnostics: {
-          staleRunningThresholdMs: 600000,
-          reasonCodes: [],
-        },
-      },
+      queueHealth: null,
       aiSuggestionPayload: null,
       aiSuggestions: [],
       businessContext: {

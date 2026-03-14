@@ -236,7 +236,7 @@ export interface ReviewWorkspaceDto {
   activeAnalysisJob: ReviewWorkspaceActiveAnalysisJobDto | null;
   analysisHistory: ReviewWorkspaceAnalysisHistoryItemDto[];
   dogfoodingMetrics: ReviewWorkspaceDogfoodingMetricsDto;
-  queueHealth: ReviewWorkspaceQueueHealthDto;
+  queueHealth: ReviewWorkspaceQueueHealthDto | null;
   aiSuggestionPayload: ReviewWorkspaceAiSuggestionPayloadDto | null;
   aiSuggestions: ReviewWorkspaceAiSuggestionDto[];
   reanalysisStatus: ReviewReanalysisStatus;
