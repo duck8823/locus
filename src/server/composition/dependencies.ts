@@ -44,13 +44,13 @@ function readOptionalPositiveIntegerEnv(name: string): number | undefined {
     return undefined;
   }
 
-  if (!/^\d+$/.test(value)) {
-    return undefined;
-  }
-
   const parsed = Number(value);
 
   if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    return undefined;
+  }
+
+  if (String(parsed) !== value) {
     return undefined;
   }
 
