@@ -39,6 +39,44 @@ async function openSeedWorkspace(page: Page) {
   await expect(page).toHaveURL(workspacePathPattern);
 }
 
+async function tabUntilFocusedTestId(
+  page: Page,
+  targetTestId: string,
+  maxTabs = 80,
+) {
+  for (let attempt = 0; attempt < maxTabs; attempt += 1) {
+    await page.keyboard.press("Tab");
+    const focusedTestId = await page.evaluate(
+      () => document.activeElement?.getAttribute("data-testid") ?? null,
+    );
+
+    if (focusedTestId === targetTestId) {
+      return;
+    }
+  }
+
+  throw new Error(`Keyboard focus could not reach data-testid=\"${targetTestId}\"`);
+}
+
+async function tabUntilFocusedTestIdPrefix(
+  page: Page,
+  targetTestIdPrefix: string,
+  maxTabs = 80,
+) {
+  for (let attempt = 0; attempt < maxTabs; attempt += 1) {
+    await page.keyboard.press("Tab");
+    const focusedTestId = await page.evaluate(
+      () => document.activeElement?.getAttribute("data-testid") ?? null,
+    );
+
+    if (focusedTestId?.startsWith(targetTestIdPrefix)) {
+      return focusedTestId;
+    }
+  }
+
+  throw new Error(`Keyboard focus could not reach data-testid prefix=\"${targetTestIdPrefix}\"`);
+}
+
 test.beforeEach(() => {
   reseedDemoData();
 });
@@ -188,25 +226,17 @@ test("persists reanalysis panel open state after reload", async ({ page }) => {
 test("supports keyboard-only interactions for core review controls", async ({ page }) => {
   await openSeedWorkspace(page);
 
-  const reviewedStatusButton = page.getByTestId("status-button-reviewed");
-  await reviewedStatusButton.focus();
-  await expect(reviewedStatusButton).toBeFocused();
-
   const localeJaButton = page.getByTestId("workspace-locale-ja");
   await localeJaButton.focus();
   await expect(localeJaButton).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByTestId("workspace-locale-en")).toBeFocused();
 
-  const localeEnButton = page.getByTestId("workspace-locale-en");
-  await localeEnButton.focus();
-  await expect(localeEnButton).toBeFocused();
+  await tabUntilFocusedTestIdPrefix(page, "group-button-group-");
+  await expect(page.locator('[data-testid^=\"group-button-group-\"]:focus')).toHaveCount(1);
 
-  const queueReanalysisButton = page.getByRole("button", { name: /Queue reanalysis|再解析をキュー投入/ });
-  await queueReanalysisButton.focus();
-  await expect(queueReanalysisButton).toBeFocused();
-
-  const refreshButton = page.getByRole("button", { name: /Reload now|今すぐ再読み込み/ });
-  await refreshButton.focus();
-  await expect(refreshButton).toBeFocused();
+  await tabUntilFocusedTestId(page, "status-button-reviewed");
+  await expect(page.getByTestId("status-button-reviewed")).toBeFocused();
 });
 
 test("keeps review detail pane readable on narrow viewport", async ({ page }) => {
