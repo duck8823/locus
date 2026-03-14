@@ -47,8 +47,20 @@ export interface ReviewWorkspaceBusinessContextDto {
   diagnostics: {
     status: "ok" | "fallback"
     retryable: boolean
+    reasonCode:
+      | "timeout"
+      | "network"
+      | "rate_limit"
+      | "auth"
+      | "not_found"
+      | "upstream_5xx"
+      | "client_error"
+      | "unknown"
+      | null
     message: string | null
     occurredAt: string | null
+    cacheHit: boolean | null
+    fallbackReason: "stale_cache" | "live_fetch_failed" | null
   }
   items: ReviewWorkspaceBusinessContextItemDto[]
 }
@@ -89,8 +101,10 @@ export interface ReviewWorkspaceBusinessContextDto {
 - `diagnostics` includes:
   - `status: "fallback"`
   - `retryable` flag for UI
+  - normalized `reasonCode` (`timeout`, `network`, `auth`, etc.)
   - error `message` (best effort)
   - `occurredAt` timestamp
+  - `cacheHit` and `fallbackReason` for operational analysis
 - UI shows retry guidance (`Reload now`) and keeps workspace usable.
 
 ## Evolution Rules
