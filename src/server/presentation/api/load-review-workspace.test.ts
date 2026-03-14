@@ -250,6 +250,29 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.activeAnalysisJob).toBeNull();
   });
 
+  it("passes stale-running threshold from env into analysis history loader", async () => {
+    const previous = process.env.LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS;
+
+    try {
+      process.env.LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS = "120000";
+
+      await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+      expect(loadAnalysisJobHistoryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reviewId: "review-1",
+          staleRunningThresholdMs: 120000,
+        }),
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS;
+      } else {
+        process.env.LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS = previous;
+      }
+    }
+  });
+
   it("logs degraded queue-health diagnostics for ops visibility", async () => {
     const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     loadAnalysisJobHistoryMock.mockResolvedValueOnce({

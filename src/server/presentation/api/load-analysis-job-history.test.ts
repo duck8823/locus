@@ -48,12 +48,12 @@ describe("loadAnalysisJobHistory", () => {
       {
         jobId: "job-3",
         reviewId: "review-1",
-        requestedAt: "2026-03-12T00:00:00.000Z",
+        requestedAt: "2026-03-12T00:30:00.000Z",
         reason: "manual_reanalysis",
         status: "failed",
-        queuedAt: "2026-03-12T00:00:00.000Z",
-        startedAt: "2026-03-12T00:00:01.000Z",
-        completedAt: "2026-03-12T00:00:04.000Z",
+        queuedAt: "2026-03-12T00:30:00.000Z",
+        startedAt: "2026-03-12T00:30:01.000Z",
+        completedAt: "2026-03-12T00:30:04.000Z",
         durationMs: 3000,
         attempts: 2,
         lastError: "temporary timeout",
@@ -114,7 +114,7 @@ describe("loadAnalysisJobHistory", () => {
       lastFailedJob: {
         jobId: "job-3",
         reason: "manual_reanalysis",
-        completedAt: "2026-03-12T00:00:04.000Z",
+        completedAt: "2026-03-12T00:30:04.000Z",
         lastError: "temporary timeout",
       },
       diagnostics: {

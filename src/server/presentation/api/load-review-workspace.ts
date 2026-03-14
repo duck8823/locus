@@ -10,6 +10,7 @@ import {
   type AiSuggestionProviderErrorType,
 } from "@/server/application/ports/ai-suggestion-provider";
 import { resolveGitHubIssueContextAccess } from "@/server/application/services/resolve-github-issue-context-access";
+import { DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS } from "@/server/application/constants/analysis-job-queue-policy";
 import { getDependencies } from "@/server/composition/dependencies";
 import { loadActiveInitialAnalysisJob } from "@/server/presentation/api/load-active-initial-analysis-job";
 import { loadActiveManualReanalysisJob } from "@/server/presentation/api/load-active-manual-reanalysis-job";
@@ -57,6 +58,22 @@ function buildAiSuggestionFailureFallback(params: {
   ];
 }
 
+function resolveAnalysisJobStaleRunningThresholdMs(): number {
+  const value = process.env.LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS?.trim();
+
+  if (!value || !/^\d+$/.test(value)) {
+    return DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS;
+  }
+
+  const parsed = Number(value);
+
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    return DEFAULT_ANALYSIS_JOB_STALE_RUNNING_MS;
+  }
+
+  return parsed;
+}
+
 export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceInput): Promise<ReviewWorkspaceDto> {
   const {
     reviewSessionRepository,
@@ -78,6 +95,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
   const analysisJobHistory = await loadAnalysisJobHistory({
     analysisJobScheduler,
     reviewId,
+    staleRunningThresholdMs: resolveAnalysisJobStaleRunningThresholdMs(),
   });
   if (analysisJobHistory.queueHealth.status === "degraded") {
     console.warn("analysis_queue_health_degraded", {

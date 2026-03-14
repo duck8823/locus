@@ -66,6 +66,16 @@ export function calculateAnalysisQueueHealth(input: {
   ).length;
   const failedJobs = input.history.filter((job) => job.status === "failed");
   const failedTerminalJobs = failedJobs.length;
+  const latestTerminalJob = [...input.history]
+    .filter((job) => job.status === "succeeded" || job.status === "failed")
+    .sort((left, right) => {
+      const leftEpochMs = Date.parse(left.completedAt ?? left.queuedAt);
+      const rightEpochMs = Date.parse(right.completedAt ?? right.queuedAt);
+      const normalizedLeftEpochMs = Number.isNaN(leftEpochMs) ? 0 : leftEpochMs;
+      const normalizedRightEpochMs = Number.isNaN(rightEpochMs) ? 0 : rightEpochMs;
+
+      return normalizedRightEpochMs - normalizedLeftEpochMs;
+    })[0] ?? null;
   const lastFailedJob = [...failedJobs]
     .sort((left, right) => {
       const leftEpochMs = Date.parse(left.completedAt ?? left.queuedAt);
@@ -90,7 +100,9 @@ export function calculateAnalysisQueueHealth(input: {
   const shouldMarkQueueBacklog =
     queuedJobs > 0 &&
     runningJobs === 0 &&
-    (oldestQueuedEpochMs === null || input.nowMs - oldestQueuedEpochMs >= backlogGracePeriodMs);
+    (oldestQueuedEpochMs === null ||
+      input.nowMs - oldestQueuedEpochMs >=
+        Math.max(backlogGracePeriodMs, input.staleRunningThresholdMs));
 
   if (shouldMarkQueueBacklog) {
     reasonCodes.push("queue_backlog");
@@ -100,7 +112,7 @@ export function calculateAnalysisQueueHealth(input: {
     reasonCodes.push("stale_running_job");
   }
 
-  if (failedTerminalJobs > 0) {
+  if (latestTerminalJob?.status === "failed") {
     reasonCodes.push("terminal_failure_detected");
   }
 
