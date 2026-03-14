@@ -39,6 +39,44 @@ async function openSeedWorkspace(page: Page) {
   await expect(page).toHaveURL(workspacePathPattern);
 }
 
+async function tabUntilFocusedTestId(
+  page: Page,
+  targetTestId: string,
+  maxTabs = 80,
+) {
+  for (let attempt = 0; attempt < maxTabs; attempt += 1) {
+    await page.keyboard.press("Tab");
+    const focusedTestId = await page.evaluate(
+      () => document.activeElement?.getAttribute("data-testid") ?? null,
+    );
+
+    if (focusedTestId === targetTestId) {
+      return;
+    }
+  }
+
+  throw new Error(`Keyboard focus could not reach data-testid=\"${targetTestId}\"`);
+}
+
+async function tabUntilFocusedTestIdPrefix(
+  page: Page,
+  targetTestIdPrefix: string,
+  maxTabs = 80,
+) {
+  for (let attempt = 0; attempt < maxTabs; attempt += 1) {
+    await page.keyboard.press("Tab");
+    const focusedTestId = await page.evaluate(
+      () => document.activeElement?.getAttribute("data-testid") ?? null,
+    );
+
+    if (focusedTestId?.startsWith(targetTestIdPrefix)) {
+      return focusedTestId;
+    }
+  }
+
+  throw new Error(`Keyboard focus could not reach data-testid prefix=\"${targetTestIdPrefix}\"`);
+}
+
 test.beforeEach(() => {
   reseedDemoData();
 });
@@ -183,6 +221,46 @@ test("persists reanalysis panel open state after reload", async ({ page }) => {
 
   await page.reload();
   await expect(reanalysisIdleText).toBeVisible();
+});
+
+test("supports keyboard-only interactions for core review controls", async ({ page }) => {
+  await openSeedWorkspace(page);
+
+  const localeJaButton = page.getByTestId("workspace-locale-ja");
+  const localeEnButton = page.getByTestId("workspace-locale-en");
+  await expect(localeJaButton).toBeVisible();
+  await tabUntilFocusedTestId(page, "workspace-locale-ja");
+  await expect(localeJaButton).toBeFocused();
+
+  await localeJaButton.press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 2, name: "変更グループ" }),
+  ).toBeVisible();
+
+  await tabUntilFocusedTestId(page, "workspace-locale-en");
+  await expect(localeEnButton).toBeFocused();
+  await localeEnButton.press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 2, name: "Change groups" }),
+  ).toBeVisible();
+
+  await tabUntilFocusedTestIdPrefix(page, "group-button-group-");
+  await expect(page.locator('[data-testid^=\"group-button-group-\"]:focus')).toHaveCount(1);
+
+  const reviewedStatusButton = page.getByTestId("status-button-reviewed");
+  await tabUntilFocusedTestId(page, "status-button-reviewed");
+  await expect(reviewedStatusButton).toBeFocused();
+  await expect(reviewedStatusButton).not.toHaveAttribute("data-active", "true");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(
+      async () => {
+        await page.reload();
+        return page.getByTestId("status-button-reviewed").getAttribute("data-active");
+      },
+      { timeout: 30_000 },
+    )
+    .toBe("true");
 });
 
 test("keeps review detail pane readable on narrow viewport", async ({ page }) => {
