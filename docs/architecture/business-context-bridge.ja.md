@@ -107,6 +107,14 @@ export interface ReviewWorkspaceBusinessContextDto {
   - 運用診断向けの `cacheHit`, `fallbackReason`
 - UI は「今すぐ再読み込み」を案内しつつ、ワークスペース本体は継続利用可能にする。
 
+## Provider Capability 境界 (H2-2)
+
+- provider 間の差分は application 層の capability flags
+  （`src/server/application/services/requirement-context-capabilities.ts`）で表現する。
+- presentation DTO は `sourceType/status/confidence` の provider 非依存契約を維持し、
+  Jira の issue key/status のような provider 固有フィールドは公開しない。
+- 新 provider はまず adapter 契約 + capability flags を拡張し、その後で既存 DTO へ写像する。
+
 ## 拡張ポリシー
 
 1. source/status の enum は加算的に拡張する。

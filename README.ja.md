@@ -189,6 +189,8 @@ npm run demo:data:reseed   # 基本ディレクトリと空のジョブキュー
 - [`docs/architecture/semantic-analysis-pipeline.ja.md`](docs/architecture/semantic-analysis-pipeline.ja.md) / [`docs/architecture/semantic-analysis-pipeline.md`](docs/architecture/semantic-analysis-pipeline.md)
 - [`docs/architecture/connections-workspace-contract.ja.md`](docs/architecture/connections-workspace-contract.ja.md) / [`docs/architecture/connections-workspace-contract.md`](docs/architecture/connections-workspace-contract.md)
 - [`docs/architecture/business-context-bridge.ja.md`](docs/architecture/business-context-bridge.ja.md) / [`docs/architecture/business-context-bridge.md`](docs/architecture/business-context-bridge.md)
+- [`docs/architecture/confluence-context-contract.ja.md`](docs/architecture/confluence-context-contract.ja.md) / [`docs/architecture/confluence-context-contract.md`](docs/architecture/confluence-context-contract.md)
+- [`docs/architecture/jira-context-contract.ja.md`](docs/architecture/jira-context-contract.ja.md) / [`docs/architecture/jira-context-contract.md`](docs/architecture/jira-context-contract.md)
 - [`docs/performance/analysis-benchmark-baseline.ja.md`](docs/performance/analysis-benchmark-baseline.ja.md) / [`docs/performance/analysis-benchmark-baseline.md`](docs/performance/analysis-benchmark-baseline.md)
 - [`docs/testing/exploratory-test-playbook.ja.md`](docs/testing/exploratory-test-playbook.ja.md) / [`docs/testing/exploratory-test-playbook.md`](docs/testing/exploratory-test-playbook.md)
 - [`docs/testing/exploratory-test-session-2026-03-11.ja.md`](docs/testing/exploratory-test-session-2026-03-11.ja.md) / [`docs/testing/exploratory-test-session-2026-03-11.md`](docs/testing/exploratory-test-session-2026-03-11.md)

@@ -107,6 +107,14 @@ export interface ReviewWorkspaceBusinessContextDto {
   - `cacheHit` and `fallbackReason` for operational analysis
 - UI shows retry guidance (`Reload now`) and keeps workspace usable.
 
+## Provider Capability Boundary (H2-2)
+
+- Provider differences are represented in application-layer capability flags
+  (`src/server/application/services/requirement-context-capabilities.ts`).
+- Presentation DTO stays provider-neutral (`sourceType/status/confidence`) and does not expose
+  provider-specific fields such as Jira issue keys/status.
+- New providers must extend adapter contracts + capability flags first, then map into the stable DTO.
+
 ## Evolution Rules
 
 1. Add source/status enums in an additive way.
