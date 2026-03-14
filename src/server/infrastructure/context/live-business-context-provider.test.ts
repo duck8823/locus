@@ -325,6 +325,51 @@ describe("LiveBusinessContextProvider", () => {
     expect(sleep).toHaveBeenCalledWith(25);
   });
 
+  it("retries transport failures surfaced as fetch TypeError with retryable cause code", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new TypeError("fetch failed", {
+            cause: {
+              code: "ENOTFOUND",
+            },
+          }),
+        )
+        .mockResolvedValue({
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          issueNumber: 66,
+          title: "Recovered issue title",
+          body: "Recovered issue body",
+          state: "open",
+          labels: [],
+          author: { login: "octocat" },
+          htmlUrl: "https://github.com/octocat/locus/issues/66",
+          updatedAt: "2026-03-14T00:00:00.000Z",
+        }),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      maxFetchAttempts: 3,
+      initialBackoffMs: 20,
+      sleep,
+    });
+
+    const snapshot = await provider.loadSnapshotForReview(createInput());
+
+    expect(snapshot.provider).toBe("github_live");
+    expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(20);
+  });
+
   it("falls back to stale cache when retries fail after cache expiry", async () => {
     const fallbackProvider: BusinessContextProvider = {
       loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),

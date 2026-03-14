@@ -159,17 +159,61 @@ interface CachedIssueEntry {
 }
 
 function isRetryableIssueFetchError(error: unknown): boolean {
-  if (error instanceof Error) {
-    if (error.name === "AbortError") {
-      return true;
+  const retryableCodes = new Set([
+    "ECONNABORTED",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "EHOSTUNREACH",
+    "EAI_AGAIN",
+    "ENETDOWN",
+    "ENETRESET",
+    "ENETUNREACH",
+    "ENOTFOUND",
+    "ETIMEDOUT",
+  ]);
+
+  const queue: unknown[] = [error];
+  const visited = new Set<unknown>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+
+    if (!current || visited.has(current)) {
+      continue;
     }
 
-    if (/\(429\)|\(5\d\d\)/.test(error.message)) {
-      return true;
+    visited.add(current);
+
+    if (current instanceof Error) {
+      if (current.name === "AbortError") {
+        return true;
+      }
+
+      if (/\(429\)|\(5\d\d\)/.test(current.message)) {
+        return true;
+      }
+
+      if (/timeout|ECONN|ENOTFOUND|EAI_AGAIN/i.test(current.message)) {
+        return true;
+      }
+
+      if (current instanceof TypeError && /fetch failed/i.test(current.message)) {
+        return true;
+      }
     }
 
-    if (/timeout|ECONN|ENOTFOUND|EAI_AGAIN/i.test(error.message)) {
-      return true;
+    if (typeof current === "object") {
+      const code = (current as { code?: unknown }).code;
+
+      if (typeof code === "string" && retryableCodes.has(code.toUpperCase())) {
+        return true;
+      }
+
+      const cause = (current as { cause?: unknown }).cause;
+
+      if (cause) {
+        queue.push(cause);
+      }
     }
   }
 
