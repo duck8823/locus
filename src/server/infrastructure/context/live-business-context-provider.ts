@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   BusinessContextItem,
   BusinessContextProvider,
@@ -22,6 +23,19 @@ interface IndexedGitHubIssueReference extends GitHubIssueReference {
 
 function toIssueReferenceKey(reference: GitHubIssueReference): string {
   return `${reference.owner.toLowerCase()}/${reference.repository.toLowerCase()}#${reference.issueNumber}`;
+}
+
+function toIssueCacheKey(input: {
+  reference: GitHubIssueReference;
+  accessToken: string | null;
+}): string {
+  if (!input.accessToken) {
+    return `anon:${toIssueReferenceKey(input.reference)}`;
+  }
+
+  const tokenHash = createHash("sha256").update(input.accessToken).digest("hex").slice(0, 16);
+
+  return `token:${tokenHash}:${toIssueReferenceKey(input.reference)}`;
 }
 
 function parseGitHubIssueReferenceFromHref(href: string | null): GitHubIssueReference | null {
@@ -265,7 +279,10 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
     cacheHit: boolean;
     fallbackReason: "stale_cache" | null;
   }> {
-    const referenceKey = toIssueReferenceKey(input.reference);
+    const referenceKey = toIssueCacheKey({
+      reference: input.reference,
+      accessToken: input.accessToken,
+    });
     const cachedState = this.getCachedEntryState(referenceKey);
 
     if (cachedState?.state === "fresh") {

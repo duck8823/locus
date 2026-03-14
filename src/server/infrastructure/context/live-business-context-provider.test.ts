@@ -230,6 +230,58 @@ describe("LiveBusinessContextProvider", () => {
     expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(1);
   });
 
+  it("does not share cache entries across different access-token contexts", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi
+        .fn()
+        .mockResolvedValueOnce({
+          provider: "github",
+          owner: "octocat",
+          repository: "locus",
+          issueNumber: 66,
+          title: "Private issue title",
+          body: "private issue body",
+          state: "open",
+          labels: [],
+          author: { login: "octocat" },
+          htmlUrl: "https://github.com/octocat/locus/issues/66",
+          updatedAt: "2026-03-14T00:00:00.000Z",
+        })
+        .mockResolvedValueOnce(null),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+      cacheTtlMs: 60_000,
+      staleCacheTtlMs: 300_000,
+    });
+
+    const firstSnapshot = await provider.loadSnapshotForReview({
+      ...createInput(),
+      githubIssueAccessToken: "oauth-access-token",
+    });
+    const secondSnapshot = await provider.loadSnapshotForReview({
+      ...createInput(),
+      githubIssueAccessToken: null,
+    });
+
+    expect(firstSnapshot.provider).toBe("github_live");
+    expect(secondSnapshot.provider).toBe("stub");
+    expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(2);
+    expect(issueContextProvider.fetchIssue).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ accessToken: "oauth-access-token" }),
+    );
+    expect(issueContextProvider.fetchIssue).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ accessToken: null }),
+    );
+  });
+
   it("retries transient fetch failures with exponential backoff", async () => {
     const fallbackProvider: BusinessContextProvider = {
       loadSnapshotForReview: vi.fn().mockResolvedValue(createFallbackSnapshot()),
