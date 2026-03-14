@@ -1,0 +1,32 @@
+{
+  "jobs": [
+    {
+      "jobId": "ci-job-1",
+      "reviewId": "demo-review",
+      "reason": "initial_ingestion",
+      "status": "succeeded",
+      "durationMs": 950
+    },
+    {
+      "jobId": "ci-job-2",
+      "reviewId": "demo-review",
+      "reason": "manual_reanalysis",
+      "status": "succeeded",
+      "durationMs": 870
+    },
+    {
+      "jobId": "ci-job-3",
+      "reviewId": "demo-review",
+      "reason": "manual_reanalysis",
+      "status": "failed",
+      "durationMs": 1530
+    },
+    {
+      "jobId": "ci-job-4",
+      "reviewId": "another-review",
+      "reason": "initial_ingestion",
+      "status": "succeeded",
+      "durationMs": 1120
+    }
+  ]
+}

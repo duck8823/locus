@@ -77,6 +77,18 @@ npm run dogfood:metrics
 
 For artifact format details: [dogfooding-runs/README.md](dogfooding-runs/README.md)
 
+## CI Artifacts
+
+CI runs `npm run dogfood:metrics:artifact` with fixture input
+(`scripts/fixtures/dogfooding-metrics/ci-jobs.json`) and uploads:
+- `dogfooding-metrics.json`
+- `dogfooding-metrics-summary.md`
+
+The CI command also applies extreme-regression thresholds:
+- max `failureRatePercent`
+- max `averageDurationMs`
+- min `recoverySuccessRatePercent`
+
 ## Recording Format (Date / Environment / Result)
 
 Use this template for each run:

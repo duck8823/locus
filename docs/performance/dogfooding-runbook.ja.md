@@ -77,6 +77,19 @@ npm run dogfood:metrics
 
 artifact 形式の詳細: [dogfooding-runs/README.ja.md](dogfooding-runs/README.ja.md)
 
+## CI Artifact
+
+CI では fixture 入力
+（`scripts/fixtures/dogfooding-metrics/ci-jobs.json`）を使って
+`npm run dogfood:metrics:artifact` を実行し、次を artifact として保存する。
+- `dogfooding-metrics.json`
+- `dogfooding-metrics-summary.md`
+
+CI コマンドでは、極端な回帰を検知するしきい値も適用する。
+- `failureRatePercent` の上限
+- `averageDurationMs` の上限
+- `recoverySuccessRatePercent` の下限
+
 ## 記録フォーマット（日時 / 環境 / 結果）
 
 各実行で以下テンプレートを使う:

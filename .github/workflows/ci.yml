@@ -69,3 +69,40 @@ jobs:
           name: playwright-report
           path: playwright-report
           if-no-files-found: ignore
+
+  dogfooding-metrics:
+    name: Dogfooding Metrics Artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint-typecheck-unit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate dogfooding metrics artifacts
+        run: |
+          npm run dogfood:metrics:artifact -- \
+            --jobs-file scripts/fixtures/dogfooding-metrics/ci-jobs.json \
+            --json-out artifacts/dogfooding-metrics.json \
+            --markdown-out artifacts/dogfooding-metrics-summary.md \
+            --max-failure-rate-percent 70 \
+            --max-average-duration-ms 5000 \
+            --min-recovery-success-rate-percent 30
+
+      - name: Upload dogfooding metrics artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dogfooding-metrics
+          path: artifacts/dogfooding-metrics*
+          if-no-files-found: error
