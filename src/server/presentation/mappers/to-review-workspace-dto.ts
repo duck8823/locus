@@ -341,6 +341,8 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
         retryable: true,
         message: null,
         occurredAt: null,
+        cacheHit: null,
+        fallbackReason: null,
       },
       items: [],
     },
