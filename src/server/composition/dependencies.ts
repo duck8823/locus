@@ -102,11 +102,12 @@ const connectionTokenRepository = new FileConnectionTokenRepository();
 const oauthStateRepository = new FileOAuthStateRepository();
 const oauthCodeExchangeProvider = new GitHubOAuthCodeExchangeProvider();
 const heuristicAiSuggestionProvider = new HeuristicAiSuggestionProvider();
+const heuristicFallbackAiSuggestionProvider = new HeuristicAiSuggestionProvider();
 const aiSuggestionProvider = new GuardrailedAiSuggestionProvider({
   providerName: "heuristic",
   provider: heuristicAiSuggestionProvider,
   fallbackProviderName: "heuristic",
-  fallbackProvider: heuristicAiSuggestionProvider,
+  fallbackProvider: heuristicFallbackAiSuggestionProvider,
   guardrailPolicy: readAiSuggestionGuardrailPolicy("heuristic"),
 });
 const issueContextProvider = new GitHubIssueContextProvider();
