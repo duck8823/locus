@@ -9,6 +9,12 @@ import {
   classifyIntegrationFailure,
   type IntegrationFailureClassification,
 } from "@/server/application/services/classify-integration-failure";
+import {
+  arbitrateBusinessContextCandidates,
+  type BusinessContextArbitrationCandidate,
+  type BusinessContextCandidateProvider,
+  type BusinessContextConflictReasonCode,
+} from "@/server/application/services/arbitrate-business-context-candidates";
 import type {
   IssueContextProvider,
   IssueContextRecord,
@@ -155,6 +161,53 @@ function mergeLiveIssueIntoItem(
     summary: toLiveIssueSummary(issue),
     href: issue.htmlUrl,
   };
+}
+
+function toContextDedupeKey(item: BusinessContextItem): string {
+  if (item.href) {
+    const trimmedHref = item.href.trim();
+
+    if (trimmedHref.length > 0) {
+      try {
+        const parsed = new URL(trimmedHref);
+        const normalizedPath = parsed.pathname.replace(/\/+$/, "").toLowerCase();
+
+        return `url:${parsed.hostname.toLowerCase()}${normalizedPath}`;
+      } catch {
+        return `raw:${trimmedHref.toLowerCase()}`;
+      }
+    }
+  }
+
+  const normalizedTitle = item.title.trim().toLowerCase();
+
+  if (normalizedTitle.length > 0) {
+    return `title:${normalizedTitle}`;
+  }
+
+  return `context:${item.contextId}`;
+}
+
+function resolveCandidateProvider(input: {
+  item: BusinessContextItem;
+  isLiveEnriched: boolean;
+}): BusinessContextCandidateProvider {
+  if (input.item.sourceType === "confluence_page") {
+    return "confluence";
+  }
+
+  if (input.isLiveEnriched) {
+    return "github";
+  }
+
+  return "stub";
+}
+
+function mergeConflictReasonCodes(input: {
+  fallbackConflictReasonCodes: readonly BusinessContextConflictReasonCode[];
+  arbitrationConflictReasonCodes: readonly BusinessContextConflictReasonCode[];
+}): BusinessContextConflictReasonCode[] {
+  return [...new Set([...input.fallbackConflictReasonCodes, ...input.arbitrationConflictReasonCodes])];
 }
 
 interface CachedIssueEntry {
@@ -400,6 +453,7 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
           referencesByItemIndex.set(reference.itemIndex, reference);
         }
       }
+      const liveIssueUpdatedAtByItemIndex = new Map<number, string | null>();
 
       const enrichedItems = fallbackSnapshot.items.map((item, itemIndex) => {
         const reference = referencesByItemIndex.get(itemIndex);
@@ -415,7 +469,27 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
         }
 
         enrichedCount += 1;
+        liveIssueUpdatedAtByItemIndex.set(itemIndex, issue.updatedAt);
         return mergeLiveIssueIntoItem(item, issue);
+      });
+      const arbitrationCandidates: BusinessContextArbitrationCandidate[] = enrichedItems.map(
+        (item, itemIndex) => ({
+          candidateId: item.contextId,
+          dedupeKey: toContextDedupeKey(item),
+          provider: resolveCandidateProvider({
+            item,
+            isLiveEnriched: liveIssueUpdatedAtByItemIndex.has(itemIndex),
+          }),
+          confidence: item.confidence,
+          status: item.status,
+          updatedAt: liveIssueUpdatedAtByItemIndex.get(itemIndex) ?? null,
+          item,
+        }),
+      );
+      const arbitrationResult = arbitrateBusinessContextCandidates(arbitrationCandidates);
+      const conflictReasonCodes = mergeConflictReasonCodes({
+        fallbackConflictReasonCodes: fallbackSnapshot.diagnostics.conflictReasonCodes,
+        arbitrationConflictReasonCodes: arbitrationResult.conflictReasonCodes,
       });
 
       if (enrichedCount === 0) {
@@ -424,7 +498,9 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
           diagnostics: {
             cacheHit,
             fallbackReason,
+            conflictReasonCodes,
           },
+          items: arbitrationResult.items,
         };
       }
 
@@ -434,8 +510,9 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
         diagnostics: {
           cacheHit,
           fallbackReason,
+          conflictReasonCodes,
         },
-        items: enrichedItems,
+        items: arbitrationResult.items,
       };
     } catch (error) {
       const failureClassification = classifyIntegrationFailure(error);

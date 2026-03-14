@@ -345,6 +345,7 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
         occurredAt: null,
         cacheHit: null,
         fallbackReason: null,
+        conflictReasonCodes: [],
       },
       items: [],
     },

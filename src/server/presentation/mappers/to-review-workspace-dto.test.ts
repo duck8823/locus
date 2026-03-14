@@ -292,6 +292,7 @@ describe("toReviewWorkspaceDto", () => {
       occurredAt: null,
       cacheHit: null,
       fallbackReason: null,
+      conflictReasonCodes: [],
     });
     expect(dto.businessContext.items).toEqual([]);
   });
@@ -352,6 +353,7 @@ describe("toReviewWorkspaceDto", () => {
       occurredAt: null,
       cacheHit: null,
       fallbackReason: null,
+      conflictReasonCodes: [],
     });
     expect(dto.businessContext.items).toEqual([]);
 

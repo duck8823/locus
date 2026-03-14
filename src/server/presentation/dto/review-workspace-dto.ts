@@ -222,6 +222,13 @@ export interface ReviewWorkspaceBusinessContextDto {
     occurredAt: string | null;
     cacheHit: boolean | null;
     fallbackReason: "stale_cache" | "live_fetch_failed" | null;
+    conflictReasonCodes: Array<
+      | "confidence_priority"
+      | "freshness_priority"
+      | "provider_priority"
+      | "status_priority"
+      | "stable_tie_breaker"
+    >;
   };
   items: ReviewWorkspaceBusinessContextItemDto[];
 }

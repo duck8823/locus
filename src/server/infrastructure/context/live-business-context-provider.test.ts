@@ -14,6 +14,7 @@ function createFallbackSnapshot(): BusinessContextSnapshot {
     diagnostics: {
       cacheHit: null,
       fallbackReason: null,
+      conflictReasonCodes: [],
     },
     items: [
       {
@@ -47,6 +48,7 @@ function createFallbackSnapshotWithIssue(issueNumber: number): BusinessContextSn
     diagnostics: {
       cacheHit: null,
       fallbackReason: null,
+      conflictReasonCodes: [],
     },
     items: [
       {
@@ -113,6 +115,7 @@ describe("LiveBusinessContextProvider", () => {
     expect(snapshot.diagnostics).toEqual({
       cacheHit: false,
       fallbackReason: null,
+      conflictReasonCodes: [],
     });
     expect(snapshot.items[0]).toMatchObject({
       sourceType: "github_issue",
@@ -163,6 +166,80 @@ describe("LiveBusinessContextProvider", () => {
       expect(thrownError.reasonCode).toBe("timeout");
       expect(thrownError.message).toContain("Live business-context fetch failed");
     }
+  });
+
+  it("surfaces conflict reason codes when mixed-provider candidates are arbitrated", async () => {
+    const fallbackProvider: BusinessContextProvider = {
+      loadSnapshotForReview: vi.fn().mockResolvedValue({
+        generatedAt: "2026-03-14T00:00:00.000Z",
+        provider: "stub",
+        diagnostics: {
+          cacheHit: null,
+          fallbackReason: null,
+          conflictReasonCodes: [],
+        },
+        items: [
+          {
+            contextId: "ctx-gh-77",
+            sourceType: "github_issue",
+            status: "linked",
+            confidence: "high",
+            inferenceSource: "repo_shorthand",
+            title: "Requirement 77",
+            summary: "GitHub requirement context",
+            href: "https://github.com/octocat/locus/issues/77",
+          },
+          {
+            contextId: "ctx-cf-77",
+            sourceType: "confluence_page",
+            status: "linked",
+            confidence: "high",
+            inferenceSource: "none",
+            title: "Requirement 77",
+            summary: "Confluence requirement context",
+            href: "https://github.com/octocat/locus/issues/77",
+          },
+        ],
+      }),
+    };
+    const issueContextProvider: IssueContextProvider = {
+      fetchIssue: vi.fn().mockResolvedValue({
+        provider: "github",
+        owner: "octocat",
+        repository: "locus",
+        issueNumber: 77,
+        title: "Live requirement 77",
+        body: "Live body",
+        state: "open",
+        labels: [],
+        author: { login: "octocat" },
+        htmlUrl: "https://github.com/octocat/locus/issues/77",
+        updatedAt: "2026-03-14T00:10:00.000Z",
+      }),
+      fetchIssuesByNumbers: vi.fn().mockResolvedValue([]),
+    };
+    const provider = new LiveBusinessContextProvider({
+      fallbackProvider,
+      issueContextProvider,
+    });
+
+    const snapshot = await provider.loadSnapshotForReview({
+      ...createInput(),
+      source: {
+        provider: "github",
+        owner: "octocat",
+        repository: "locus",
+        pullRequestNumber: 77,
+      },
+    });
+
+    expect(snapshot.items).toHaveLength(1);
+    expect(snapshot.items[0]).toMatchObject({
+      contextId: "ctx-gh-77",
+      sourceType: "github_issue",
+      title: "Live requirement 77",
+    });
+    expect(snapshot.diagnostics.conflictReasonCodes).toEqual(["freshness_priority"]);
   });
 
   it("returns stub snapshot for non-github sources", async () => {
@@ -224,10 +301,12 @@ describe("LiveBusinessContextProvider", () => {
     expect(first.diagnostics).toEqual({
       cacheHit: false,
       fallbackReason: null,
+      conflictReasonCodes: [],
     });
     expect(second.diagnostics).toEqual({
       cacheHit: true,
       fallbackReason: null,
+      conflictReasonCodes: [],
     });
     expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(1);
   });
@@ -322,6 +401,7 @@ describe("LiveBusinessContextProvider", () => {
     expect(snapshot.diagnostics).toEqual({
       cacheHit: false,
       fallbackReason: null,
+      conflictReasonCodes: [],
     });
     expect(issueContextProvider.fetchIssue).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledWith(25);
@@ -414,11 +494,13 @@ describe("LiveBusinessContextProvider", () => {
     expect(firstSnapshot.diagnostics).toEqual({
       cacheHit: false,
       fallbackReason: null,
+      conflictReasonCodes: [],
     });
     expect(secondSnapshot.provider).toBe("github_live");
     expect(secondSnapshot.diagnostics).toEqual({
       cacheHit: true,
       fallbackReason: "stale_cache",
+      conflictReasonCodes: [],
     });
   });
 

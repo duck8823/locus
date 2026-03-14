@@ -79,6 +79,7 @@ describe("loadReviewWorkspaceDto", () => {
       diagnostics: {
         cacheHit: null,
         fallbackReason: null,
+        conflictReasonCodes: [],
       },
       items: [],
     });
@@ -134,6 +135,7 @@ describe("loadReviewWorkspaceDto", () => {
           occurredAt: null,
           cacheHit: null,
           fallbackReason: null,
+          conflictReasonCodes: [],
         },
         items: [],
       },
@@ -227,6 +229,7 @@ describe("loadReviewWorkspaceDto", () => {
         occurredAt: null,
         cacheHit: null,
         fallbackReason: null,
+        conflictReasonCodes: [],
       },
       items: [],
     });
@@ -324,6 +327,7 @@ describe("loadReviewWorkspaceDto", () => {
       diagnostics: {
         cacheHit: null,
         fallbackReason: null,
+        conflictReasonCodes: [],
       },
       items: [
         {
@@ -374,6 +378,7 @@ describe("loadReviewWorkspaceDto", () => {
       occurredAt: null,
       cacheHit: null,
       fallbackReason: null,
+      conflictReasonCodes: [],
     });
   });
 
@@ -481,6 +486,7 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.businessContext.diagnostics.message).toBe("context timeout");
     expect(dto.businessContext.diagnostics.cacheHit).toBe(false);
     expect(dto.businessContext.diagnostics.fallbackReason).toBe("live_fetch_failed");
+    expect(dto.businessContext.diagnostics.conflictReasonCodes).toEqual([]);
     expect(dto.businessContext.items[0]).toMatchObject({
       status: "unavailable",
       sourceType: "github_issue",
@@ -505,6 +511,7 @@ describe("loadReviewWorkspaceDto", () => {
               diagnostics: {
                 cacheHit: null,
                 fallbackReason: null,
+                conflictReasonCodes: [],
               },
               items: [
                 {
@@ -538,6 +545,7 @@ describe("loadReviewWorkspaceDto", () => {
     );
     expect(dto.businessContext.diagnostics.cacheHit).toBe(false);
     expect(dto.businessContext.diagnostics.fallbackReason).toBe("live_fetch_failed");
+    expect(dto.businessContext.diagnostics.conflictReasonCodes).toEqual([]);
     expect(dto.businessContext.items).toEqual([
       {
         contextId: "ctx-gh-66",
@@ -575,6 +583,7 @@ describe("loadReviewWorkspaceDto", () => {
           diagnostics: {
             cacheHit: false,
             fallbackReason: null,
+            conflictReasonCodes: ["provider_priority"],
           },
           items: [
             {
@@ -622,6 +631,7 @@ describe("loadReviewWorkspaceDto", () => {
       occurredAt: null,
       cacheHit: false,
       fallbackReason: null,
+      conflictReasonCodes: ["provider_priority"],
     });
     expect(dto.businessContext.items[0]).toMatchObject({
       sourceType: "github_issue",
@@ -737,6 +747,7 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.businessContext.diagnostics.retryable).toBe(false);
     expect(dto.businessContext.diagnostics.reasonCode).toBe("auth");
     expect(dto.businessContext.diagnostics.message).toContain("missing issue-read scope");
+    expect(dto.businessContext.diagnostics.conflictReasonCodes).toEqual([]);
   });
 
   it("injects analysis-history snapshots and derived dogfooding metrics", async () => {

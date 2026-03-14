@@ -114,6 +114,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     occurredAt: null,
     cacheHit: null,
     fallbackReason: null,
+    conflictReasonCodes: [],
   };
   const businessContext = await (async () => {
     const githubIssueContextAccess =
@@ -155,6 +156,9 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
         error.cacheHit ?? error.fallbackSnapshot.diagnostics.cacheHit ?? false;
       businessContextDiagnostics.fallbackReason =
         error.fallbackReason ?? error.fallbackSnapshot.diagnostics.fallbackReason ?? "live_fetch_failed";
+      businessContextDiagnostics.conflictReasonCodes = [
+        ...error.fallbackSnapshot.diagnostics.conflictReasonCodes,
+      ];
       console.warn("business_context_fallback", {
         reviewId,
         retryable: businessContextDiagnostics.retryable,
@@ -184,6 +188,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       diagnostics: {
         cacheHit: false,
         fallbackReason: "live_fetch_failed" as const,
+        conflictReasonCodes: [],
       },
       items: [
         {
@@ -299,6 +304,10 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
           businessContextDiagnostics.fallbackReason ??
           businessContext.diagnostics.fallbackReason ??
           null,
+        conflictReasonCodes:
+          businessContextDiagnostics.conflictReasonCodes.length > 0
+            ? [...businessContextDiagnostics.conflictReasonCodes]
+            : [...businessContext.diagnostics.conflictReasonCodes],
       },
       items: businessContext.items.map((item) => ({
         contextId: item.contextId,

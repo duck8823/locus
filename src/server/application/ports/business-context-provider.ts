@@ -1,4 +1,5 @@
 import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
+import type { BusinessContextConflictReasonCode } from "@/server/application/services/arbitrate-business-context-candidates";
 
 export interface BusinessContextItem {
   contextId: string;
@@ -24,6 +25,7 @@ export interface BusinessContextSnapshot {
   diagnostics: {
     cacheHit: boolean | null;
     fallbackReason: "stale_cache" | "live_fetch_failed" | null;
+    conflictReasonCodes: BusinessContextConflictReasonCode[];
   };
   items: BusinessContextItem[];
 }
