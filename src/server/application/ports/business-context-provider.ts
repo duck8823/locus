@@ -21,6 +21,10 @@ export interface BusinessContextItem {
 export interface BusinessContextSnapshot {
   generatedAt: string;
   provider: "stub" | "github_live";
+  diagnostics: {
+    cacheHit: boolean | null;
+    fallbackReason: "stale_cache" | "live_fetch_failed" | null;
+  };
   items: BusinessContextItem[];
 }
 

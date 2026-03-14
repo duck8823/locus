@@ -139,18 +139,171 @@ function mergeLiveIssueIntoItem(
   };
 }
 
+interface CachedIssueEntry {
+  issue: IssueContextRecord | null;
+  cachedAtMs: number;
+}
+
+function isRetryableIssueFetchError(error: unknown): boolean {
+  if (error instanceof Error) {
+    if (error.name === "AbortError") {
+      return true;
+    }
+
+    if (/\(429\)|\(5\d\d\)/.test(error.message)) {
+      return true;
+    }
+
+    if (/timeout|ECONN|ENOTFOUND|EAI_AGAIN/i.test(error.message)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export interface LiveBusinessContextProviderOptions {
   issueContextProvider: IssueContextProvider;
   fallbackProvider?: BusinessContextProvider;
+  cacheTtlMs?: number;
+  staleCacheTtlMs?: number;
+  maxFetchAttempts?: number;
+  initialBackoffMs?: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 export class LiveBusinessContextProvider implements BusinessContextProvider {
   private readonly issueContextProvider: IssueContextProvider;
   private readonly fallbackProvider: BusinessContextProvider;
+  private readonly cacheTtlMs: number;
+  private readonly staleCacheTtlMs: number;
+  private readonly maxFetchAttempts: number;
+  private readonly initialBackoffMs: number;
+  private readonly now: () => number;
+  private readonly sleep: (ms: number) => Promise<void>;
+  private readonly issueCache = new Map<string, CachedIssueEntry>();
 
   constructor(options: LiveBusinessContextProviderOptions) {
     this.issueContextProvider = options.issueContextProvider;
     this.fallbackProvider = options.fallbackProvider ?? new StubBusinessContextProvider();
+    this.cacheTtlMs = Math.max(0, Math.floor(options.cacheTtlMs ?? 30_000));
+    this.staleCacheTtlMs = Math.max(
+      this.cacheTtlMs,
+      Math.floor(options.staleCacheTtlMs ?? 5 * 60_000),
+    );
+    this.maxFetchAttempts = Math.max(1, Math.floor(options.maxFetchAttempts ?? 3));
+    this.initialBackoffMs = Math.max(0, Math.floor(options.initialBackoffMs ?? 200));
+    this.now = options.now ?? (() => Date.now());
+    this.sleep = options.sleep ?? sleep;
+  }
+
+  private getCachedEntryState(referenceKey: string):
+    | { state: "fresh" | "stale"; issue: IssueContextRecord | null }
+    | null {
+    const cached = this.issueCache.get(referenceKey);
+
+    if (!cached) {
+      return null;
+    }
+
+    const ageMs = this.now() - cached.cachedAtMs;
+
+    if (ageMs <= this.cacheTtlMs) {
+      return {
+        state: "fresh",
+        issue: cached.issue,
+      };
+    }
+
+    if (ageMs <= this.staleCacheTtlMs) {
+      return {
+        state: "stale",
+        issue: cached.issue,
+      };
+    }
+
+    this.issueCache.delete(referenceKey);
+    return null;
+  }
+
+  private cacheIssue(referenceKey: string, issue: IssueContextRecord | null) {
+    this.issueCache.set(referenceKey, {
+      issue,
+      cachedAtMs: this.now(),
+    });
+  }
+
+  private async fetchIssueWithResilience(input: {
+    reference: GitHubIssueReference;
+    accessToken: string | null;
+  }): Promise<{
+    issue: IssueContextRecord | null;
+    cacheHit: boolean;
+    fallbackReason: "stale_cache" | null;
+  }> {
+    const referenceKey = toIssueReferenceKey(input.reference);
+    const cachedState = this.getCachedEntryState(referenceKey);
+
+    if (cachedState?.state === "fresh") {
+      return {
+        issue: cachedState.issue,
+        cacheHit: true,
+        fallbackReason: null,
+      };
+    }
+
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= this.maxFetchAttempts; attempt += 1) {
+      try {
+        const fetchedIssue = await this.issueContextProvider.fetchIssue({
+          reference: {
+            provider: "github",
+            owner: input.reference.owner,
+            repository: input.reference.repository,
+            issueNumber: input.reference.issueNumber,
+          },
+          accessToken: input.accessToken,
+        });
+
+        this.cacheIssue(referenceKey, fetchedIssue);
+
+        return {
+          issue: fetchedIssue,
+          cacheHit: false,
+          fallbackReason: null,
+        };
+      } catch (error) {
+        lastError = error;
+
+        if (attempt >= this.maxFetchAttempts || !isRetryableIssueFetchError(error)) {
+          break;
+        }
+
+        const delayMs = this.initialBackoffMs * (2 ** (attempt - 1));
+
+        if (delayMs > 0) {
+          await this.sleep(delayMs);
+        }
+      }
+    }
+
+    if (cachedState?.state === "stale") {
+      return {
+        issue: cachedState.issue,
+        cacheHit: true,
+        fallbackReason: "stale_cache",
+      };
+    }
+
+    throw lastError;
   }
 
   async loadSnapshotForReview(input: {
@@ -184,22 +337,25 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
     }
 
     try {
-      const fetchedIssues = await Promise.all(
+      const fetchedIssueResults = await Promise.all(
         uniqueReferences.map((reference) =>
-          this.issueContextProvider.fetchIssue({
-            reference: {
-              provider: "github",
-              owner: reference.owner,
-              repository: reference.repository,
-              issueNumber: reference.issueNumber,
-            },
+          this.fetchIssueWithResilience({
+            reference,
             accessToken: input.githubIssueAccessToken,
           }),
         ),
       );
+      const cacheHit = fetchedIssueResults.some((result) => result.cacheHit);
+      const fallbackReason = fetchedIssueResults.some(
+        (result) => result.fallbackReason === "stale_cache",
+      )
+        ? "stale_cache"
+        : null;
       const issueByReferenceKey = new Map<string, IssueContextRecord>();
 
-      fetchedIssues.forEach((issue, index) => {
+      fetchedIssueResults.forEach((result, index) => {
+        const issue = result.issue;
+
         if (!issue) {
           return;
         }
@@ -237,17 +393,29 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
       });
 
       if (enrichedCount === 0) {
-        return fallbackSnapshot;
+        return {
+          ...fallbackSnapshot,
+          diagnostics: {
+            cacheHit,
+            fallbackReason,
+          },
+        };
       }
 
       return {
         generatedAt: new Date().toISOString(),
         provider: "github_live",
+        diagnostics: {
+          cacheHit,
+          fallbackReason,
+        },
         items: enrichedItems,
       };
     } catch (error) {
       throw new LiveBusinessContextUnavailableError({
         fallbackSnapshot,
+        cacheHit: false,
+        fallbackReason: "live_fetch_failed",
         message:
           error instanceof Error && error.message.trim().length > 0
             ? `Live business-context fetch failed: ${error.message}`
