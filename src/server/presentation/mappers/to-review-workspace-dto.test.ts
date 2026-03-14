@@ -386,7 +386,15 @@ describe("toReviewWorkspaceDto", () => {
           status: "unread",
           upstream: [],
           downstream: [],
-          semanticChangeIds: ["change-c", "change-a", "change-b", "change-d"],
+          semanticChangeIds: [
+            "change-g",
+            "change-c",
+            "change-a",
+            "change-f",
+            "change-b",
+            "change-d",
+            "change-e",
+          ],
         },
       ],
       semanticChanges: [
@@ -430,6 +438,36 @@ describe("toReviewWorkspaceDto", () => {
             type: "removed",
           },
         }),
+        createSemanticChange("change-e", {
+          symbol: {
+            stableKey: "function::<root>::MoveTask",
+            displayName: "MoveTask",
+            kind: "function",
+          },
+          change: {
+            type: "moved",
+          },
+        }),
+        createSemanticChange("change-f", {
+          symbol: {
+            stableKey: "function::<root>::CoreTaskAlias",
+            displayName: "CoreTask",
+            kind: "function",
+          },
+          change: {
+            type: "modified",
+          },
+        }),
+        createSemanticChange("change-g", {
+          symbol: {
+            stableKey: "function::<root>::CoreTaskAlias2",
+            displayName: "CoreTask",
+            kind: "function",
+          },
+          change: {
+            type: "modified",
+          },
+        }),
       ],
     });
 
@@ -437,9 +475,21 @@ describe("toReviewWorkspaceDto", () => {
 
     expect(dto.groups[0]?.semanticChanges.map((change) => change.symbolDisplayName)).toEqual([
       "CoreTask",
+      "CoreTask",
+      "CoreTask",
       "AddTask",
       "RemoveTask",
+      "MoveTask",
       "RenameTask",
+    ]);
+    expect(dto.groups[0]?.semanticChanges.map((change) => change.semanticChangeId)).toEqual([
+      "change-c",
+      "change-f",
+      "change-g",
+      "change-b",
+      "change-d",
+      "change-e",
+      "change-a",
     ]);
   });
 
