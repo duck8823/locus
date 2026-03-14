@@ -8,7 +8,6 @@ interface CollapsibleDetailsProps {
   className?: string;
   summaryClassName?: string;
   contentClassName?: string;
-  summaryTestId?: string;
   summary: ReactNode;
   defaultOpen?: boolean;
   storageKey?: string;
@@ -118,7 +117,6 @@ export function CollapsibleDetails({
   className,
   summaryClassName,
   contentClassName,
-  summaryTestId,
   summary,
   defaultOpen = false,
   storageKey,
@@ -174,7 +172,6 @@ export function CollapsibleDetails({
     >
       <summary
         className={summaryClassName}
-        data-testid={summaryTestId}
         onClickCapture={() => {
           manualToggleIntentRef.current = true;
         }}

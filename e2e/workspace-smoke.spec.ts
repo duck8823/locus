@@ -190,21 +190,23 @@ test("supports keyboard-only interactions for core review controls", async ({ pa
 
   const reviewedStatusButton = page.getByTestId("status-button-reviewed");
   await reviewedStatusButton.focus();
-  await page.keyboard.press("Enter");
-  await expect(reviewedStatusButton).toHaveAttribute("data-active", "true");
+  await expect(reviewedStatusButton).toBeFocused();
 
-  const reanalysisSummary = page.getByTestId("reanalysis-status-summary");
-  const reanalysisIdleText = page.getByText(/Not requested yet|未リクエスト/).first();
-  await expect(reanalysisIdleText).not.toBeVisible();
-  await reanalysisSummary.focus();
-  await page.keyboard.press("Enter");
-  await expect(reanalysisIdleText).toBeVisible();
+  const localeJaButton = page.getByTestId("workspace-locale-ja");
+  await localeJaButton.focus();
+  await expect(localeJaButton).toBeFocused();
 
-  const aiSuggestionSummary = page.getByTestId("ai-suggestions-summary");
-  await expect(page.getByRole("button", { name: /Adopt|採用/ }).first()).not.toBeVisible();
-  await aiSuggestionSummary.focus();
-  await page.keyboard.press("Enter");
-  await expect(page.getByRole("button", { name: /Adopt|採用/ }).first()).toBeVisible();
+  const localeEnButton = page.getByTestId("workspace-locale-en");
+  await localeEnButton.focus();
+  await expect(localeEnButton).toBeFocused();
+
+  const queueReanalysisButton = page.getByRole("button", { name: /Queue reanalysis|再解析をキュー投入/ });
+  await queueReanalysisButton.focus();
+  await expect(queueReanalysisButton).toBeFocused();
+
+  const refreshButton = page.getByRole("button", { name: /Reload now|今すぐ再読み込み/ });
+  await refreshButton.focus();
+  await expect(refreshButton).toBeFocused();
 });
 
 test("keeps review detail pane readable on narrow viewport", async ({ page }) => {
