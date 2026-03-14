@@ -237,7 +237,11 @@ test("supports keyboard-only interactions for core review controls", async ({ pa
   await expect(page.locator('[data-testid^=\"group-button-group-\"]:focus')).toHaveCount(1);
 
   await tabUntilFocusedTestId(page, "status-button-reviewed");
-  await expect(page.getByTestId("status-button-reviewed")).toBeFocused();
+  const reviewedStatusButton = page.getByTestId("status-button-reviewed");
+  await expect(reviewedStatusButton).toBeFocused();
+  await expect(reviewedStatusButton).not.toHaveAttribute("data-active", "true");
+  await page.keyboard.press("Enter");
+  await expect(reviewedStatusButton).toHaveAttribute("data-active", "true");
 });
 
 test("keeps review detail pane readable on narrow viewport", async ({ page }) => {
