@@ -22,6 +22,12 @@ export interface GitHubPullRequestRef extends PullRequestSourceRef {
   pullRequestNumber: number;
 }
 
+export interface GitLabPullRequestRef extends PullRequestSourceRef {
+  provider: "gitlab";
+  projectPath: string;
+  mergeRequestIid: number;
+}
+
 /**
  * Backward-compatible source alias for existing GitHub-oriented imports.
  */
@@ -36,6 +42,16 @@ export function isGitHubPullRequestRef(source: PullRequestSourceRef): source is 
     source.repository.length > 0 &&
     typeof source.pullRequestNumber === "number" &&
     Number.isInteger(source.pullRequestNumber)
+  );
+}
+
+export function isGitLabPullRequestRef(source: PullRequestSourceRef): source is GitLabPullRequestRef {
+  return (
+    source.provider === "gitlab" &&
+    typeof source.projectPath === "string" &&
+    source.projectPath.length > 0 &&
+    typeof source.mergeRequestIid === "number" &&
+    Number.isInteger(source.mergeRequestIid)
   );
 }
 
@@ -60,6 +76,19 @@ export class PullRequestProviderAuthError extends Error {
       `Pull request provider authentication failed (${statusCode}): ${path}\n${responseBody}`,
     );
     this.name = "PullRequestProviderAuthError";
+  }
+}
+
+export class PullRequestProviderUnsupportedCapabilityError extends Error {
+  constructor(
+    readonly provider: PullRequestSourceProvider,
+    readonly capability: string,
+    readonly detail: string,
+  ) {
+    super(
+      `Pull request provider capability is unavailable (${provider}:${capability}): ${detail}`,
+    );
+    this.name = "PullRequestProviderUnsupportedCapabilityError";
   }
 }
 

@@ -6,9 +6,11 @@ import { PrototypeConnectionProviderCatalog } from "@/server/application/service
 import { createAiSuggestionProviderBundle } from "@/server/infrastructure/ai/create-ai-suggestion-provider";
 import { LiveBusinessContextProvider } from "@/server/infrastructure/context/live-business-context-provider";
 import { StubBusinessContextProvider } from "@/server/infrastructure/context/stub-business-context-provider";
+import { DefaultProviderAgnosticPullRequestSnapshotProvider } from "@/server/infrastructure/code-host/provider-agnostic-pull-request-snapshot-provider";
 import { GitHubIssueContextProvider } from "@/server/infrastructure/github/github-issue-context-provider";
 import { GitHubPullRequestSnapshotProvider } from "@/server/infrastructure/github/github-pull-request-snapshot-provider";
 import { GitHubOAuthCodeExchangeProvider } from "@/server/infrastructure/github/github-oauth-code-exchange-provider";
+import { GitLabPullRequestSnapshotProvider } from "@/server/infrastructure/gitlab/gitlab-pull-request-snapshot-provider";
 import { TypeScriptParserAdapter } from "@/server/infrastructure/parser/typescript-parser-adapter";
 import { RunScheduledAnalysisJobUseCase } from "@/server/application/usecases/run-scheduled-analysis-job";
 import { FileAnalysisJobScheduler } from "@/server/infrastructure/queue/file-analysis-job-scheduler";
@@ -33,6 +35,12 @@ function readOptionalNonNegativeIntegerEnv(name: string): number | undefined {
   return parsed;
 }
 
+function readFeatureFlagEnv(name: string): boolean {
+  const value = process.env[name]?.trim().toLowerCase();
+
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
 const reviewSessionRepository = new FileReviewSessionRepository();
 const connectionStateRepository = new SqliteConnectionStateRepository({
   maxTransitionsPerReviewer: readOptionalNonNegativeIntegerEnv(
@@ -53,7 +61,16 @@ const businessContextProvider = new LiveBusinessContextProvider({
   fallbackProvider: new StubBusinessContextProvider(),
 });
 const parserAdapters = [new TypeScriptParserAdapter()];
-const pullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
+const githubPullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
+const gitlabPullRequestSnapshotProvider = new GitLabPullRequestSnapshotProvider();
+const providerAgnosticPullRequestSnapshotProvider = new DefaultProviderAgnosticPullRequestSnapshotProvider(
+  {
+    githubProvider: githubPullRequestSnapshotProvider,
+    gitlabProvider: gitlabPullRequestSnapshotProvider,
+    enableGitLabAdapter: readFeatureFlagEnv("LOCUS_ENABLE_GITLAB_ADAPTER"),
+  },
+);
+const pullRequestSnapshotProvider = githubPullRequestSnapshotProvider;
 const runScheduledAnalysisJobUseCase = new RunScheduledAnalysisJobUseCase({
   reviewSessionRepository,
   connectionStateRepository,
@@ -95,5 +112,6 @@ export function getDependencies() {
     analysisJobScheduler,
     parserAdapters,
     pullRequestSnapshotProvider,
+    providerAgnosticPullRequestSnapshotProvider,
   };
 }
