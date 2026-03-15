@@ -47,3 +47,10 @@ This keeps current GitHub call sites intact while enabling plugin/runtime routin
 - Bitbucket implementation
 - Dynamic plugin marketplace/discovery
 - Hot reloading plugins in production
+
+## Current orchestration coverage
+
+- `ReviewSessionSource` now includes `github` and `gitlab` as first-class code-host variants.
+- Async analysis orchestration can process GitLab-backed review sessions through the provider-agnostic snapshot provider route.
+- GitHub-specific OAuth reauth state transitions remain scoped to GitHub auth failures only.
+

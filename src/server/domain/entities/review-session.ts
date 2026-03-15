@@ -124,6 +124,12 @@ function cloneSource(source: ReviewSessionSource | undefined): ReviewSessionSour
         repository: source.repository,
         pullRequestNumber: source.pullRequestNumber,
       };
+    case "gitlab":
+      return {
+        provider: "gitlab",
+        projectPath: source.projectPath,
+        mergeRequestIid: source.mergeRequestIid,
+      };
     case "seed_fixture":
       return {
         provider: "seed_fixture",

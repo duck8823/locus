@@ -84,6 +84,49 @@ describe("RequestInitialAnalysisRetryUseCase", () => {
     expect(persisted?.toRecord().analysisError).toBeNull();
   });
 
+
+
+  it("queues retry for gitlab-backed sessions", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    reviewSessionRepository.seed(
+      ReviewSession.create({
+        reviewId: "gitlab-duck8823-locus-mr-42",
+        title: "MR !42: failed",
+        repositoryName: "duck8823/locus",
+        branchLabel: "feature/mr-42 → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "gitlab",
+          projectPath: "duck8823/locus",
+          mergeRequestIid: 42,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-10T00:00:00.000Z",
+        analysisStatus: "failed",
+        analysisAttemptCount: 2,
+        analysisError: "GitLab API request failed",
+      }),
+    );
+    const analysisJobScheduler = new SpyAnalysisJobScheduler();
+    const useCase = new RequestInitialAnalysisRetryUseCase({
+      reviewSessionRepository,
+      analysisJobScheduler,
+    });
+
+    await useCase.execute({
+      reviewId: "gitlab-duck8823-locus-mr-42",
+      requestedAt: "2026-03-10T00:06:00.000Z",
+    });
+
+    expect(analysisJobScheduler.calls).toEqual([
+      {
+        reviewId: "gitlab-duck8823-locus-mr-42",
+        requestedAt: "2026-03-10T00:06:00.000Z",
+        reason: "initial_ingestion",
+      },
+    ]);
+  });
+
   it("raises when review is missing", async () => {
     const useCase = new RequestInitialAnalysisRetryUseCase({
       reviewSessionRepository: new InMemoryReviewSessionRepository(),
@@ -95,7 +138,7 @@ describe("RequestInitialAnalysisRetryUseCase", () => {
     );
   });
 
-  it("raises when source is not github", async () => {
+  it("raises when source is neither github nor gitlab", async () => {
     const reviewSessionRepository = new InMemoryReviewSessionRepository();
     reviewSessionRepository.seed(
       ReviewSession.create({

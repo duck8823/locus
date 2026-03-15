@@ -26,7 +26,7 @@ export class RequestInitialAnalysisRetryUseCase {
 
     const source = reviewSession.toRecord().source;
 
-    if (!source || source.provider !== "github") {
+    if (!source || (source.provider !== "github" && source.provider !== "gitlab")) {
       throw new ReanalyzeSourceUnavailableError(reviewId);
     }
 

@@ -79,6 +79,7 @@ const runScheduledAnalysisJobUseCase = new RunScheduledAnalysisJobUseCase({
   connectionProviderCatalog,
   parserAdapters,
   pullRequestSnapshotProvider,
+  providerAgnosticPullRequestSnapshotProvider,
 });
 const analysisJobScheduler = new FileAnalysisJobScheduler({
   maxAttempts: readOptionalNonNegativeIntegerEnv("LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS"),
