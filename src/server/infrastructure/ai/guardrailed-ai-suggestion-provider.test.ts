@@ -227,12 +227,43 @@ describe("GuardrailedAiSuggestionProvider", () => {
     expectGuardrailReason(logger, "timeout");
   });
 
-  it("propagates non-guardrail provider errors", async () => {
+  it("uses fallback provider when primary provider throws temporary error", async () => {
     const primaryProvider: AiSuggestionProvider = {
       generateSuggestions: vi
         .fn()
         .mockRejectedValue(
           new AiSuggestionProviderTemporaryError("primary provider unavailable"),
+        ),
+    };
+    const fallbackProvider: AiSuggestionProvider = {
+      generateSuggestions: vi.fn().mockResolvedValue(createSuggestions("fallback")),
+    };
+    const logger = createLoggerSpies();
+
+    const provider = new GuardrailedAiSuggestionProvider({
+      providerName: "llm_primary",
+      provider: primaryProvider,
+      fallbackProviderName: "heuristic_fallback",
+      fallbackProvider,
+      guardrailPolicy: {
+        timeoutMs: 1000,
+      },
+      logger,
+    });
+
+    await expect(
+      provider.generateSuggestions({ payload: createPayload() }),
+    ).resolves.toEqual(createSuggestions("fallback"));
+    expect(fallbackProvider.generateSuggestions).toHaveBeenCalledTimes(1);
+    expectGuardrailReason(logger, "provider_temporary_error");
+  });
+
+  it("propagates permanent provider errors", async () => {
+    const primaryProvider: AiSuggestionProvider = {
+      generateSuggestions: vi
+        .fn()
+        .mockRejectedValue(
+          new AiSuggestionProviderPermanentError("invalid output schema"),
         ),
     };
     const fallbackProvider: AiSuggestionProvider = {
@@ -252,7 +283,7 @@ describe("GuardrailedAiSuggestionProvider", () => {
 
     await expect(
       provider.generateSuggestions({ payload: createPayload() }),
-    ).rejects.toBeInstanceOf(AiSuggestionProviderTemporaryError);
+    ).rejects.toBeInstanceOf(AiSuggestionProviderPermanentError);
     expect(fallbackProvider.generateSuggestions).not.toHaveBeenCalled();
   });
 

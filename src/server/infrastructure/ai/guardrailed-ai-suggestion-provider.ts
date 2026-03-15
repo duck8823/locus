@@ -1,13 +1,15 @@
 import type { AiSuggestion, AiSuggestionPayload } from "@/server/application/ai/ai-suggestion-types";
 import {
   AiSuggestionProviderTemporaryError,
+  classifyAiSuggestionProviderError,
   type AiSuggestionProvider,
 } from "@/server/application/ports/ai-suggestion-provider";
 
 export type AiSuggestionGuardrailReasonCode =
   | "timeout"
   | "estimated_input_tokens_exceeded"
-  | "estimated_input_cost_exceeded";
+  | "estimated_input_cost_exceeded"
+  | "provider_temporary_error";
 
 export interface AiSuggestionProviderGuardrailPolicy {
   timeoutMs: number;
@@ -224,6 +226,15 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
         return this.generateFallbackSuggestions({
           payload: input.payload,
           reasonCode: error.reasonCode,
+          estimatedInputTokens,
+          estimatedInputCostUsd,
+        });
+      }
+
+      if (classifyAiSuggestionProviderError(error) === "temporary") {
+        return this.generateFallbackSuggestions({
+          payload: input.payload,
+          reasonCode: "provider_temporary_error",
           estimatedInputTokens,
           estimatedInputCostUsd,
         });
