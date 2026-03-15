@@ -157,6 +157,11 @@ export LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS=600000
 # 任意: provider-agnostic code-host 境界で GitLab adapter skeleton を有効化
 export LOCUS_ENABLE_GITLAB_ADAPTER=true
 
+# 任意: plugin capability policy（最小権限）
+# カンマ区切りキー、例: pull-request-snapshot-provider:github
+export LOCUS_PLUGIN_CAPABILITY_ALLOWLIST=
+export LOCUS_PLUGIN_CAPABILITY_DENYLIST=
+
 # 任意: 接続遷移監査ログの保持件数
 export LOCUS_CONNECTION_TRANSITION_MAX_RETAINED=200
 

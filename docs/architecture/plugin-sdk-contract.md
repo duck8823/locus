@@ -46,6 +46,15 @@ Behavior:
 - skip duplicated capability providers
 - disable plugin on execution failure (except auth errors), call `deactivate`, and keep host process alive
 
+### Capability permission policy
+
+- Runtime evaluates capability allow/deny policy before activation is accepted.
+- Environment variables:
+  - `LOCUS_PLUGIN_CAPABILITY_ALLOWLIST`
+  - `LOCUS_PLUGIN_CAPABILITY_DENYLIST`
+- Format: comma-separated capability keys (example: `pull-request-snapshot-provider:github`).
+- Denied capabilities are rejected deterministically with typed diagnostics (`PluginCapabilityDeniedError`), and plugin load status becomes disabled.
+
 ## Sample plugin
 
 Location:
@@ -60,3 +69,10 @@ Purpose:
 - `PLUGIN_SDK_VERSION` major bump is required for breaking changes.
 - Additive fields are allowed within the same major.
 - Runtime should continue to reject unknown/invalid capability bindings deterministically.
+
+## Secure extension-development constraints
+
+- Plugin capabilities should follow least privilege by provider key.
+- Do not register wildcard/high-entropy provider identifiers for production use.
+- Plugin code must avoid reading host secrets outside explicitly passed runtime context.
+- Capability denial by policy must be treated as non-retryable configuration failure.
