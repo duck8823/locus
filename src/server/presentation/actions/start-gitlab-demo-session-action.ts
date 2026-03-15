@@ -1,11 +1,11 @@
 "use server";
 
-import { createHash } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { PrepareGitLabReviewWorkspaceUseCase } from "@/server/application/usecases/prepare-gitlab-review-workspace";
 import { getDependencies } from "@/server/composition/dependencies";
+import { createGitLabDemoReviewId } from "./create-gitlab-demo-review-id";
 import {
   GitLabDemoActionError,
   toGitLabDemoErrorCode,
@@ -65,24 +65,6 @@ function parseMergeRequestIid(rawValue: string): number {
   return mergeRequestIid;
 }
 
-function normalizeSegment(value: string): string {
-  return value
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "");
-}
-
-function createReviewId(projectPath: string, mergeRequestIid: number): string {
-  const normalizedProjectPath = normalizeSegment(projectPath) || "project";
-  const canonicalProjectPath = projectPath.trim().toLowerCase();
-  const discriminator = createHash("sha256")
-    .update(`${canonicalProjectPath}\u0000${mergeRequestIid}`)
-    .digest("hex")
-    .slice(0, 10);
-
-  return `gitlab-${normalizedProjectPath}-mr-${mergeRequestIid}-${discriminator}`;
-}
-
 export async function startGitLabDemoSessionAction(formData: FormData): Promise<void> {
   const headerStore = await headers();
   const cookieStore = await cookies();
@@ -106,7 +88,7 @@ export async function startGitLabDemoSessionAction(formData: FormData): Promise<
       missingCode: "merge_request_iid_required",
     });
     const mergeRequestIid = parseMergeRequestIid(mergeRequestIidRaw);
-    const reviewId = createReviewId(projectPath, mergeRequestIid);
+    const reviewId = createGitLabDemoReviewId(projectPath, mergeRequestIid);
     const { reviewSessionRepository, analysisJobScheduler } = getDependencies();
     const prepareUseCase = new PrepareGitLabReviewWorkspaceUseCase({
       reviewSessionRepository,
