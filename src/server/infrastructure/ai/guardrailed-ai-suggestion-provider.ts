@@ -213,6 +213,13 @@ function buildGuardrailEventPayload(input: {
   };
 }
 
+function buildCallerAbortedError(cause: unknown): AiSuggestionProviderTemporaryError {
+  return new AiSuggestionProviderTemporaryError(
+    "AI suggestion generation was aborted by caller.",
+    cause,
+  );
+}
+
 export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
   private readonly guardrailPolicy: ReturnType<typeof normalizeGuardrailPolicy>;
   private readonly logger: GuardrailedAiSuggestionProviderLogger;
@@ -227,10 +234,7 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     abortSignal?: AbortSignal;
   }): Promise<AiSuggestion[]> {
     if (input.abortSignal?.aborted) {
-      throw new AiSuggestionProviderTemporaryError(
-        "AI suggestion generation was aborted by caller.",
-        input.abortSignal.reason,
-      );
+      throw buildCallerAbortedError(input.abortSignal.reason);
     }
 
     const estimatedInputTokens = estimateAiSuggestionInputTokens(input.payload);
@@ -281,10 +285,7 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
       });
     } catch (error) {
       if (input.abortSignal?.aborted) {
-        throw new AiSuggestionProviderTemporaryError(
-          "AI suggestion generation was aborted by caller.",
-          error,
-        );
+        throw buildCallerAbortedError(error);
       }
 
       if (error instanceof AiSuggestionGuardrailTriggeredError) {
@@ -293,6 +294,7 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
           reasonCode: error.reasonCode,
           estimatedInputTokens,
           estimatedInputCostUsd,
+          abortSignal: input.abortSignal,
         });
       }
 
@@ -302,6 +304,7 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
           reasonCode: "provider_temporary_error",
           estimatedInputTokens,
           estimatedInputCostUsd,
+          abortSignal: input.abortSignal,
         });
       }
 
@@ -314,7 +317,12 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     reasonCode: AiSuggestionGuardrailReasonCode;
     estimatedInputTokens: number;
     estimatedInputCostUsd: number | null;
+    abortSignal?: AbortSignal;
   }): Promise<AiSuggestion[]> {
+    if (input.abortSignal?.aborted) {
+      throw buildCallerAbortedError(input.abortSignal.reason);
+    }
+
     const eventPayload = buildGuardrailEventPayload({
       payload: input.payload,
       providerName: this.input.providerName,
@@ -328,10 +336,18 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     this.logger.warn("ai_suggestion_guardrail_triggered", eventPayload);
 
     try {
-      return await this.input.fallbackProvider.generateSuggestions({
+      const suggestions = await this.input.fallbackProvider.generateSuggestions({
         payload: input.payload,
+        abortSignal: input.abortSignal,
       });
+      if (input.abortSignal?.aborted) {
+        throw buildCallerAbortedError(input.abortSignal.reason);
+      }
+      return suggestions;
     } catch (error) {
+      if (input.abortSignal?.aborted) {
+        throw buildCallerAbortedError(error);
+      }
       this.logger.error("ai_suggestion_guardrail_fallback_failed", {
         ...eventPayload,
         message: error instanceof Error ? error.message : String(error),
