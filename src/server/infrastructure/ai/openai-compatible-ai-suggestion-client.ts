@@ -154,8 +154,16 @@ export class OpenAiCompatibleAiSuggestionClient implements LlmAiSuggestionClient
         method: "POST",
         headers,
         body: JSON.stringify(requestBody),
+        signal: input.abortSignal,
       });
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new AiSuggestionProviderTemporaryError(
+          "OpenAI-compatible provider request was aborted.",
+          error,
+        );
+      }
+
       throw new AiSuggestionProviderTemporaryError(
         "OpenAI-compatible provider request failed before receiving a response.",
         error,

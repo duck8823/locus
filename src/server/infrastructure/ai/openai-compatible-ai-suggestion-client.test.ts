@@ -184,6 +184,57 @@ describe("OpenAiCompatibleAiSuggestionClient", () => {
     );
   });
 
+  it("classifies abort error as temporary provider error", async () => {
+    const fetchFn = vi.fn().mockRejectedValue(
+      Object.assign(new Error("aborted"), { name: "AbortError" }),
+    );
+    const client = new OpenAiCompatibleAiSuggestionClient({
+      apiKey: "test-key",
+      model: "gpt-4o-mini",
+      fetchFn,
+    });
+
+    await expect(client.complete(createClientInput())).rejects.toBeInstanceOf(
+      AiSuggestionProviderTemporaryError,
+    );
+  });
+
+  it("passes abort signal to fetch request", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({ suggestions: [] }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    const client = new OpenAiCompatibleAiSuggestionClient({
+      apiKey: "test-key",
+      model: "gpt-4o-mini",
+      fetchFn,
+    });
+    const controller = new AbortController();
+
+    await expect(
+      client.complete({
+        ...createClientInput(),
+        abortSignal: controller.signal,
+      }),
+    ).resolves.toEqual({ suggestions: [] });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/chat/completions",
+      expect.objectContaining({
+        signal: controller.signal,
+      }),
+    );
+  });
+
   it("classifies invalid JSON content as permanent provider error", async () => {
     const fetchFn = vi.fn().mockResolvedValue(
       new Response(

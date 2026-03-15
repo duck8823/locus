@@ -129,20 +129,37 @@ function estimateAiSuggestionInputCostUsd(input: {
 
 function withTimeout<T>(input: {
   timeoutMs: number;
-  operation: () => Promise<T>;
+  operation: (abortSignal: AbortSignal) => Promise<T>;
   onTimeout: () => Error;
+  upstreamAbortSignal?: AbortSignal;
 }): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timeoutId = setTimeout(() => reject(input.onTimeout()), input.timeoutMs);
+    const timeoutController = new AbortController();
+    const onUpstreamAbort = () => {
+      timeoutController.abort(input.upstreamAbortSignal?.reason);
+    };
+    if (input.upstreamAbortSignal?.aborted) {
+      onUpstreamAbort();
+    } else {
+      input.upstreamAbortSignal?.addEventListener("abort", onUpstreamAbort, {
+        once: true,
+      });
+    }
+    const timeoutId = setTimeout(() => {
+      timeoutController.abort();
+      reject(input.onTimeout());
+    }, input.timeoutMs);
 
     input
-      .operation()
+      .operation(timeoutController.signal)
       .then((value) => {
         clearTimeout(timeoutId);
+        input.upstreamAbortSignal?.removeEventListener("abort", onUpstreamAbort);
         resolve(value);
       })
       .catch((error) => {
         clearTimeout(timeoutId);
+        input.upstreamAbortSignal?.removeEventListener("abort", onUpstreamAbort);
         reject(error);
       });
   });
@@ -179,7 +196,10 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     this.logger = input.logger ?? defaultLogger;
   }
 
-  async generateSuggestions(input: { payload: AiSuggestionPayload }): Promise<AiSuggestion[]> {
+  async generateSuggestions(input: {
+    payload: AiSuggestionPayload;
+    abortSignal?: AbortSignal;
+  }): Promise<AiSuggestion[]> {
     const estimatedInputTokens = estimateAiSuggestionInputTokens(input.payload);
     const estimatedInputCostUsd = estimateAiSuggestionInputCostUsd({
       estimatedInputTokens,
@@ -214,7 +234,12 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     try {
       return await withTimeout({
         timeoutMs: this.guardrailPolicy.timeoutMs,
-        operation: () => this.input.provider.generateSuggestions(input),
+        operation: (abortSignal) =>
+          this.input.provider.generateSuggestions({
+            ...input,
+            abortSignal,
+          }),
+        upstreamAbortSignal: input.abortSignal,
         onTimeout: () =>
           new AiSuggestionGuardrailTriggeredError(
             "timeout",

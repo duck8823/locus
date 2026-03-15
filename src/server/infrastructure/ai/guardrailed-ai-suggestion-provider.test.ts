@@ -227,6 +227,46 @@ describe("GuardrailedAiSuggestionProvider", () => {
     expectGuardrailReason(logger, "timeout");
   });
 
+  it("aborts primary provider request when timeout guardrail fires", async () => {
+    let aborted = false;
+    const primaryProvider: AiSuggestionProvider = {
+      generateSuggestions: vi.fn().mockImplementation(
+        ({ abortSignal }: { payload: AiSuggestionPayload; abortSignal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            abortSignal?.addEventListener(
+              "abort",
+              () => {
+                aborted = true;
+                const error = new Error("aborted");
+                error.name = "AbortError";
+                reject(error);
+              },
+              { once: true },
+            );
+          }),
+      ),
+    };
+    const fallbackProvider: AiSuggestionProvider = {
+      generateSuggestions: vi.fn().mockResolvedValue(createSuggestions("fallback")),
+    };
+
+    const provider = new GuardrailedAiSuggestionProvider({
+      providerName: "llm_primary",
+      provider: primaryProvider,
+      fallbackProviderName: "heuristic_fallback",
+      fallbackProvider,
+      guardrailPolicy: {
+        timeoutMs: 1,
+      },
+      logger: createLoggerSpies(),
+    });
+
+    await expect(
+      provider.generateSuggestions({ payload: createPayload() }),
+    ).resolves.toEqual(createSuggestions("fallback"));
+    expect(aborted).toBe(true);
+  });
+
   it("uses fallback provider when primary provider throws temporary error", async () => {
     const primaryProvider: AiSuggestionProvider = {
       generateSuggestions: vi

@@ -8,6 +8,7 @@ import {
 export interface LlmAiSuggestionClientInput {
   payload: AiSuggestionPayload;
   promptVersion: string;
+  abortSignal?: AbortSignal;
 }
 
 export interface LlmAiSuggestionClient {
@@ -136,11 +137,15 @@ function toClassifiedProviderError(error: unknown): Error {
 export class LlmAiSuggestionProvider implements AiSuggestionProvider {
   constructor(private readonly input: LlmAiSuggestionProviderInput) {}
 
-  async generateSuggestions(input: { payload: AiSuggestionPayload }): Promise<AiSuggestion[]> {
+  async generateSuggestions(input: {
+    payload: AiSuggestionPayload;
+    abortSignal?: AbortSignal;
+  }): Promise<AiSuggestion[]> {
     try {
       const raw = await this.input.client.complete({
         payload: input.payload,
         promptVersion: this.input.promptVersion,
+        abortSignal: input.abortSignal,
       });
       return parseSuggestionsPayload(raw);
     } catch (error) {
