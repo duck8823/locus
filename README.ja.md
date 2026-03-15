@@ -141,14 +141,18 @@ export LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEY=base64:...
 
 `GITHUB_OAUTH_CLIENT_ID` を設定しない場合は、外部連携なしで状態遷移を検証できるようローカル demo OAuth fallback が使われます。
 
-マーケティングページ上の「Open GitHub PR demo」では、owner / repository / PR number をフォームに直接入力できます。
-以下の環境変数は既定値として使うための任意設定です。
+マーケティングページ上の GitHub / GitLab demo では、
+GitHub は owner / repository / PR number、
+GitLab は project path / merge request IID をフォームに直接入力できます。
+以下の環境変数はフォーム既定値として使うための任意設定です。
 
 ```bash
 export GITHUB_TOKEN=your-github-token
 export LOCUS_GITHUB_DEMO_OWNER=owner
 export LOCUS_GITHUB_DEMO_REPO=repository
 export LOCUS_GITHUB_DEMO_PR_NUMBER=123
+export LOCUS_GITLAB_DEMO_PROJECT_PATH=group/project
+export LOCUS_GITLAB_DEMO_MERGE_REQUEST_IID=123
 
 # 任意: 耐久 analysis queue のチューニング
 export LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS=3

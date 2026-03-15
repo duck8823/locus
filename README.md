@@ -136,7 +136,8 @@ export LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEY=base64:...
 
 Without `GITHUB_OAUTH_CLIENT_ID`, the connections page uses a local demo OAuth fallback so you can validate the state machine without external setup.
 
-If you want to run the live GitHub PR demo button from the marketing page, you can enter owner/repo/PR number directly in the form.
+If you want to run the live GitHub/GitLab demo buttons from the marketing page, you can enter
+owner/repo/PR number (GitHub) or project path/MR IID (GitLab) directly in the form.
 The environment variables below are optional defaults:
 
 ```bash
@@ -144,6 +145,8 @@ export GITHUB_TOKEN=your-github-token
 export LOCUS_GITHUB_DEMO_OWNER=owner
 export LOCUS_GITHUB_DEMO_REPO=repository
 export LOCUS_GITHUB_DEMO_PR_NUMBER=123
+export LOCUS_GITLAB_DEMO_PROJECT_PATH=group/project
+export LOCUS_GITLAB_DEMO_MERGE_REQUEST_IID=123
 
 # Optional: durable analysis queue tuning
 export LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS=3
