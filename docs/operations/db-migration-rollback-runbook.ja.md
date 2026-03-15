@@ -111,7 +111,7 @@ Locus の永続化をローカルプロトタイプストア（`.locus-data` + S
 
 1. legacy スナップショットをアーカイブ。
 2. 休眠 legacy write path を無効化/除去。
-3. 復旧ドリル手順を参照可能状態で保持。
+3. 復旧ドリル手順を参照可能状態で保持（本書の「ロールバック手順」節 + [production-baseline.ja.md](production-baseline.ja.md) の Phase 5）。
 
 ## ロールバック手順（Step 4以降で適用）
 
@@ -143,4 +143,3 @@ Locus の永続化をローカルプロトタイプストア（`.locus-data` + S
 - [ ] Step 5 cutover 完了（中止時は理由記録）
 - [ ] rollback 状態記録（未実施なら不要）
 - [ ] incident / follow-up issue を紐付け
-

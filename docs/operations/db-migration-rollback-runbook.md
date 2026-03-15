@@ -111,7 +111,7 @@ Go criteria:
 
 1. Archive legacy snapshot artifacts.
 2. Disable/remove dormant legacy write paths.
-3. Keep restoration drill instructions available.
+3. Keep restoration drill instructions available (this runbook “Rollback runbook” section + [production-baseline.md](production-baseline.md) Phase 5).
 
 ## Rollback runbook (any phase after Step 4)
 
@@ -143,4 +143,3 @@ Copy this section into the migration ticket:
 - [ ] Step 5 cutover completed (or aborted with reason)
 - [ ] Rollback status documented (not required if no rollback)
 - [ ] Incident/follow-up issues linked
-

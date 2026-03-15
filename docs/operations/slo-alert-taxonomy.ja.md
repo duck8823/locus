@@ -48,6 +48,11 @@
 | `audit-ingestion-gap` | P2 | 重要監査イベントが15分以上無発火 | telemetry pipeline 復旧 |
 | `queue-stale-job-growth` | P3 | stale running jobs が30分増加 | worker 健全性確認 + cleanup 計画 |
 
+`audit-ingestion-gap` 発火時は、次の順で切り分ける:
+1. アプリ側ログ emitter 健全性（クラッシュ/再起動ループ有無）
+2. アプリ→保管先間の log shipper/collector 健全性
+3. 取り込み先 ingestion endpoint の可用性と認証状態
+
 ## ダッシュボード最小パネル
 
 最低限、以下を構成する:
@@ -75,4 +80,3 @@
 - 週次: ノイズ多発・低シグナルアラートを見直し閾値調整
 - 月次: 実運用データで SLO 目標を再評価し本書を更新
 - リリースゲート: 本番 cutover 前に dashboard/alert 配線を確認
-

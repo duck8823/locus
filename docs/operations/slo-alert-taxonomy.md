@@ -48,6 +48,11 @@ Severity mapping:
 | `audit-ingestion-gap` | P2 | no critical audit events for > 15m | telemetry pipeline recovery |
 | `queue-stale-job-growth` | P3 | stale running jobs increase for 30m | worker health check + cleanup plan |
 
+For `audit-ingestion-gap`, prioritize this triage order:
+1. application log emitter health (no process crash/restart loop)
+2. log shipper/collector health between app and storage
+3. destination ingestion endpoint availability and auth status
+
 ## Dashboard minimum panels
 
 Create at least these panels:
@@ -75,4 +80,3 @@ When alerts fire:
 - Weekly: check noisy/low-signal alerts and adjust thresholds
 - Monthly: review SLO targets against real usage and update this document
 - Release gate: confirm dashboard + alert wiring before production cutover
-
