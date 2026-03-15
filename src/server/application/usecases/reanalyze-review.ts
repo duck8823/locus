@@ -225,7 +225,7 @@ export class ReanalyzeReviewUseCase {
           const bundle = await providerAgnosticProvider.fetchPullRequestSnapshots({
             reviewId,
             source,
-            accessToken: null,
+            accessToken: this.resolveGitLabAccessToken(),
           });
           snapshotPairCount = bundle.snapshotPairs.length;
           refreshedReviewSession = await createAnalyzedReviewSession({
@@ -354,6 +354,14 @@ export class ReanalyzeReviewUseCase {
         errorMessage,
       };
     }
+  }
+
+
+
+  private resolveGitLabAccessToken(): string | null {
+    const token = process.env.GITLAB_TOKEN?.trim() ?? process.env.GL_TOKEN?.trim() ?? "";
+
+    return token.length > 0 ? token : null;
   }
 
   private async resolveGitHubAccessToken(reviewerId: string): Promise<string | null> {

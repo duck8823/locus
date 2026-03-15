@@ -88,6 +88,8 @@ export class RunScheduledAnalysisJobUseCase {
         throw new ReanalyzeSourceUnavailableError(input.reviewId);
       }
 
+      // NOTE: Non-GitHub initial ingestion currently reuses reanalysis orchestration
+      // until a dedicated provider-specific ingestion use case is introduced.
       const nonGitHubIngestionUseCase = new ReanalyzeReviewUseCase({
         reviewSessionRepository: this.dependencies.reviewSessionRepository,
         parserAdapters: this.dependencies.parserAdapters,
@@ -120,6 +122,7 @@ export class RunScheduledAnalysisJobUseCase {
     });
   }
 
+  // TODO(H6): Add GitLab connection-state transitions when GitLab OAuth/token persistence is implemented.
   private async markGitHubConnectionReauthRequired(input: {
     error: unknown;
     reviewerId: string;
