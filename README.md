@@ -152,6 +152,11 @@ export LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS=600000
 # Optional: enable GitLab adapter skeleton in provider-agnostic code-host boundary
 export LOCUS_ENABLE_GITLAB_ADAPTER=true
 
+# Optional: plugin capability policy (least privilege)
+# comma-separated keys, e.g. pull-request-snapshot-provider:github
+export LOCUS_PLUGIN_CAPABILITY_ALLOWLIST=
+export LOCUS_PLUGIN_CAPABILITY_DENYLIST=
+
 # Optional: connection transition audit retention
 export LOCUS_CONNECTION_TRANSITION_MAX_RETAINED=200
 
