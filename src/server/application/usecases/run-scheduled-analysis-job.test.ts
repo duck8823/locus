@@ -9,6 +9,8 @@ import type {
   GitHubPullRequestRef,
   PullRequestSnapshotBundle,
   PullRequestSnapshotProvider,
+  ProviderAgnosticPullRequestSnapshotProvider,
+  PullRequestSourceRef,
 } from "@/server/application/ports/pull-request-snapshot-provider";
 import { PullRequestProviderAuthError } from "@/server/application/ports/pull-request-snapshot-provider";
 import { ReanalyzeSourceUnavailableError } from "@/server/application/errors/reanalyze-source-unavailable-error";
@@ -284,6 +286,72 @@ class StubPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
   }
 }
 
+
+
+class StubProviderAgnosticPullRequestSnapshotProvider
+  implements ProviderAgnosticPullRequestSnapshotProvider
+{
+  calls = 0;
+  lastInput:
+    | { reviewId: string; source: PullRequestSourceRef; accessToken?: string | null }
+    | null = null;
+
+  async fetchPullRequestSnapshots(input: {
+    reviewId: string;
+    source: PullRequestSourceRef;
+    accessToken?: string | null;
+  }): Promise<PullRequestSnapshotBundle<PullRequestSourceRef>> {
+    this.calls += 1;
+    this.lastInput = input;
+
+    if (input.source.provider !== "gitlab") {
+      throw new Error("unexpected provider");
+    }
+
+    const source = input.source as {
+      provider: "gitlab";
+      projectPath: string;
+      mergeRequestIid: number;
+    };
+
+    return {
+      title: `MR !${source.mergeRequestIid}: Normalize parser flow`,
+      repositoryName: source.projectPath,
+      branchLabel: "feature/mr-42 → main",
+      source,
+      snapshotPairs: [
+        {
+          fileId: "file-user-service",
+          filePath: "src/user-service.ts",
+          before: {
+            snapshotId: `${input.reviewId}:file-user-service:before`,
+            fileId: "file-user-service",
+            filePath: "src/user-service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const before = true;",
+            metadata: {
+              codeHost: "gitlab",
+            },
+          },
+          after: {
+            snapshotId: `${input.reviewId}:file-user-service:after`,
+            fileId: "file-user-service",
+            filePath: "src/user-service.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const after = true;",
+            metadata: {
+              codeHost: "gitlab",
+            },
+          },
+        },
+      ],
+    };
+  }
+}
+
+
 class AuthFailingPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
   constructor(private readonly error: PullRequestProviderAuthError) {}
 
@@ -453,6 +521,59 @@ describe("RunScheduledAnalysisJobUseCase", () => {
 
     expect(snapshotProvider.lastInput?.accessToken).toBe("oauth-bearer-token");
   });
+
+
+
+  it("runs initial ingestion for gitlab sources via provider-agnostic orchestration", async () => {
+    const reviewSessionRepository = new InMemoryReviewSessionRepository();
+    reviewSessionRepository.seed(
+      ReviewSession.create({
+        reviewId: "gitlab-duck8823-locus-mr-42",
+        title: "MR !42: Loading analysis...",
+        repositoryName: "duck8823/locus",
+        branchLabel: "loading",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "gitlab",
+          projectPath: "duck8823/locus",
+          mergeRequestIid: 42,
+        },
+        groups: [],
+        lastOpenedAt: "2026-03-10T00:00:00.000Z",
+        analysisStatus: "queued",
+      }),
+    );
+    const githubSnapshotProvider = new StubPullRequestSnapshotProvider();
+    const providerAgnosticSnapshotProvider =
+      new StubProviderAgnosticPullRequestSnapshotProvider();
+    const connectionStateRepository = new InMemoryConnectionStateRepository();
+    const connectionStateTransitionRepository =
+      new InMemoryConnectionStateTransitionRepository(connectionStateRepository);
+    const useCase = new RunScheduledAnalysisJobUseCase({
+      reviewSessionRepository,
+      connectionStateRepository,
+      connectionStateTransitionRepository,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
+      connectionProviderCatalog: new InMemoryConnectionProviderCatalog(),
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: githubSnapshotProvider,
+      providerAgnosticPullRequestSnapshotProvider: providerAgnosticSnapshotProvider,
+    });
+
+    await useCase.execute({
+      jobId: "job-gitlab-ingestion",
+      reviewId: "gitlab-duck8823-locus-mr-42",
+      requestedAt: "2026-03-10T00:00:00.000Z",
+      reason: "initial_ingestion",
+    });
+
+    const persisted = await reviewSessionRepository.findByReviewId("gitlab-duck8823-locus-mr-42");
+    expect(githubSnapshotProvider.calls).toBe(0);
+    expect(providerAgnosticSnapshotProvider.calls).toBe(1);
+    expect(persisted?.toRecord().analysisStatus).toBe("ready");
+    expect(persisted?.toRecord().reanalysisStatus).toBe("succeeded");
+  });
+
 
   it("runs reanalysis for webhook jobs", async () => {
     const reviewSessionRepository = new InMemoryReviewSessionRepository();

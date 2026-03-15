@@ -10,6 +10,8 @@ import type {
   GitHubPullRequestRef,
   PullRequestSnapshotBundle,
   PullRequestSnapshotProvider,
+  ProviderAgnosticPullRequestSnapshotProvider,
+  PullRequestSourceRef,
 } from "@/server/application/ports/pull-request-snapshot-provider";
 import type {
   ConnectionTokenRepository,
@@ -130,6 +132,78 @@ export function updateProfile(phone: string): string {
     };
   }
 }
+
+
+
+class StubProviderAgnosticPullRequestSnapshotProvider
+  implements ProviderAgnosticPullRequestSnapshotProvider
+{
+  lastInput:
+    | { reviewId: string; source: PullRequestSourceRef; accessToken?: string | null }
+    | null = null;
+  calls = 0;
+
+  async fetchPullRequestSnapshots(input: {
+    reviewId: string;
+    source: PullRequestSourceRef;
+    accessToken?: string | null;
+  }): Promise<PullRequestSnapshotBundle<PullRequestSourceRef>> {
+    this.calls += 1;
+    this.lastInput = input;
+
+    if (input.source.provider !== "gitlab") {
+      throw new Error("unexpected provider");
+    }
+
+    const source = input.source as {
+      provider: "gitlab";
+      projectPath: string;
+      mergeRequestIid: number;
+    };
+
+    return {
+      title: `MR !${source.mergeRequestIid}: Normalize parser flow`,
+      repositoryName: source.projectPath,
+      branchLabel: "feature/mr-42 → main",
+      source,
+      snapshotPairs: [
+        {
+          fileId: "file-gitlab-user-service",
+          filePath: "src/user-service.ts",
+          before: {
+            snapshotId: `${input.reviewId}:file-gitlab-user-service:before`,
+            fileId: "file-gitlab-user-service",
+            filePath: "src/user-service.ts",
+            language: "typescript",
+            revision: "before",
+            content: "export const before = true;",
+            metadata: {
+              codeHost: "gitlab",
+              repositoryRef: source.projectPath,
+              changeRequestRef: `merge_requests/${source.mergeRequestIid}`,
+              commitSha: "base-sha",
+            },
+          },
+          after: {
+            snapshotId: `${input.reviewId}:file-gitlab-user-service:after`,
+            fileId: "file-gitlab-user-service",
+            filePath: "src/user-service.ts",
+            language: "typescript",
+            revision: "after",
+            content: "export const after = true;",
+            metadata: {
+              codeHost: "gitlab",
+              repositoryRef: source.projectPath,
+              changeRequestRef: `merge_requests/${source.mergeRequestIid}`,
+              commitSha: "head-sha",
+            },
+          },
+        },
+      ],
+    };
+  }
+}
+
 
 class FailingPullRequestSnapshotProvider implements PullRequestSnapshotProvider {
   async fetchPullRequestSnapshots(): Promise<PullRequestSnapshotBundle> {
@@ -326,6 +400,60 @@ describe("ReanalyzeReviewUseCase", () => {
     await useCase.execute({ reviewId: "github-octocat-locus-pr-33" });
 
     expect(snapshotProvider.lastInput?.accessToken).toBe("bearer-token");
+  });
+
+
+
+  it("reanalyzes gitlab-backed sessions via provider-agnostic provider", async () => {
+    const repository = new InMemoryReviewSessionRepository();
+    repository.seed(
+      ReviewSession.create({
+        reviewId: "gitlab-duck8823-locus-mr-42",
+        title: "MR !42: existing",
+        repositoryName: "duck8823/locus",
+        branchLabel: "feature/mr-42 → main",
+        viewerName: "Demo reviewer",
+        source: {
+          provider: "gitlab",
+          projectPath: "duck8823/locus",
+          mergeRequestIid: 42,
+        },
+        groups: [
+          {
+            groupId: "legacy-group",
+            title: "Legacy group",
+            summary: "Legacy summary",
+            filePath: "src/user-service.ts",
+            status: "in_progress",
+            upstream: [],
+            downstream: [],
+          },
+        ],
+        lastOpenedAt: "2026-03-07T00:00:00.000Z",
+      }),
+    );
+    const snapshotProvider = new StubPullRequestSnapshotProvider();
+    const providerAgnosticSnapshotProvider =
+      new StubProviderAgnosticPullRequestSnapshotProvider();
+    const useCase = new ReanalyzeReviewUseCase({
+      reviewSessionRepository: repository,
+      parserAdapters: [new TestParserAdapter()],
+      pullRequestSnapshotProvider: snapshotProvider,
+      providerAgnosticPullRequestSnapshotProvider: providerAgnosticSnapshotProvider,
+      connectionTokenRepository: new InMemoryConnectionTokenRepository(),
+    });
+
+    const result = await useCase.execute({ reviewId: "gitlab-duck8823-locus-mr-42" });
+
+    expect(snapshotProvider.calls).toBe(0);
+    expect(providerAgnosticSnapshotProvider.calls).toBe(1);
+    expect(providerAgnosticSnapshotProvider.lastInput?.source).toEqual({
+      provider: "gitlab",
+      projectPath: "duck8823/locus",
+      mergeRequestIid: 42,
+    });
+    expect(result.reanalysisStatus).toBe("succeeded");
+    expect(result.reviewSession.toRecord().analysisStatus).toBe("ready");
   });
 
   it("infers GitHub source from legacy records when source metadata is absent", async () => {
