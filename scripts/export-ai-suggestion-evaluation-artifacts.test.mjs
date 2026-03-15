@@ -124,6 +124,38 @@ describe("evaluateThresholdViolations", () => {
 
     expect(violations).toEqual([
       "fixtureCount was 0; at least one valid fixture is required",
+      "summary usefulRatePercent was null while min 80 is configured",
+      "summary falsePositiveRatePercent was null while max 20 is configured",
+    ]);
+  });
+
+  it("fails quality gate when configured threshold metric is null", () => {
+    const violations = evaluateThresholdViolations(
+      {
+        summary: {
+          fixtureCount: 1,
+          usefulRatePercent: null,
+          falsePositiveRatePercent: null,
+        },
+        fixtures: [
+          {
+            fixtureId: "fixture-null-metrics",
+            usefulRatePercent: null,
+            falsePositiveRatePercent: null,
+          },
+        ],
+      },
+      {
+        minUsefulRatePercent: 80,
+        maxFalsePositiveRatePercent: 20,
+      },
+    );
+
+    expect(violations).toEqual([
+      "summary usefulRatePercent was null while min 80 is configured",
+      "summary falsePositiveRatePercent was null while max 20 is configured",
+      "fixture fixture-null-metrics usefulRatePercent was null while min 80 is configured",
+      "fixture fixture-null-metrics falsePositiveRatePercent was null while max 20 is configured",
     ]);
   });
 });

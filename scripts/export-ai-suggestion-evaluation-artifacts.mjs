@@ -136,6 +136,13 @@ export function evaluateThresholdViolations(result, thresholdOptions) {
 
   if (
     thresholdOptions.minUsefulRatePercent !== undefined &&
+    summary.usefulRatePercent === null
+  ) {
+    violations.push(
+      `summary usefulRatePercent was null while min ${thresholdOptions.minUsefulRatePercent} is configured`,
+    );
+  } else if (
+    thresholdOptions.minUsefulRatePercent !== undefined &&
     summary.usefulRatePercent !== null &&
     summary.usefulRatePercent < thresholdOptions.minUsefulRatePercent
   ) {
@@ -145,6 +152,13 @@ export function evaluateThresholdViolations(result, thresholdOptions) {
   }
 
   if (
+    thresholdOptions.maxFalsePositiveRatePercent !== undefined &&
+    summary.falsePositiveRatePercent === null
+  ) {
+    violations.push(
+      `summary falsePositiveRatePercent was null while max ${thresholdOptions.maxFalsePositiveRatePercent} is configured`,
+    );
+  } else if (
     thresholdOptions.maxFalsePositiveRatePercent !== undefined &&
     summary.falsePositiveRatePercent !== null &&
     summary.falsePositiveRatePercent > thresholdOptions.maxFalsePositiveRatePercent
@@ -157,6 +171,13 @@ export function evaluateThresholdViolations(result, thresholdOptions) {
   for (const fixture of result.fixtures) {
     if (
       thresholdOptions.minUsefulRatePercent !== undefined &&
+      fixture.usefulRatePercent === null
+    ) {
+      violations.push(
+        `fixture ${fixture.fixtureId} usefulRatePercent was null while min ${thresholdOptions.minUsefulRatePercent} is configured`,
+      );
+    } else if (
+      thresholdOptions.minUsefulRatePercent !== undefined &&
       fixture.usefulRatePercent !== null &&
       fixture.usefulRatePercent < thresholdOptions.minUsefulRatePercent
     ) {
@@ -166,6 +187,13 @@ export function evaluateThresholdViolations(result, thresholdOptions) {
     }
 
     if (
+      thresholdOptions.maxFalsePositiveRatePercent !== undefined &&
+      fixture.falsePositiveRatePercent === null
+    ) {
+      violations.push(
+        `fixture ${fixture.fixtureId} falsePositiveRatePercent was null while max ${thresholdOptions.maxFalsePositiveRatePercent} is configured`,
+      );
+    } else if (
       thresholdOptions.maxFalsePositiveRatePercent !== undefined &&
       fixture.falsePositiveRatePercent !== null &&
       fixture.falsePositiveRatePercent > thresholdOptions.maxFalsePositiveRatePercent
