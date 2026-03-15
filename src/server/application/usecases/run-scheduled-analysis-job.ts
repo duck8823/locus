@@ -2,6 +2,7 @@ import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 import type { ScheduleAnalysisJobInput } from "@/server/application/ports/analysis-job-scheduler";
 import {
   PullRequestProviderAuthError,
+  type ProviderAgnosticPullRequestSnapshotProvider,
   type PullRequestSnapshotProvider,
 } from "@/server/application/ports/pull-request-snapshot-provider";
 import type { ConnectionProviderCatalog } from "@/server/application/ports/connection-provider-catalog";
@@ -32,6 +33,7 @@ export interface RunScheduledAnalysisJobDependencies {
   connectionProviderCatalog: ConnectionProviderCatalog;
   parserAdapters: ParserAdapter[];
   pullRequestSnapshotProvider: PullRequestSnapshotProvider;
+  providerAgnosticPullRequestSnapshotProvider?: ProviderAgnosticPullRequestSnapshotProvider;
 }
 
 export class RunScheduledAnalysisJobUseCase {
@@ -49,34 +51,57 @@ export class RunScheduledAnalysisJobUseCase {
     if (input.reason === "initial_ingestion") {
       const source = reviewSession.toRecord().source;
 
-      if (!source || source.provider !== "github") {
+      if (!source) {
         throw new ReanalyzeSourceUnavailableError(input.reviewId);
       }
 
-      const useCase = new RunGitHubIngestionJobUseCase({
+      if (source.provider === "github") {
+        const useCase = new RunGitHubIngestionJobUseCase({
+          reviewSessionRepository: this.dependencies.reviewSessionRepository,
+          parserAdapters: this.dependencies.parserAdapters,
+          pullRequestSnapshotProvider: this.dependencies.pullRequestSnapshotProvider,
+        });
+        const accessToken = await this.resolveGitHubAccessToken(reviewSession.viewerName);
+
+        try {
+          await useCase.execute({
+            reviewId: input.reviewId,
+            viewerName: reviewSession.viewerName,
+            owner: source.owner,
+            repository: source.repository,
+            pullRequestNumber: source.pullRequestNumber,
+            accessToken,
+            requestedAt: input.requestedAt,
+          });
+        } catch (error) {
+          await this.markGitHubConnectionReauthRequired({
+            error,
+            reviewerId: reviewSession.viewerName,
+          });
+          throw error;
+        }
+
+        return;
+      }
+
+      if (source.provider === "seed_fixture") {
+        throw new ReanalyzeSourceUnavailableError(input.reviewId);
+      }
+
+      const nonGitHubIngestionUseCase = new ReanalyzeReviewUseCase({
         reviewSessionRepository: this.dependencies.reviewSessionRepository,
         parserAdapters: this.dependencies.parserAdapters,
         pullRequestSnapshotProvider: this.dependencies.pullRequestSnapshotProvider,
+        providerAgnosticPullRequestSnapshotProvider:
+          this.dependencies.providerAgnosticPullRequestSnapshotProvider,
+        connectionTokenRepository: this.dependencies.connectionTokenRepository,
       });
-      const accessToken = await this.resolveGitHubAccessToken(reviewSession.viewerName);
 
-      try {
-        await useCase.execute({
-          reviewId: input.reviewId,
-          viewerName: reviewSession.viewerName,
-          owner: source.owner,
-          repository: source.repository,
-          pullRequestNumber: source.pullRequestNumber,
-          accessToken,
-          requestedAt: input.requestedAt,
-        });
-      } catch (error) {
-        await this.markGitHubConnectionReauthRequired({
-          error,
-          reviewerId: reviewSession.viewerName,
-        });
-        throw error;
-      }
+      await nonGitHubIngestionUseCase.execute({
+        reviewId: input.reviewId,
+        requestedAt: input.requestedAt,
+      });
+
       return;
     }
 
@@ -84,6 +109,8 @@ export class RunScheduledAnalysisJobUseCase {
       reviewSessionRepository: this.dependencies.reviewSessionRepository,
       parserAdapters: this.dependencies.parserAdapters,
       pullRequestSnapshotProvider: this.dependencies.pullRequestSnapshotProvider,
+      providerAgnosticPullRequestSnapshotProvider:
+        this.dependencies.providerAgnosticPullRequestSnapshotProvider,
       connectionTokenRepository: this.dependencies.connectionTokenRepository,
     });
 

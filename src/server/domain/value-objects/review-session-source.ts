@@ -6,9 +6,19 @@ export interface GitHubReviewSessionSource {
   [key: string]: unknown;
 }
 
+export interface GitLabReviewSessionSource {
+  provider: "gitlab";
+  projectPath: string;
+  mergeRequestIid: number;
+  [key: string]: unknown;
+}
+
 export interface SeedFixtureReviewSessionSource {
   provider: "seed_fixture";
   fixtureId: string;
 }
 
-export type ReviewSessionSource = GitHubReviewSessionSource | SeedFixtureReviewSessionSource;
+export type ReviewSessionSource =
+  | GitHubReviewSessionSource
+  | GitLabReviewSessionSource
+  | SeedFixtureReviewSessionSource;

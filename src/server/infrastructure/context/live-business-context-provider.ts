@@ -20,6 +20,7 @@ import type {
   IssueContextRecord,
 } from "@/server/application/ports/issue-context-provider";
 import { StubBusinessContextProvider } from "@/server/infrastructure/context/stub-business-context-provider";
+import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
 
 interface GitHubIssueReference {
   owner: string;
@@ -394,15 +395,7 @@ export class LiveBusinessContextProvider implements BusinessContextProvider {
     title: string;
     githubIssueAccessToken: string | null;
     githubIssueGrantedScopes: string[];
-    source: {
-      provider: "github";
-      owner: string;
-      repository: string;
-      pullRequestNumber: number;
-    } | {
-      provider: "seed_fixture";
-      fixtureId: string;
-    } | null;
+    source: ReviewSessionSource | null;
   }): Promise<BusinessContextSnapshot> {
     const fallbackSnapshot = await this.fallbackProvider.loadSnapshotForReview(input);
 

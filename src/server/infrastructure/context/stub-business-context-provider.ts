@@ -3,6 +3,7 @@ import type {
   BusinessContextProvider,
   BusinessContextSnapshot,
 } from "@/server/application/ports/business-context-provider";
+import type { ReviewSessionSource } from "@/server/domain/value-objects/review-session-source";
 
 interface ExtractedIssueReference {
   owner: string;
@@ -250,15 +251,7 @@ export class StubBusinessContextProvider implements BusinessContextProvider {
     title: string;
     githubIssueAccessToken: string | null;
     githubIssueGrantedScopes: string[];
-    source: {
-      provider: "github";
-      owner: string;
-      repository: string;
-      pullRequestNumber: number;
-    } | {
-      provider: "seed_fixture";
-      fixtureId: string;
-    } | null;
+    source: ReviewSessionSource | null;
   }): Promise<BusinessContextSnapshot> {
     const generatedAt = new Date().toISOString();
     const sharedSuffix = createHash("sha256")

@@ -8,6 +8,7 @@ import {
 } from "@/server/application/services/review-session-seed";
 import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 import type {
+  ProviderAgnosticPullRequestSnapshotProvider,
   PullRequestSnapshotProvider,
 } from "@/server/application/ports/pull-request-snapshot-provider";
 import type {
@@ -31,6 +32,7 @@ export interface ReanalyzeReviewDependencies {
   reviewSessionRepository: ReviewSessionRepository;
   parserAdapters: ParserAdapter[];
   pullRequestSnapshotProvider: PullRequestSnapshotProvider;
+  providerAgnosticPullRequestSnapshotProvider?: ProviderAgnosticPullRequestSnapshotProvider;
   connectionTokenRepository: ConnectionTokenRepository;
 }
 
@@ -197,6 +199,33 @@ export class ReanalyzeReviewUseCase {
             reviewId,
             source,
             accessToken,
+          });
+          snapshotPairCount = bundle.snapshotPairs.length;
+          refreshedReviewSession = await createAnalyzedReviewSession({
+            reviewId,
+            title: bundle.title,
+            repositoryName: bundle.repositoryName,
+            branchLabel: bundle.branchLabel,
+            viewerName: previousRecord.viewerName,
+            source,
+            createdAt: startedAt,
+            snapshotPairs: bundle.snapshotPairs,
+            parserAdapters: this.dependencies.parserAdapters,
+          });
+          break;
+        }
+        case "gitlab": {
+          const providerAgnosticProvider =
+            this.dependencies.providerAgnosticPullRequestSnapshotProvider;
+
+          if (!providerAgnosticProvider) {
+            throw new ReanalyzeSourceUnavailableError(reviewId);
+          }
+
+          const bundle = await providerAgnosticProvider.fetchPullRequestSnapshots({
+            reviewId,
+            source,
+            accessToken: null,
           });
           snapshotPairCount = bundle.snapshotPairs.length;
           refreshedReviewSession = await createAnalyzedReviewSession({
