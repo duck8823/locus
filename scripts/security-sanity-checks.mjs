@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -103,7 +103,9 @@ export async function runSecuritySanityChecks({
   cwd = process.cwd(),
   files,
   readFileFn = readFile,
+  statFn = stat,
   listTrackedFilesFn = listTrackedFiles,
+  maxScanFileBytes = 1_000_000,
 } = {}) {
   const trackedFiles = files ?? (await listTrackedFilesFn({ cwd }));
   const blockedDotenvFiles = collectBlockedDotenvFiles(trackedFiles);
@@ -116,9 +118,17 @@ export async function runSecuritySanityChecks({
 
   let scannedTextFiles = 0;
   let skippedBinaryFiles = 0;
+  let skippedLargeFiles = 0;
 
   for (const filePath of trackedFiles) {
     const absolutePath = path.join(cwd, filePath);
+    const stats = await statFn(absolutePath);
+
+    if (stats.size > maxScanFileBytes) {
+      skippedLargeFiles += 1;
+      continue;
+    }
+
     const raw = await readFileFn(absolutePath);
 
     if (isLikelyBinary(raw)) {
@@ -144,6 +154,7 @@ export async function runSecuritySanityChecks({
     violations,
     scannedTextFiles,
     skippedBinaryFiles,
+    skippedLargeFiles,
   };
 }
 
@@ -160,7 +171,7 @@ async function main() {
   }
 
   process.stdout.write(
-    `security sanity checks passed (scanned text files: ${result.scannedTextFiles}, skipped binary files: ${result.skippedBinaryFiles})\n`,
+    `security sanity checks passed (scanned text files: ${result.scannedTextFiles}, skipped binary files: ${result.skippedBinaryFiles}, skipped large files: ${result.skippedLargeFiles})\n`,
   );
 }
 
@@ -171,4 +182,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exitCode = 1;
   });
 }
-

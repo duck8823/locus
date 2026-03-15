@@ -20,6 +20,23 @@ function createReadFileStub({ cwd, fileContents, binaryFiles = new Set() }) {
   };
 }
 
+function createStatStub({ cwd, fileContents, binaryFiles = new Set(), largeFiles = new Set() }) {
+  return async (absolutePath) => {
+    const relativePath = path.relative(cwd, absolutePath).replaceAll("\\", "/");
+    if (largeFiles.has(relativePath)) {
+      return { size: 2_000_000 };
+    }
+    if (binaryFiles.has(relativePath)) {
+      return { size: 10 };
+    }
+    const contents = fileContents[relativePath];
+    if (contents === undefined) {
+      throw new Error(`unexpected stat path: ${relativePath}`);
+    }
+    return { size: Buffer.byteLength(contents, "utf8") };
+  };
+}
+
 describe("collectBlockedDotenvFiles", () => {
   it("blocks tracked .env files except sample variants", () => {
     expect(
@@ -36,8 +53,10 @@ describe("collectBlockedDotenvFiles", () => {
 
 describe("scanSecretPatterns", () => {
   it("detects token-like literals", () => {
+    const githubClassic = `ghp_${"123456789012345678901234567890123456"}`;
+    const openAiLike = `sk-${"abcdefghijklmnopqrstuvwx"}`;
     const findings = scanSecretPatterns(
-      'const token = "ghp_123456789012345678901234567890123456"; const key = "sk-abcdefghijklmnopqrstuvwx";',
+      `const token = "${githubClassic}"; const key = "${openAiLike}";`,
     );
 
     expect(findings.map((item) => item.ruleId).sort()).toEqual(["github_pat_classic", "openai_api_key"]);
@@ -52,7 +71,14 @@ describe("runSecuritySanityChecks", () => {
       cwd,
       fileContents: {
         ".env.local": "SOME_VAR=1",
-        "src/server/token.ts": 'export const token = "github_pat_abcdefghijklmnopqrstuv_1234567890";',
+        "src/server/token.ts": `export const token = "${`github_pat_${"abcdefghijklmnopqrstuv_1234567890"}`}";`,
+      },
+    });
+    const statFn = createStatStub({
+      cwd,
+      fileContents: {
+        ".env.local": "SOME_VAR=1",
+        "src/server/token.ts": `export const token = "${`github_pat_${"abcdefghijklmnopqrstuv_1234567890"}`}";`,
       },
     });
 
@@ -60,6 +86,7 @@ describe("runSecuritySanityChecks", () => {
       cwd,
       files,
       readFileFn,
+      statFn,
     });
 
     expect(result.violations).toEqual([
@@ -88,16 +115,56 @@ describe("runSecuritySanityChecks", () => {
       },
       binaryFiles: new Set(["assets/icon.png"]),
     });
+    const statFn = createStatStub({
+      cwd,
+      fileContents: {
+        "README.md": "# demo",
+      },
+      binaryFiles: new Set(["assets/icon.png"]),
+    });
 
     const result = await runSecuritySanityChecks({
       cwd,
       files,
       readFileFn,
+      statFn,
     });
 
     expect(result.violations).toEqual([]);
     expect(result.scannedTextFiles).toBe(1);
     expect(result.skippedBinaryFiles).toBe(1);
+    expect(result.skippedLargeFiles).toBe(0);
+  });
+
+  it("skips files larger than maxScanFileBytes", async () => {
+    const cwd = "/repo";
+    const files = ["README.md", "artifacts/huge.json"];
+    const readFileFn = createReadFileStub({
+      cwd,
+      fileContents: {
+        "README.md": "# demo",
+        "artifacts/huge.json": '{"very":"large"}',
+      },
+    });
+    const statFn = createStatStub({
+      cwd,
+      fileContents: {
+        "README.md": "# demo",
+        "artifacts/huge.json": '{"very":"large"}',
+      },
+      largeFiles: new Set(["artifacts/huge.json"]),
+    });
+
+    const result = await runSecuritySanityChecks({
+      cwd,
+      files,
+      readFileFn,
+      statFn,
+      maxScanFileBytes: 1024,
+    });
+
+    expect(result.violations).toEqual([]);
+    expect(result.scannedTextFiles).toBe(1);
+    expect(result.skippedLargeFiles).toBe(1);
   });
 });
-
