@@ -167,4 +167,39 @@ describe("runSecuritySanityChecks", () => {
     expect(result.scannedTextFiles).toBe(1);
     expect(result.skippedLargeFiles).toBe(1);
   });
+
+  it("continues scanning when a file read/stat fails", async () => {
+    const cwd = "/repo";
+    const files = ["README.md", "broken/link.txt"];
+    const readFileFn = async (absolutePath) => {
+      const relativePath = path.relative(cwd, absolutePath).replaceAll("\\", "/");
+      if (relativePath === "README.md") {
+        return Buffer.from("# demo", "utf8");
+      }
+      throw new Error("link target missing");
+    };
+    const statFn = async (absolutePath) => {
+      const relativePath = path.relative(cwd, absolutePath).replaceAll("\\", "/");
+      if (relativePath === "README.md") {
+        return { size: 6 };
+      }
+      throw new Error("stat failed");
+    };
+
+    const result = await runSecuritySanityChecks({
+      cwd,
+      files,
+      readFileFn,
+      statFn,
+    });
+
+    expect(result.scannedTextFiles).toBe(1);
+    expect(result.violations).toEqual([
+      {
+        type: "scan_error",
+        filePath: "broken/link.txt",
+        message: "Failed to scan file: stat failed",
+      },
+    ]);
+  });
 });

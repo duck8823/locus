@@ -92,11 +92,44 @@ export function scanSecretPatterns(content) {
 }
 
 export async function listTrackedFiles({ cwd = process.cwd() } = {}) {
-  const { stdout } = await execFileAsync("git", ["ls-files"], { cwd });
+  let stdout;
+
+  try {
+    const result = await execFileAsync("git", ["ls-files"], { cwd });
+    stdout = result.stdout;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown git error";
+    throw new Error(
+      `Failed to enumerate tracked files via git ls-files. Ensure git is installed and run this command inside a git repository. (${message})`,
+    );
+  }
+
   return stdout
     .split("\n")
     .map((file) => file.trim())
     .filter((file) => file.length > 0);
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const limit = Math.max(1, Math.min(concurrency, items.length || 1));
+  const results = new Array(items.length);
+  let index = 0;
+
+  async function worker() {
+    while (true) {
+      const currentIndex = index;
+      index += 1;
+
+      if (currentIndex >= items.length) {
+        return;
+      }
+
+      results[currentIndex] = await mapper(items[currentIndex]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, () => worker()));
+  return results;
 }
 
 export async function runSecuritySanityChecks({
@@ -106,6 +139,7 @@ export async function runSecuritySanityChecks({
   statFn = stat,
   listTrackedFilesFn = listTrackedFiles,
   maxScanFileBytes = 1_000_000,
+  maxConcurrency = 8,
 } = {}) {
   const trackedFiles = files ?? (await listTrackedFilesFn({ cwd }));
   const blockedDotenvFiles = collectBlockedDotenvFiles(trackedFiles);
@@ -116,38 +150,58 @@ export async function runSecuritySanityChecks({
       "Tracked .env* file detected. Use .env.example/.env.sample/.env.template only and keep secrets out of git.",
   }));
 
-  let scannedTextFiles = 0;
-  let skippedBinaryFiles = 0;
-  let skippedLargeFiles = 0;
-
-  for (const filePath of trackedFiles) {
+  const scanResults = await mapWithConcurrency(trackedFiles, maxConcurrency, async (filePath) => {
+    const result = {
+      scannedTextFiles: 0,
+      skippedBinaryFiles: 0,
+      skippedLargeFiles: 0,
+      violations: [],
+    };
     const absolutePath = path.join(cwd, filePath);
-    const stats = await statFn(absolutePath);
 
-    if (stats.size > maxScanFileBytes) {
-      skippedLargeFiles += 1;
-      continue;
-    }
+    try {
+      const stats = await statFn(absolutePath);
 
-    const raw = await readFileFn(absolutePath);
+      if (stats.size > maxScanFileBytes) {
+        result.skippedLargeFiles = 1;
+        return result;
+      }
 
-    if (isLikelyBinary(raw)) {
-      skippedBinaryFiles += 1;
-      continue;
-    }
+      const raw = await readFileFn(absolutePath);
 
-    scannedTextFiles += 1;
-    const content = raw.toString("utf8");
-    const matches = scanSecretPatterns(content);
+      if (isLikelyBinary(raw)) {
+        result.skippedBinaryFiles = 1;
+        return result;
+      }
 
-    for (const match of matches) {
-      violations.push({
+      result.scannedTextFiles = 1;
+      const content = raw.toString("utf8");
+      const matches = scanSecretPatterns(content);
+      result.violations = matches.map((match) => ({
         type: "secret_pattern",
         filePath,
         ruleId: match.ruleId,
         message: `${match.description} found (${match.matchedPreview})`,
-      });
+      }));
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown scan error";
+      result.violations = [
+        {
+          type: "scan_error",
+          filePath,
+          message: `Failed to scan file: ${message}`,
+        },
+      ];
+      return result;
     }
+  });
+
+  const scannedTextFiles = scanResults.reduce((sum, item) => sum + item.scannedTextFiles, 0);
+  const skippedBinaryFiles = scanResults.reduce((sum, item) => sum + item.skippedBinaryFiles, 0);
+  const skippedLargeFiles = scanResults.reduce((sum, item) => sum + item.skippedLargeFiles, 0);
+  for (const result of scanResults) {
+    violations.push(...result.violations);
   }
 
   return {
