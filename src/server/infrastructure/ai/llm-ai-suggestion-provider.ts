@@ -1,5 +1,6 @@
 import type { AiSuggestion, AiSuggestionPayload } from "@/server/application/ai/ai-suggestion-types";
 import {
+  type AiSuggestionExecutionMetadata,
   AiSuggestionProviderPermanentError,
   AiSuggestionProviderTemporaryError,
   type AiSuggestionProvider,
@@ -140,6 +141,7 @@ export class LlmAiSuggestionProvider implements AiSuggestionProvider {
   async generateSuggestions(input: {
     payload: AiSuggestionPayload;
     abortSignal?: AbortSignal;
+    captureMetadata?: (metadata: AiSuggestionExecutionMetadata) => void;
   }): Promise<AiSuggestion[]> {
     try {
       const raw = await this.input.client.complete({

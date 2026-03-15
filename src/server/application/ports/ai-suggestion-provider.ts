@@ -38,5 +38,17 @@ export interface AiSuggestionProvider {
   generateSuggestions(input: {
     payload: AiSuggestionPayload;
     abortSignal?: AbortSignal;
+    captureMetadata?: (metadata: AiSuggestionExecutionMetadata) => void;
   }): Promise<AiSuggestion[]>;
+}
+
+export interface AiSuggestionExecutionMetadata {
+  provider: "heuristic" | "openai_compat";
+  fallbackApplied: boolean;
+  reasonCode:
+    | "timeout"
+    | "estimated_input_tokens_exceeded"
+    | "estimated_input_cost_exceeded"
+    | "provider_temporary_error"
+    | null;
 }

@@ -127,6 +127,13 @@ export interface ReviewWorkspaceAiSuggestionAuditDto {
   generatedAt: string;
   provider: "heuristic" | "openai_compat";
   fallbackProvider: "heuristic";
+  fallbackApplied: boolean;
+  reasonCode:
+    | "timeout"
+    | "estimated_input_tokens_exceeded"
+    | "estimated_input_cost_exceeded"
+    | "provider_temporary_error"
+    | null;
   requestedMode: "heuristic" | "openai_compat";
   promptTemplateId: string;
   promptVersion: string;

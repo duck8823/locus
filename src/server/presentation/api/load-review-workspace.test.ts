@@ -227,6 +227,8 @@ describe("loadReviewWorkspaceDto", () => {
       provider: "heuristic",
       requestedMode: "heuristic",
       fallbackProvider: "heuristic",
+      fallbackApplied: false,
+      reasonCode: null,
       promptTemplateId: "heuristic.rule_set.v1",
       promptVersion: "heuristic.v1",
       redactionPolicyVersion: "ai_suggestion_redaction.v1",
@@ -270,6 +272,65 @@ describe("loadReviewWorkspaceDto", () => {
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
 
     expect(dto.activeAnalysisJob).toBeNull();
+  });
+
+  it("records effective fallback provider in aiSuggestionAudit metadata", async () => {
+    getDependenciesMock.mockReturnValueOnce({
+      reviewSessionRepository: {},
+      analysisJobScheduler: {},
+      connectionTokenRepository: {
+        findTokenByReviewerId: vi.fn().mockResolvedValue(null),
+      },
+      businessContextProvider: {
+        loadSnapshotForReview: vi.fn().mockResolvedValue({
+          generatedAt: "2026-03-12T00:00:00.000Z",
+          provider: "stub",
+          diagnostics: {
+            cacheHit: null,
+            fallbackReason: null,
+            conflictReasonCodes: [],
+          },
+          items: [],
+        }),
+      },
+      aiSuggestionProvider: {
+        generateSuggestions: vi.fn().mockImplementation(async ({ captureMetadata }) => {
+          captureMetadata?.({
+            provider: "heuristic",
+            fallbackApplied: true,
+            reasonCode: "timeout",
+          });
+          return [
+            {
+              suggestionId: "heuristic-fallback",
+              category: "general",
+              confidence: "medium",
+              headline: "Fallback suggestion",
+              recommendation: "Use fallback output.",
+              rationale: ["Guardrail timeout fallback"],
+            },
+          ];
+        }),
+      },
+      aiSuggestionAuditProfile: {
+        requestedMode: "openai_compat",
+        provider: "openai_compat",
+        fallbackProvider: "heuristic",
+        promptTemplateId: "openai_compat.chat_completions.json_object.v1",
+        promptVersion: "openai_compat.v1",
+      },
+    });
+
+    const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
+
+    expect(dto.aiSuggestionAudit).toMatchObject({
+      requestedMode: "openai_compat",
+      provider: "heuristic",
+      fallbackProvider: "heuristic",
+      fallbackApplied: true,
+      reasonCode: "timeout",
+      promptVersion: "openai_compat.v1",
+    });
   });
 
   it("passes stale-running threshold from env into analysis history loader", async () => {

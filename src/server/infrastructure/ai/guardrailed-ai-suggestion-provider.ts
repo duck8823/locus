@@ -1,5 +1,6 @@
 import type { AiSuggestion, AiSuggestionPayload } from "@/server/application/ai/ai-suggestion-types";
 import {
+  type AiSuggestionExecutionMetadata,
   AiSuggestionProviderTemporaryError,
   classifyAiSuggestionProviderError,
   type AiSuggestionProvider,
@@ -220,6 +221,10 @@ function buildCallerAbortedError(cause: unknown): AiSuggestionProviderTemporaryE
   );
 }
 
+function toAuditProviderName(value: string): "heuristic" | "openai_compat" {
+  return value === "openai_compat" ? "openai_compat" : "heuristic";
+}
+
 export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
   private readonly guardrailPolicy: ReturnType<typeof normalizeGuardrailPolicy>;
   private readonly logger: GuardrailedAiSuggestionProviderLogger;
@@ -232,6 +237,7 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
   async generateSuggestions(input: {
     payload: AiSuggestionPayload;
     abortSignal?: AbortSignal;
+    captureMetadata?: (metadata: AiSuggestionExecutionMetadata) => void;
   }): Promise<AiSuggestion[]> {
     if (input.abortSignal?.aborted) {
       throw buildCallerAbortedError(input.abortSignal.reason);
@@ -252,6 +258,7 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
         reasonCode: "estimated_input_tokens_exceeded",
         estimatedInputTokens,
         estimatedInputCostUsd,
+        captureMetadata: input.captureMetadata,
       });
     }
 
@@ -265,15 +272,16 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
         reasonCode: "estimated_input_cost_exceeded",
         estimatedInputTokens,
         estimatedInputCostUsd,
+        captureMetadata: input.captureMetadata,
       });
     }
 
     try {
-      return await withTimeout({
+      const suggestions = await withTimeout({
         timeoutMs: this.guardrailPolicy.timeoutMs,
         operation: (abortSignal) =>
           this.input.provider.generateSuggestions({
-            ...input,
+            payload: input.payload,
             abortSignal,
           }),
         upstreamAbortSignal: input.abortSignal,
@@ -283,6 +291,12 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
             `AI suggestion provider timed out after ${this.guardrailPolicy.timeoutMs}ms.`,
           ),
       });
+      input.captureMetadata?.({
+        provider: toAuditProviderName(this.input.providerName),
+        fallbackApplied: false,
+        reasonCode: null,
+      });
+      return suggestions;
     } catch (error) {
       if (input.abortSignal?.aborted) {
         throw buildCallerAbortedError(error);
@@ -295,6 +309,7 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
           estimatedInputTokens,
           estimatedInputCostUsd,
           abortSignal: input.abortSignal,
+          captureMetadata: input.captureMetadata,
         });
       }
 
@@ -305,6 +320,7 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
           estimatedInputTokens,
           estimatedInputCostUsd,
           abortSignal: input.abortSignal,
+          captureMetadata: input.captureMetadata,
         });
       }
 
@@ -318,6 +334,7 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     estimatedInputTokens: number;
     estimatedInputCostUsd: number | null;
     abortSignal?: AbortSignal;
+    captureMetadata?: (metadata: AiSuggestionExecutionMetadata) => void;
   }): Promise<AiSuggestion[]> {
     if (input.abortSignal?.aborted) {
       throw buildCallerAbortedError(input.abortSignal.reason);
@@ -343,6 +360,11 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
       if (input.abortSignal?.aborted) {
         throw buildCallerAbortedError(input.abortSignal.reason);
       }
+      input.captureMetadata?.({
+        provider: toAuditProviderName(this.input.fallbackProviderName),
+        fallbackApplied: true,
+        reasonCode: input.reasonCode,
+      });
       return suggestions;
     } catch (error) {
       if (input.abortSignal?.aborted) {
