@@ -266,8 +266,40 @@ describe("GitLabPullRequestSnapshotProvider", () => {
     ).rejects.toBeInstanceOf(PullRequestProviderAuthError);
 
     expect(seenAuthorizationHeaders[0]).toBe("Bearer request-token");
-    expect(seenPrivateTokenHeaders[0]).toBe("request-token");
+    expect(seenPrivateTokenHeaders[0]).toBeNull();
   });
+
+
+
+  it("uses private-token header for PAT-style tokens", async () => {
+    const seenAuthorizationHeaders: Array<string | null> = [];
+    const seenPrivateTokenHeaders: Array<string | null> = [];
+    const provider = new GitLabPullRequestSnapshotProvider({
+      token: "glpat-configured",
+      apiBaseUrl: "https://gitlab.com/api/v4",
+      fetchImpl: async (_input, init) => {
+        const headers = new Headers(init?.headers);
+        seenAuthorizationHeaders.push(headers.get("authorization"));
+        seenPrivateTokenHeaders.push(headers.get("private-token"));
+        return jsonResponse({ message: "Unauthorized" }, 401);
+      },
+    });
+
+    await expect(
+      provider.fetchPullRequestSnapshots({
+        reviewId: "gitlab-auth-pat",
+        source: {
+          provider: "gitlab",
+          projectPath: "duck8823/locus",
+          mergeRequestIid: 403,
+        },
+      }),
+    ).rejects.toBeInstanceOf(PullRequestProviderAuthError);
+
+    expect(seenAuthorizationHeaders[0]).toBeNull();
+    expect(seenPrivateTokenHeaders[0]).toBe("glpat-configured");
+  });
+
 
   it("fails fast when a request times out", async () => {
     const fetchImpl: typeof fetch = (_input, init) =>

@@ -258,7 +258,7 @@ export class GitLabPullRequestSnapshotProvider
 
     if (!beforeRef || !afterRef) {
       throw new Error(
-        "GitLab merge request does not expose resolvable before/after refs for snapshot fetch.",
+        `GitLab merge request !${input.source.mergeRequestIid} does not expose resolvable before/after refs for snapshot fetch.`,
       );
     }
 
@@ -434,8 +434,11 @@ export class GitLabPullRequestSnapshotProvider
     };
 
     if (accessToken) {
-      headers.authorization = `Bearer ${accessToken}`;
-      headers["private-token"] = accessToken;
+      if (accessToken.toLowerCase().startsWith("glpat-")) {
+        headers["private-token"] = accessToken;
+      } else {
+        headers.authorization = `Bearer ${accessToken}`;
+      }
     }
 
     const abortController = new AbortController();
