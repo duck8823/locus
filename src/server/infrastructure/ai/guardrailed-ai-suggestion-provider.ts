@@ -135,33 +135,59 @@ function withTimeout<T>(input: {
 }): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timeoutController = new AbortController();
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const rejectIfPending = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      input.upstreamAbortSignal?.removeEventListener("abort", onUpstreamAbort);
+      reject(error);
+    };
+    const resolveIfPending = (value: T) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      input.upstreamAbortSignal?.removeEventListener("abort", onUpstreamAbort);
+      resolve(value);
+    };
     const onUpstreamAbort = () => {
       timeoutController.abort(input.upstreamAbortSignal?.reason);
+      const reason = input.upstreamAbortSignal?.reason;
+      if (reason instanceof Error) {
+        rejectIfPending(reason);
+        return;
+      }
+
+      const abortError = new Error("AI suggestion generation was aborted by caller.");
+      abortError.name = "AbortError";
+      rejectIfPending(abortError);
     };
     if (input.upstreamAbortSignal?.aborted) {
       onUpstreamAbort();
+      return;
     } else {
       input.upstreamAbortSignal?.addEventListener("abort", onUpstreamAbort, {
         once: true,
       });
     }
-    const timeoutId = setTimeout(() => {
+    timeoutId = setTimeout(() => {
       timeoutController.abort();
-      reject(input.onTimeout());
+      rejectIfPending(input.onTimeout());
     }, input.timeoutMs);
 
     input
       .operation(timeoutController.signal)
-      .then((value) => {
-        clearTimeout(timeoutId);
-        input.upstreamAbortSignal?.removeEventListener("abort", onUpstreamAbort);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId);
-        input.upstreamAbortSignal?.removeEventListener("abort", onUpstreamAbort);
-        reject(error);
-      });
+      .then((value) => resolveIfPending(value))
+      .catch((error) => rejectIfPending(error));
   });
 }
 

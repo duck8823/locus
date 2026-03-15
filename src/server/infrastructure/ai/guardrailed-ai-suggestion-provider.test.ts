@@ -333,6 +333,46 @@ describe("GuardrailedAiSuggestionProvider", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it("rejects without fallback when caller aborts during in-flight primary generation", async () => {
+    const abortController = new AbortController();
+    const primaryProvider: AiSuggestionProvider = {
+      generateSuggestions: vi.fn().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve(createSuggestions("primary")), 30);
+          }),
+      ),
+    };
+    const fallbackProvider: AiSuggestionProvider = {
+      generateSuggestions: vi.fn().mockResolvedValue(createSuggestions("fallback")),
+    };
+    const logger = createLoggerSpies();
+
+    const provider = new GuardrailedAiSuggestionProvider({
+      providerName: "llm_primary",
+      provider: primaryProvider,
+      fallbackProviderName: "heuristic_fallback",
+      fallbackProvider,
+      guardrailPolicy: {
+        timeoutMs: 1000,
+      },
+      logger,
+    });
+
+    const generationPromise = provider.generateSuggestions({
+      payload: createPayload(),
+      abortSignal: abortController.signal,
+    });
+    abortController.abort("caller canceled");
+
+    await expect(generationPromise).rejects.toBeInstanceOf(
+      AiSuggestionProviderTemporaryError,
+    );
+    expect(primaryProvider.generateSuggestions).toHaveBeenCalledTimes(1);
+    expect(fallbackProvider.generateSuggestions).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it("propagates permanent provider errors", async () => {
     const primaryProvider: AiSuggestionProvider = {
       generateSuggestions: vi
