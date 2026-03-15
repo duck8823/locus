@@ -459,6 +459,7 @@ describe("GuardrailedAiSuggestionProvider", () => {
         .mockRejectedValue(new AiSuggestionProviderPermanentError("fallback broken")),
     };
     const logger = createLoggerSpies();
+    const captureMetadata = vi.fn();
 
     const provider = new GuardrailedAiSuggestionProvider({
       providerName: "llm_primary",
@@ -472,7 +473,7 @@ describe("GuardrailedAiSuggestionProvider", () => {
     });
 
     await expect(
-      provider.generateSuggestions({ payload: createPayload() }),
+      provider.generateSuggestions({ payload: createPayload(), captureMetadata }),
     ).rejects.toBeInstanceOf(AiSuggestionProviderPermanentError);
 
     expect(logger.error).toHaveBeenCalledWith(
@@ -482,5 +483,10 @@ describe("GuardrailedAiSuggestionProvider", () => {
         message: "fallback broken",
       }),
     );
+    expect(captureMetadata).toHaveBeenCalledWith({
+      provider: "heuristic",
+      fallbackApplied: true,
+      reasonCode: "timeout",
+    });
   });
 });

@@ -351,6 +351,11 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     });
 
     this.logger.warn("ai_suggestion_guardrail_triggered", eventPayload);
+    input.captureMetadata?.({
+      provider: toAuditProviderName(this.input.fallbackProviderName),
+      fallbackApplied: true,
+      reasonCode: input.reasonCode,
+    });
 
     try {
       const suggestions = await this.input.fallbackProvider.generateSuggestions({
@@ -360,11 +365,6 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
       if (input.abortSignal?.aborted) {
         throw buildCallerAbortedError(input.abortSignal.reason);
       }
-      input.captureMetadata?.({
-        provider: toAuditProviderName(this.input.fallbackProviderName),
-        fallbackApplied: true,
-        reasonCode: input.reasonCode,
-      });
       return suggestions;
     } catch (error) {
       if (input.abortSignal?.aborted) {
