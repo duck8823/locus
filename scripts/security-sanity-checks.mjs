@@ -2,6 +2,7 @@
 import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -110,10 +111,11 @@ export async function listTrackedFiles({ cwd = process.cwd() } = {}) {
     );
   }
 
-  return stdout
-    .split("\n")
-    .map((file) => file.trim())
-    .filter((file) => file.length > 0);
+  return parseTrackedFilesOutput(stdout);
+}
+
+export function parseTrackedFilesOutput(stdout) {
+  return stdout.split("\n").filter((file) => file.length > 0);
 }
 
 async function mapWithConcurrency(items, concurrency, mapper) {
@@ -235,7 +237,7 @@ async function main() {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     const message = error instanceof Error ? error.message : "Unknown error";
     process.stderr.write(`security sanity checks failed: ${message}\n`);

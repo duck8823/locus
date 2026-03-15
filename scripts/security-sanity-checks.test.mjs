@@ -2,6 +2,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   collectBlockedDotenvFiles,
+  parseTrackedFilesOutput,
   runSecuritySanityChecks,
   scanSecretPatterns,
 } from "./security-sanity-checks.mjs";
@@ -48,6 +49,16 @@ describe("collectBlockedDotenvFiles", () => {
         "config/.env.template",
       ]),
     ).toEqual([".env", ".env.local", "config/.env.production"]);
+  });
+});
+
+describe("parseTrackedFilesOutput", () => {
+  it("preserves leading/trailing whitespace in tracked file paths", () => {
+    expect(parseTrackedFilesOutput(" normal.ts\n leading.ts\ntrailing.ts \n\n")).toEqual([
+      " normal.ts",
+      " leading.ts",
+      "trailing.ts ",
+    ]);
   });
 });
 
