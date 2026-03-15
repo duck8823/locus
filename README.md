@@ -149,6 +149,9 @@ export LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS=3
 export LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS=500
 export LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS=600000
 
+# Optional: enable GitLab adapter skeleton in provider-agnostic code-host boundary
+export LOCUS_ENABLE_GITLAB_ADAPTER=true
+
 # Optional: connection transition audit retention
 export LOCUS_CONNECTION_TRANSITION_MAX_RETAINED=200
 

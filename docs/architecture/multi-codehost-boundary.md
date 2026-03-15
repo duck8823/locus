@@ -22,8 +22,16 @@ This keeps current GitHub call sites intact while enabling plugin/runtime routin
 ## Adapter boundary
 
 - GitHub adapter remains isolated in `src/server/infrastructure/github/*`.
+- GitLab skeleton adapter lives in `src/server/infrastructure/gitlab/*`.
+- Provider-agnostic router lives in `src/server/infrastructure/code-host/*`.
 - Provider-specific parsing and API details do not leak into application contracts.
 - Plugin runtime can bind additional providers at runtime through capability registration.
+
+## Composition flag (skeleton activation)
+
+- `LOCUS_ENABLE_GITLAB_ADAPTER=true` enables the GitLab skeleton route in composition.
+- Default is disabled, so current GitHub ingestion flow remains unchanged.
+- Disabled or unsupported provider paths return typed diagnostics (`PullRequestProviderUnsupportedCapabilityError`) instead of generic errors.
 
 ## Safety rails
 
