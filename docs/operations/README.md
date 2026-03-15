@@ -10,6 +10,7 @@
 ## Delivery workflow
 
 - [AI Review Workflow](ai-review-workflow.md)
+- [Security Review Checklist (OAuth / Token / Data Handling)](security-review-checklist.md)
 
 ## Production baseline
 

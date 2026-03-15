@@ -185,6 +185,7 @@ export LOCUS_AI_SUGGESTION_PROVIDER_OPENAI_COMPAT_ESTIMATED_INPUT_USD_PER_1K_TOK
 
 ```bash
 npm run lint
+npm run security:sanity
 npm run typecheck
 npm test
 npm run test:e2e
@@ -220,6 +221,7 @@ npm run demo:data:reseed   # 基本ディレクトリと空のジョブキュー
 - [`docs/testing/exploratory-test-session-2026-03-11.ja.md`](docs/testing/exploratory-test-session-2026-03-11.ja.md) / [`docs/testing/exploratory-test-session-2026-03-11.md`](docs/testing/exploratory-test-session-2026-03-11.md)
 - [`docs/operations/ai-review-workflow.ja.md`](docs/operations/ai-review-workflow.ja.md) / [`docs/operations/ai-review-workflow.md`](docs/operations/ai-review-workflow.md)
 - [`docs/operations/ai-suggestion-audit-redaction-policy.ja.md`](docs/operations/ai-suggestion-audit-redaction-policy.ja.md) / [`docs/operations/ai-suggestion-audit-redaction-policy.md`](docs/operations/ai-suggestion-audit-redaction-policy.md)
+- [`docs/operations/security-review-checklist.ja.md`](docs/operations/security-review-checklist.ja.md) / [`docs/operations/security-review-checklist.md`](docs/operations/security-review-checklist.md)
 - [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md) / [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## ロードマップ

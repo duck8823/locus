@@ -10,6 +10,7 @@
 ## 開発フロー
 
 - [AIレビュー運用フロー](ai-review-workflow.ja.md)
+- [セキュリティレビュー・チェックリスト（OAuth / Token / データ取り扱い）](security-review-checklist.ja.md)
 
 ## 本番運用ベースライン
 
