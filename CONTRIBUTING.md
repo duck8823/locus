@@ -25,6 +25,7 @@ Locus is currently a documentation-first repository. The immediate goal is to al
 - `README.md` / `README.ja.md` — product overview
 - `docs/mvp.md` / `docs/mvp.ja.md` — MVP scope and delivery slices
 - `docs/adr/` — architecture decisions
+- `docs/operations/` — review/ops/security runbooks
 - `CONTRIBUTING.md` / `CONTRIBUTING.ja.md` — contribution policy
 
 ## Change Policy
@@ -45,6 +46,7 @@ Open or update an ADR before making one of these changes:
 - [ ] Cross-links between language variants are updated if needed
 - [ ] README / docs updated when the documented direction changes
 - [ ] AI review loop completed (Gemini + Codex) or blocking reason documented
+- [ ] If OAuth/token/data-handling is touched, Security checklist is completed in PR body
 
 ## AI Review Workflow
 
@@ -52,3 +54,5 @@ See:
 
 - [`docs/operations/ai-review-workflow.md`](docs/operations/ai-review-workflow.md)
 - [`docs/operations/ai-review-workflow.ja.md`](docs/operations/ai-review-workflow.ja.md)
+- [`docs/operations/security-review-checklist.md`](docs/operations/security-review-checklist.md)
+- [`docs/operations/security-review-checklist.ja.md`](docs/operations/security-review-checklist.ja.md)

@@ -28,6 +28,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Security sanity checks
+        run: npm run security:sanity
+
       - name: Typecheck
         run: npm run typecheck
 

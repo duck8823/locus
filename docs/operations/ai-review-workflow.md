@@ -11,6 +11,11 @@ This repository uses a multi-AI review loop for implementation pull requests:
 5. Address Codex comments and request review again until no issues remain.
 6. Merge after CI and review checks are green.
 
+For integration-impacting PRs (OAuth/token/data-handling), complete:
+
+- [`Security Review Checklist`](security-review-checklist.md)
+- corresponding Security section in PR description
+
 ## Codex environment prerequisite
 
 If Codex replies with:
@@ -32,4 +37,4 @@ Without this setup, Codex cannot produce PR review comments.
 - CI checks pass (`Lint / Typecheck / Unit / Build`, `E2E Smoke`)
 - Gemini blocker comments addressed
 - Codex blocker comments addressed (or Codex returns no issues)
-
+- Security checklist completed for integration-impacting changes

@@ -11,6 +11,11 @@
 5. Codex 指摘を反映し、指摘がなくなるまで再依頼する。
 6. CI とレビューが通ったらマージする。
 
+OAuth/token/data-handling に影響するPRでは、次も必須です。
+
+- [`セキュリティレビュー・チェックリスト`](security-review-checklist.ja.md)
+- PR description の Security セクション記入
+
 ## Codex環境の前提
 
 Codex が次のメッセージを返した場合:
@@ -32,4 +37,4 @@ Codex が次のメッセージを返した場合:
 - CI (`Lint / Typecheck / Unit / Build`, `E2E Smoke`) が成功
 - Gemini のブロッカー指摘を解消
 - Codex のブロッカー指摘を解消（または指摘なし）
-
+- 連携影響変更では Security checklist を完了
