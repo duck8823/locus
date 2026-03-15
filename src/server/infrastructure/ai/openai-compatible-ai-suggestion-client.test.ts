@@ -110,6 +110,37 @@ describe("OpenAiCompatibleAiSuggestionClient", () => {
     );
   });
 
+  it("normalizes base url when chat/completions is already included", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({ suggestions: [] }),
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    const client = new OpenAiCompatibleAiSuggestionClient({
+      apiKey: "test-key",
+      model: "gpt-4o-mini",
+      baseUrl: "https://example.local/v1/chat/completions",
+      fetchFn,
+    });
+
+    await expect(client.complete(createClientInput())).resolves.toEqual({
+      suggestions: [],
+    });
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://example.local/v1/chat/completions",
+      expect.any(Object),
+    );
+  });
+
   it("classifies 429 as temporary provider error", async () => {
     const fetchFn = vi
       .fn()

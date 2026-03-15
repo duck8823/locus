@@ -33,7 +33,15 @@ function normalizeBaseUrl(baseUrl: string | undefined): string {
     return DEFAULT_OPENAI_BASE_URL;
   }
 
-  return raw.endsWith("/") ? raw.slice(0, -1) : raw;
+  const withoutTrailingSlash = raw.endsWith("/") ? raw.slice(0, -1) : raw;
+  if (withoutTrailingSlash.endsWith("/chat/completions")) {
+    return withoutTrailingSlash.slice(
+      0,
+      withoutTrailingSlash.length - "/chat/completions".length,
+    );
+  }
+
+  return withoutTrailingSlash;
 }
 
 function isTemporaryStatus(status: number): boolean {
