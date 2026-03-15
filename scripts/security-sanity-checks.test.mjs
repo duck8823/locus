@@ -61,6 +61,13 @@ describe("scanSecretPatterns", () => {
 
     expect(findings.map((item) => item.ruleId).sort()).toEqual(["github_pat_classic", "openai_api_key"]);
   });
+
+  it("returns all matches within the same file", () => {
+    const tokenA = `ghp_${"123456789012345678901234567890123456"}`;
+    const tokenB = `ghp_${"abcdefghijklmnopqrstuvwx123456789012"}`;
+    const findings = scanSecretPatterns(`const a="${tokenA}"; const b="${tokenB}";`);
+    expect(findings.filter((item) => item.ruleId === "github_pat_classic")).toHaveLength(2);
+  });
 });
 
 describe("runSecuritySanityChecks", () => {

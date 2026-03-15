@@ -78,15 +78,21 @@ export function collectBlockedDotenvFiles(files) {
 export function scanSecretPatterns(content) {
   const findings = [];
   for (const rule of SECRET_PATTERNS) {
-    const match = rule.pattern.exec(content);
-    if (!match) {
-      continue;
+    const flags = rule.pattern.flags.includes("g") ? rule.pattern.flags : `${rule.pattern.flags}g`;
+    const pattern = new RegExp(rule.pattern.source, flags);
+    let match;
+
+    while ((match = pattern.exec(content)) !== null) {
+      findings.push({
+        ruleId: rule.id,
+        description: rule.description,
+        matchedPreview: maskMatch(match[0]),
+      });
+
+      if (match[0].length === 0) {
+        break;
+      }
     }
-    findings.push({
-      ruleId: rule.id,
-      description: rule.description,
-      matchedPreview: maskMatch(match[0]),
-    });
   }
   return findings;
 }

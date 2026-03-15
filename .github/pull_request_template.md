@@ -41,6 +41,5 @@ If impact exists, complete all:
 
 Reference:
 
-- [Security Review Checklist](../docs/operations/security-review-checklist.md)
-- [セキュリティレビュー・チェックリスト](../docs/operations/security-review-checklist.ja.md)
-
+- [Security Review Checklist](/docs/operations/security-review-checklist.md)
+- [セキュリティレビュー・チェックリスト](/docs/operations/security-review-checklist.ja.md)
