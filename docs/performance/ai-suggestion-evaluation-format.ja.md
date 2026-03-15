@@ -63,6 +63,12 @@ fixture ファイル: `scripts/fixtures/ai-suggestion-evaluation/*.json`
     "usefulRatePercent": 100,
     "falsePositiveRatePercent": 0
   },
+  "audit": {
+    "provider": "heuristic",
+    "promptTemplateId": "heuristic.rule_set.v1",
+    "promptVersion": "heuristic.v1",
+    "redactionPolicyVersion": "ai_suggestion_redaction.v1"
+  },
   "fixtures": [
     {
       "fixtureId": "removed-symbol-high-risk",
@@ -73,7 +79,7 @@ fixture ファイル: `scripts/fixtures/ai-suggestion-evaluation/*.json`
       "expectedFalsePositiveCount": 1,
       "detectedFalsePositiveCount": 0,
       "falsePositiveRatePercent": 0,
-      "payload": { "...": "生成payloadスナップショット" }
+      "payload": { "...": "redaction済みpayloadスナップショット" }
     }
   ]
 }
@@ -83,6 +89,7 @@ fixture ファイル: `scripts/fixtures/ai-suggestion-evaluation/*.json`
 
 - `usefulRatePercent`: 期待有用提案に対する再現率（recall相当）
 - `falsePositiveRatePercent`: 期待誤検知提案に対する検出比率
+- `payload`: `audit.redactionPolicyVersion` で示されるポリシーに基づいて redaction 済み
 - このハーネスは本リポジトリ内の継続比較を目的とし、外部比較ランキング用途ではない
 
 ## CI品質ゲート（Issue #138）

@@ -147,6 +147,7 @@ describe("toReviewWorkspaceDto", () => {
     });
     expect(dto.queueHealth).toBeNull();
     expect(dto.aiSuggestionPayload).toBeNull();
+    expect(dto.aiSuggestionAudit).toBeNull();
     expect(dto.aiSuggestions).toEqual([]);
     expect(dto.reanalysisStatus).toBe("failed");
     expect(dto.lastReanalyzeRequestedAt).toBe("2026-03-08T01:00:00.000Z");
@@ -339,6 +340,7 @@ describe("toReviewWorkspaceDto", () => {
     });
     expect(dto.queueHealth).toBeNull();
     expect(dto.aiSuggestionPayload).toBeNull();
+    expect(dto.aiSuggestionAudit).toBeNull();
     expect(dto.aiSuggestions).toEqual([]);
     expect(dto.reanalysisStatus).toBe("idle");
     expect(dto.lastReanalyzeRequestedAt).toBeNull();

@@ -77,6 +77,8 @@ describe("evaluate-ai-suggestions", () => {
       falsePositiveRatePercent: 0,
     });
     expect(results[0]?.generatedSuggestionIds).toContain("verify-removed-symbol-references");
+    expect(results[0]?.payload.review.title).toMatch(/^\[redacted:/);
+    expect(results[0]?.payload.review.repositoryName).toBe("duck8823/locus");
   });
 
   it("writes evaluation artifact with summary rates", async () => {
@@ -121,6 +123,13 @@ describe("evaluate-ai-suggestions", () => {
     expect(result.summary.fixtureCount).toBe(1);
     expect(result.summary.usefulRatePercent).toBe(100);
     expect(result.summary.falsePositiveRatePercent).toBe(0);
+    expect(result.audit).toEqual({
+      provider: "heuristic",
+      promptTemplateId: "heuristic.rule_set.v1",
+      promptVersion: "heuristic.v1",
+      redactionPolicyVersion: "ai_suggestion_redaction.v1",
+    });
     expect(persisted.summary).toEqual(result.summary);
+    expect(persisted.fixtures[0]?.payload.review.title).toMatch(/^\[redacted:/);
   });
 });

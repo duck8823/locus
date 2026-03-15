@@ -63,6 +63,12 @@ Top-level shape:
     "usefulRatePercent": 100,
     "falsePositiveRatePercent": 0
   },
+  "audit": {
+    "provider": "heuristic",
+    "promptTemplateId": "heuristic.rule_set.v1",
+    "promptVersion": "heuristic.v1",
+    "redactionPolicyVersion": "ai_suggestion_redaction.v1"
+  },
   "fixtures": [
     {
       "fixtureId": "removed-symbol-high-risk",
@@ -73,7 +79,7 @@ Top-level shape:
       "expectedFalsePositiveCount": 1,
       "detectedFalsePositiveCount": 0,
       "falsePositiveRatePercent": 0,
-      "payload": { "...": "generated payload snapshot" }
+      "payload": { "...": "redacted payload snapshot" }
     }
   ]
 }
@@ -83,6 +89,7 @@ Top-level shape:
 
 - `usefulRatePercent`: recall-like score on expected useful suggestions.
 - `falsePositiveRatePercent`: hit ratio against expected false-positive suggestions.
+- `payload`: redacted using policy version in `audit.redactionPolicyVersion`.
 - This harness is for trend comparison inside this repository, not cross-project leaderboard ranking.
 
 ## CI quality gate (Issue #138)

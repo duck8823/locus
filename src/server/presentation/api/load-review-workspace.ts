@@ -1,6 +1,10 @@
 import { GetReviewWorkspaceUseCase } from "@/server/application/usecases/get-review-workspace";
 import { buildAiSuggestionPayload } from "@/server/application/ai/build-ai-suggestion-payload";
 import {
+  AI_SUGGESTION_REDACTION_POLICY_VERSION,
+  redactAiSuggestionPayload,
+} from "@/server/application/ai/ai-suggestion-redaction-policy";
+import {
   type AiSuggestion,
   type AiSuggestionPayload,
 } from "@/server/application/ai/ai-suggestion-types";
@@ -82,6 +86,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     businessContextProvider,
     connectionTokenRepository,
     aiSuggestionProvider,
+    aiSuggestionAuditProfile,
   } = getDependencies();
   const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository });
   const reviewSession = await useCase.execute({ reviewId });
@@ -257,11 +262,31 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       href: item.href,
     })),
   });
+  const aiSuggestionAuditBase = {
+    generatedAt: aiSuggestionPayload.generatedAt,
+    requestedMode: aiSuggestionAuditProfile.requestedMode,
+    promptTemplateId: aiSuggestionAuditProfile.promptTemplateId,
+    promptVersion: aiSuggestionAuditProfile.promptVersion,
+    redactionPolicyVersion: AI_SUGGESTION_REDACTION_POLICY_VERSION,
+  } as const;
+  let aiSuggestionProviderUsed: "heuristic" | "openai_compat" | null = null;
+  let aiSuggestionFallbackApplied = false;
+  let aiSuggestionReasonCode:
+    | "timeout"
+    | "estimated_input_tokens_exceeded"
+    | "estimated_input_cost_exceeded"
+    | "provider_temporary_error"
+    | null = null;
   let aiSuggestions: AiSuggestion[];
 
   try {
     aiSuggestions = await aiSuggestionProvider.generateSuggestions({
       payload: aiSuggestionPayload,
+      captureMetadata: (metadata) => {
+        aiSuggestionProviderUsed = metadata.provider;
+        aiSuggestionFallbackApplied = metadata.fallbackApplied;
+        aiSuggestionReasonCode = metadata.reasonCode;
+      },
     });
   } catch (error) {
     const errorType = classifyAiSuggestionProviderError(error);
@@ -269,6 +294,14 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       reviewId: workspace.reviewId,
       errorType,
       message: error instanceof Error ? error.message : String(error),
+      audit: {
+        ...aiSuggestionAuditBase,
+        provider: aiSuggestionProviderUsed ?? aiSuggestionAuditProfile.provider,
+        fallbackProvider: aiSuggestionAuditProfile.fallbackProvider,
+        fallbackApplied: aiSuggestionFallbackApplied,
+        reasonCode: aiSuggestionReasonCode,
+      },
+      payload: redactAiSuggestionPayload(aiSuggestionPayload),
     });
     aiSuggestions = buildAiSuggestionFailureFallback({
       payload: aiSuggestionPayload,
@@ -290,7 +323,14 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     analysisHistory: analysisJobHistory.history,
     dogfoodingMetrics: analysisJobHistory.metrics,
     queueHealth: analysisJobHistory.queueHealth,
-    aiSuggestionPayload,
+    aiSuggestionPayload: redactAiSuggestionPayload(aiSuggestionPayload),
+    aiSuggestionAudit: {
+      ...aiSuggestionAuditBase,
+      provider: aiSuggestionProviderUsed ?? aiSuggestionAuditProfile.provider,
+      fallbackProvider: aiSuggestionAuditProfile.fallbackProvider,
+      fallbackApplied: aiSuggestionFallbackApplied,
+      reasonCode: aiSuggestionReasonCode,
+    },
     aiSuggestions,
     reanalysisStatus: effectiveReanalysisState.reanalysisStatus,
     lastReanalyzeRequestedAt: effectiveReanalysisState.lastReanalyzeRequestedAt,

@@ -123,6 +123,23 @@ export interface ReviewWorkspaceAiSuggestionDto {
   rationale: string[];
 }
 
+export interface ReviewWorkspaceAiSuggestionAuditDto {
+  generatedAt: string;
+  provider: "heuristic" | "openai_compat";
+  fallbackProvider: "heuristic";
+  fallbackApplied: boolean;
+  reasonCode:
+    | "timeout"
+    | "estimated_input_tokens_exceeded"
+    | "estimated_input_cost_exceeded"
+    | "provider_temporary_error"
+    | null;
+  requestedMode: "heuristic" | "openai_compat";
+  promptTemplateId: string;
+  promptVersion: string;
+  redactionPolicyVersion: string;
+}
+
 export interface ReviewWorkspaceSemanticChangeDto {
   semanticChangeId: string;
   symbolDisplayName: string;
@@ -255,6 +272,7 @@ export interface ReviewWorkspaceDto {
   dogfoodingMetrics: ReviewWorkspaceDogfoodingMetricsDto;
   queueHealth: ReviewWorkspaceQueueHealthDto | null;
   aiSuggestionPayload: ReviewWorkspaceAiSuggestionPayloadDto | null;
+  aiSuggestionAudit: ReviewWorkspaceAiSuggestionAuditDto | null;
   aiSuggestions: ReviewWorkspaceAiSuggestionDto[];
   reanalysisStatus: ReviewReanalysisStatus;
   lastOpenedAt: string;

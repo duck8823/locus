@@ -3,6 +3,7 @@ import type { AiSuggestion, AiSuggestionPayload } from "@/server/application/ai/
 import {
   AiSuggestionProviderPermanentError,
   AiSuggestionProviderTemporaryError,
+  type AiSuggestionExecutionMetadata,
   type AiSuggestionProvider,
 } from "@/server/application/ports/ai-suggestion-provider";
 
@@ -51,10 +52,17 @@ export class HeuristicAiSuggestionProvider implements AiSuggestionProvider {
   async generateSuggestions(input: {
     payload: AiSuggestionPayload;
     abortSignal?: AbortSignal;
+    captureMetadata?: (metadata: AiSuggestionExecutionMetadata) => void;
   }): Promise<AiSuggestion[]> {
     try {
       throwIfAborted(input.abortSignal);
-      return await this.suggestionGenerator(input.payload);
+      const suggestions = await this.suggestionGenerator(input.payload);
+      input.captureMetadata?.({
+        provider: "heuristic",
+        fallbackApplied: false,
+        reasonCode: null,
+      });
+      return suggestions;
     } catch (error) {
       throw toClassifiedProviderError(error);
     }

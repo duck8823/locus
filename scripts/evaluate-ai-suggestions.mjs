@@ -1,8 +1,15 @@
 #!/usr/bin/env node
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import {
+  AI_SUGGESTION_REDACTION_POLICY_VERSION,
+  redactAiSuggestionPayload,
+} from "../src/server/application/ai/ai-suggestion-redaction-policy.ts";
 import { buildAiSuggestionPayload } from "../src/server/application/ai/build-ai-suggestion-payload.ts";
 import { generateAiSuggestionsFromPayload } from "../src/server/application/ai/generate-ai-suggestions.ts";
+
+const HEURISTIC_PROMPT_TEMPLATE_ID = "heuristic.rule_set.v1";
+const HEURISTIC_PROMPT_VERSION = "heuristic.v1";
 
 function toFixedOneDecimal(value) {
   return Math.round(value * 10) / 10;
@@ -46,7 +53,7 @@ export function evaluateFixtures(fixtures) {
       expectedFalsePositiveCount: expectedFalsePositiveIds.length,
       detectedFalsePositiveCount,
       falsePositiveRatePercent: calculateRatePercent(detectedFalsePositiveCount, expectedFalsePositiveIds.length),
-      payload,
+      payload: redactAiSuggestionPayload(payload),
     };
   });
 }
@@ -102,6 +109,12 @@ export async function runAiSuggestionEvaluation(input = {}) {
       usefulRatePercent: usefulRateAverage === null ? null : toFixedOneDecimal(usefulRateAverage),
       falsePositiveRatePercent:
         falsePositiveRateAverage === null ? null : toFixedOneDecimal(falsePositiveRateAverage),
+    },
+    audit: {
+      provider: "heuristic",
+      promptTemplateId: HEURISTIC_PROMPT_TEMPLATE_ID,
+      promptVersion: HEURISTIC_PROMPT_VERSION,
+      redactionPolicyVersion: AI_SUGGESTION_REDACTION_POLICY_VERSION,
     },
     fixtures: fixtureResults,
   };
