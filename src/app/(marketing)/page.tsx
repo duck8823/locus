@@ -3,13 +3,20 @@ import Link from "next/link";
 import styles from "./page.module.css";
 import { resolveWorkspaceLocale, type WorkspaceLocale } from "@/app/(workspace)/workspace-locale";
 import { parseGitHubDemoErrorCode, type GitHubDemoErrorCode } from "@/server/presentation/actions/github-demo-error-code";
+import {
+  parseGitLabDemoErrorCode,
+  type GitLabDemoErrorCode,
+} from "@/server/presentation/actions/gitlab-demo-error-code";
 import { startDemoSessionAction } from "@/server/presentation/actions/start-demo-session-action";
 import { startGitHubDemoSessionAction } from "@/server/presentation/actions/start-github-demo-session-action";
+import { startGitLabDemoSessionAction } from "@/server/presentation/actions/start-gitlab-demo-session-action";
 import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 
 interface MarketingPageSearchParams {
   githubDemoError?: string | string[];
   githubDemoErrorCode?: string | string[];
+  gitlabDemoError?: string | string[];
+  gitlabDemoErrorCode?: string | string[];
 }
 
 function resolveSearchParamValue(value: string | string[] | undefined): string | null {
@@ -37,6 +44,21 @@ const githubDemoErrorCopyByLocale: Record<WorkspaceLocale, Record<GitHubDemoErro
   },
 };
 
+const gitlabDemoErrorCopyByLocale: Record<WorkspaceLocale, Record<GitLabDemoErrorCode, string>> = {
+  en: {
+    project_path_required: "GitLab project path is required.",
+    merge_request_iid_required: "GitLab merge request IID is required.",
+    merge_request_iid_invalid: "GitLab merge request IID must be a positive integer.",
+    start_failed: "Failed to open GitLab demo. Check your inputs and try again.",
+  },
+  ja: {
+    project_path_required: "GitLab project path を入力してください。",
+    merge_request_iid_required: "GitLab merge request IID を入力してください。",
+    merge_request_iid_invalid: "GitLab merge request IID は 1 以上の整数で入力してください。",
+    start_failed: "GitLab デモを開始できませんでした。入力内容を確認して再試行してください。",
+  },
+};
+
 const marketingCopyByLocale = {
   en: {
     languageLabel: "Language",
@@ -45,9 +67,10 @@ const marketingCopyByLocale = {
     kicker: "Slice 1 · Workspace demo",
     title: "Open a PR review workspace in seconds.",
     lead:
-      "Start from the seed demo or any public GitHub PR. Initial analysis runs asynchronously.",
+      "Start from the seed demo or any public GitHub/GitLab change request. Initial analysis runs asynchronously.",
     openSeedDemo: "Open seed demo",
     openConnections: "Connection settings",
+    githubDemoCardTitle: "GitHub pull request",
     githubOwnerLabel: "GitHub owner",
     githubOwnerPlaceholder: "octocat",
     repositoryLabel: "Repository",
@@ -55,8 +78,14 @@ const marketingCopyByLocale = {
     pullRequestNumberLabel: "PR number",
     pullRequestNumberPlaceholder: "123",
     openGitHubDemo: "Open GitHub demo",
+    gitlabDemoCardTitle: "GitLab merge request",
+    gitlabProjectPathLabel: "Project path",
+    gitlabProjectPathPlaceholder: "gitlab-org/gitlab",
+    gitlabMergeRequestIidLabel: "Merge request IID",
+    gitlabMergeRequestIidPlaceholder: "123",
+    openGitLabDemo: "Open GitLab demo",
     hints: [
-      "Public repositories work without GITHUB_TOKEN (with stricter rate limits).",
+      "Public repositories can run without GITHUB_TOKEN / GITLAB_TOKEN (with stricter rate limits).",
       "Workspace opens first; analysis continues in the background.",
       "Environment variables can provide optional defaults.",
     ],
@@ -98,9 +127,10 @@ const marketingCopyByLocale = {
     kicker: "Slice 1 · ワークスペースデモ",
     title: "PR レビュー画面をすぐに開けます。",
     lead:
-      "シードデモまたは public GitHub PR から開始できます。初回解析は非同期で進みます。",
+      "シードデモまたは public GitHub/GitLab change request から開始できます。初回解析は非同期で進みます。",
     openSeedDemo: "シードデモを開く",
     openConnections: "接続設定",
+    githubDemoCardTitle: "GitHub pull request",
     githubOwnerLabel: "GitHub オーナー",
     githubOwnerPlaceholder: "octocat",
     repositoryLabel: "リポジトリ",
@@ -108,8 +138,14 @@ const marketingCopyByLocale = {
     pullRequestNumberLabel: "PR 番号",
     pullRequestNumberPlaceholder: "123",
     openGitHubDemo: "GitHub デモを開く",
+    gitlabDemoCardTitle: "GitLab merge request",
+    gitlabProjectPathLabel: "Project path",
+    gitlabProjectPathPlaceholder: "gitlab-org/gitlab",
+    gitlabMergeRequestIidLabel: "Merge request IID",
+    gitlabMergeRequestIidPlaceholder: "123",
+    openGitLabDemo: "GitLab デモを開く",
     hints: [
-      "public リポジトリは GITHUB_TOKEN なしでも利用できます（レート制限は厳しくなります）。",
+      "public リポジトリは GITHUB_TOKEN / GITLAB_TOKEN なしでも利用できます（レート制限は厳しくなります）。",
       "ワークスペースを先に開き、解析はバックグラウンドで続行します。",
       "環境変数でフォーム初期値を任意設定できます。",
     ],
@@ -156,6 +192,8 @@ export default async function MarketingPage({
   const defaultGitHubOwner = process.env.LOCUS_GITHUB_DEMO_OWNER ?? "";
   const defaultGitHubRepository = process.env.LOCUS_GITHUB_DEMO_REPO ?? "";
   const defaultGitHubPullRequestNumber = process.env.LOCUS_GITHUB_DEMO_PR_NUMBER ?? "";
+  const defaultGitLabProjectPath = process.env.LOCUS_GITLAB_DEMO_PROJECT_PATH ?? "";
+  const defaultGitLabMergeRequestIid = process.env.LOCUS_GITLAB_DEMO_MERGE_REQUEST_IID ?? "";
   const workspaceLocale = resolveWorkspaceLocale({
     preferredLocale: cookieStore.get("locus-ui-locale")?.value ?? null,
     acceptLanguage: headerStore.get("accept-language"),
@@ -168,6 +206,13 @@ export default async function MarketingPage({
   const githubDemoError = githubDemoErrorCode
     ? githubDemoErrorCopyByLocale[workspaceLocale][githubDemoErrorCode]
     : legacyGithubDemoError;
+  const gitLabDemoErrorCode = parseGitLabDemoErrorCode(
+    resolveSearchParamValue(resolvedSearchParams.gitlabDemoErrorCode),
+  );
+  const legacyGitLabDemoError = resolveSearchParamValue(resolvedSearchParams.gitlabDemoError);
+  const gitLabDemoError = gitLabDemoErrorCode
+    ? gitlabDemoErrorCopyByLocale[workspaceLocale][gitLabDemoErrorCode]
+    : legacyGitLabDemoError;
 
   return (
     <main className={styles.page}>
@@ -222,51 +267,92 @@ export default async function MarketingPage({
               </Link>
             </div>
 
-            <form action={startGitHubDemoSessionAction} className={styles.githubDemoForm}>
-              <label className={styles.githubDemoField}>
-                <span>{copy.githubOwnerLabel}</span>
-                <input
-                  autoComplete="off"
-                  defaultValue={defaultGitHubOwner}
-                  name="owner"
-                  placeholder={copy.githubOwnerPlaceholder}
-                  required
-                  type="text"
-                />
-              </label>
-              <label className={styles.githubDemoField}>
-                <span>{copy.repositoryLabel}</span>
-                <input
-                  autoComplete="off"
-                  defaultValue={defaultGitHubRepository}
-                  name="repository"
-                  placeholder={copy.repositoryPlaceholder}
-                  required
-                  type="text"
-                />
-              </label>
-              <label className={styles.githubDemoField}>
-                <span>{copy.pullRequestNumberLabel}</span>
-                <input
-                  autoComplete="off"
-                  defaultValue={defaultGitHubPullRequestNumber}
-                  min={1}
-                  name="pullRequestNumber"
-                  placeholder={copy.pullRequestNumberPlaceholder}
-                  required
-                  type="number"
-                />
-              </label>
-              <button
-                className={styles.secondaryButton}
-                type="submit"
-                data-testid="open-github-demo"
-              >
-                {copy.openGitHubDemo}
-              </button>
-            </form>
+            <div className={styles.codeHostDemoGrid}>
+              <section className={styles.codeHostDemoCard}>
+                <h2 className={styles.codeHostDemoTitle}>{copy.githubDemoCardTitle}</h2>
+                <form action={startGitHubDemoSessionAction} className={styles.codeHostDemoForm}>
+                  <label className={styles.codeHostDemoField}>
+                    <span>{copy.githubOwnerLabel}</span>
+                    <input
+                      autoComplete="off"
+                      defaultValue={defaultGitHubOwner}
+                      name="owner"
+                      placeholder={copy.githubOwnerPlaceholder}
+                      required
+                      type="text"
+                    />
+                  </label>
+                  <label className={styles.codeHostDemoField}>
+                    <span>{copy.repositoryLabel}</span>
+                    <input
+                      autoComplete="off"
+                      defaultValue={defaultGitHubRepository}
+                      name="repository"
+                      placeholder={copy.repositoryPlaceholder}
+                      required
+                      type="text"
+                    />
+                  </label>
+                  <label className={styles.codeHostDemoField}>
+                    <span>{copy.pullRequestNumberLabel}</span>
+                    <input
+                      autoComplete="off"
+                      defaultValue={defaultGitHubPullRequestNumber}
+                      min={1}
+                      name="pullRequestNumber"
+                      placeholder={copy.pullRequestNumberPlaceholder}
+                      required
+                      type="number"
+                    />
+                  </label>
+                  <button
+                    className={styles.secondaryButton}
+                    type="submit"
+                    data-testid="open-github-demo"
+                  >
+                    {copy.openGitHubDemo}
+                  </button>
+                </form>
+                {githubDemoError ? <p className={styles.errorBanner}>{githubDemoError}</p> : null}
+              </section>
 
-            {githubDemoError ? <p className={styles.errorBanner}>{githubDemoError}</p> : null}
+              <section className={styles.codeHostDemoCard}>
+                <h2 className={styles.codeHostDemoTitle}>{copy.gitlabDemoCardTitle}</h2>
+                <form action={startGitLabDemoSessionAction} className={styles.codeHostDemoForm}>
+                  <label className={styles.codeHostDemoField}>
+                    <span>{copy.gitlabProjectPathLabel}</span>
+                    <input
+                      autoComplete="off"
+                      defaultValue={defaultGitLabProjectPath}
+                      name="projectPath"
+                      placeholder={copy.gitlabProjectPathPlaceholder}
+                      required
+                      type="text"
+                    />
+                  </label>
+                  <label className={styles.codeHostDemoField}>
+                    <span>{copy.gitlabMergeRequestIidLabel}</span>
+                    <input
+                      autoComplete="off"
+                      defaultValue={defaultGitLabMergeRequestIid}
+                      min={1}
+                      name="mergeRequestIid"
+                      placeholder={copy.gitlabMergeRequestIidPlaceholder}
+                      required
+                      type="number"
+                    />
+                  </label>
+                  <button
+                    className={styles.secondaryButton}
+                    type="submit"
+                    data-testid="open-gitlab-demo"
+                  >
+                    {copy.openGitLabDemo}
+                  </button>
+                </form>
+                {gitLabDemoError ? <p className={styles.errorBanner}>{gitLabDemoError}</p> : null}
+              </section>
+            </div>
 
             <ul className={styles.demoHintList}>
               {copy.hints.map((hint) => (

@@ -140,28 +140,51 @@
   transform: translateY(-1px);
 }
 
-.githubDemoForm {
+.codeHostDemoGrid {
   margin-top: 4px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.codeHostDemoCard {
+  border: 1px solid rgba(154, 167, 209, 0.16);
+  border-radius: 14px;
+  background: rgba(11, 16, 32, 0.45);
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.codeHostDemoTitle {
+  font-size: 15px;
+  line-height: 1.4;
+  overflow-wrap: break-word;
+}
+
+.codeHostDemoForm {
+  margin-top: 4px;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 10px;
   align-items: end;
 }
 
-.githubDemoField {
+.codeHostDemoField {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
 
-.githubDemoField span {
+.codeHostDemoField span {
   font-size: 12px;
   color: var(--muted);
   letter-spacing: 0.02em;
   overflow-wrap: break-word;
 }
 
-.githubDemoField input {
+.codeHostDemoField input {
   min-height: 42px;
   border-radius: 10px;
   border: 1px solid rgba(154, 167, 209, 0.26);
@@ -265,6 +288,10 @@
     grid-template-columns: 1fr;
   }
 
+  .codeHostDemoGrid {
+    grid-template-columns: 1fr;
+  }
+
   .sidePanel {
     padding: 22px;
   }
@@ -281,7 +308,7 @@
     padding: 18px;
   }
 
-  .githubDemoForm {
-    grid-template-columns: 1fr;
+  .codeHostDemoCard {
+    padding: 12px;
   }
 }
