@@ -35,5 +35,8 @@ export function classifyAiSuggestionProviderError(
 }
 
 export interface AiSuggestionProvider {
-  generateSuggestions(input: { payload: AiSuggestionPayload }): Promise<AiSuggestion[]>;
+  generateSuggestions(input: {
+    payload: AiSuggestionPayload;
+    abortSignal?: AbortSignal;
+  }): Promise<AiSuggestion[]>;
 }

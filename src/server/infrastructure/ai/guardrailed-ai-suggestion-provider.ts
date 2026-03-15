@@ -1,13 +1,15 @@
 import type { AiSuggestion, AiSuggestionPayload } from "@/server/application/ai/ai-suggestion-types";
 import {
   AiSuggestionProviderTemporaryError,
+  classifyAiSuggestionProviderError,
   type AiSuggestionProvider,
 } from "@/server/application/ports/ai-suggestion-provider";
 
 export type AiSuggestionGuardrailReasonCode =
   | "timeout"
   | "estimated_input_tokens_exceeded"
-  | "estimated_input_cost_exceeded";
+  | "estimated_input_cost_exceeded"
+  | "provider_temporary_error";
 
 export interface AiSuggestionProviderGuardrailPolicy {
   timeoutMs: number;
@@ -127,22 +129,65 @@ function estimateAiSuggestionInputCostUsd(input: {
 
 function withTimeout<T>(input: {
   timeoutMs: number;
-  operation: () => Promise<T>;
+  operation: (abortSignal: AbortSignal) => Promise<T>;
   onTimeout: () => Error;
+  upstreamAbortSignal?: AbortSignal;
 }): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timeoutId = setTimeout(() => reject(input.onTimeout()), input.timeoutMs);
+    const timeoutController = new AbortController();
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const rejectIfPending = (error: unknown) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      input.upstreamAbortSignal?.removeEventListener("abort", onUpstreamAbort);
+      reject(error);
+    };
+    const resolveIfPending = (value: T) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      input.upstreamAbortSignal?.removeEventListener("abort", onUpstreamAbort);
+      resolve(value);
+    };
+    const onUpstreamAbort = () => {
+      timeoutController.abort(input.upstreamAbortSignal?.reason);
+      const reason = input.upstreamAbortSignal?.reason;
+      if (reason instanceof Error) {
+        rejectIfPending(reason);
+        return;
+      }
+
+      const abortError = new Error("AI suggestion generation was aborted by caller.");
+      abortError.name = "AbortError";
+      rejectIfPending(abortError);
+    };
+    if (input.upstreamAbortSignal?.aborted) {
+      onUpstreamAbort();
+      return;
+    } else {
+      input.upstreamAbortSignal?.addEventListener("abort", onUpstreamAbort, {
+        once: true,
+      });
+    }
+    timeoutId = setTimeout(() => {
+      timeoutController.abort();
+      rejectIfPending(input.onTimeout());
+    }, input.timeoutMs);
 
     input
-      .operation()
-      .then((value) => {
-        clearTimeout(timeoutId);
-        resolve(value);
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      });
+      .operation(timeoutController.signal)
+      .then((value) => resolveIfPending(value))
+      .catch((error) => rejectIfPending(error));
   });
 }
 
@@ -168,6 +213,13 @@ function buildGuardrailEventPayload(input: {
   };
 }
 
+function buildCallerAbortedError(cause: unknown): AiSuggestionProviderTemporaryError {
+  return new AiSuggestionProviderTemporaryError(
+    "AI suggestion generation was aborted by caller.",
+    cause,
+  );
+}
+
 export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
   private readonly guardrailPolicy: ReturnType<typeof normalizeGuardrailPolicy>;
   private readonly logger: GuardrailedAiSuggestionProviderLogger;
@@ -177,7 +229,14 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     this.logger = input.logger ?? defaultLogger;
   }
 
-  async generateSuggestions(input: { payload: AiSuggestionPayload }): Promise<AiSuggestion[]> {
+  async generateSuggestions(input: {
+    payload: AiSuggestionPayload;
+    abortSignal?: AbortSignal;
+  }): Promise<AiSuggestion[]> {
+    if (input.abortSignal?.aborted) {
+      throw buildCallerAbortedError(input.abortSignal.reason);
+    }
+
     const estimatedInputTokens = estimateAiSuggestionInputTokens(input.payload);
     const estimatedInputCostUsd = estimateAiSuggestionInputCostUsd({
       estimatedInputTokens,
@@ -212,7 +271,12 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     try {
       return await withTimeout({
         timeoutMs: this.guardrailPolicy.timeoutMs,
-        operation: () => this.input.provider.generateSuggestions(input),
+        operation: (abortSignal) =>
+          this.input.provider.generateSuggestions({
+            ...input,
+            abortSignal,
+          }),
+        upstreamAbortSignal: input.abortSignal,
         onTimeout: () =>
           new AiSuggestionGuardrailTriggeredError(
             "timeout",
@@ -220,12 +284,27 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
           ),
       });
     } catch (error) {
+      if (input.abortSignal?.aborted) {
+        throw buildCallerAbortedError(error);
+      }
+
       if (error instanceof AiSuggestionGuardrailTriggeredError) {
         return this.generateFallbackSuggestions({
           payload: input.payload,
           reasonCode: error.reasonCode,
           estimatedInputTokens,
           estimatedInputCostUsd,
+          abortSignal: input.abortSignal,
+        });
+      }
+
+      if (classifyAiSuggestionProviderError(error) === "temporary") {
+        return this.generateFallbackSuggestions({
+          payload: input.payload,
+          reasonCode: "provider_temporary_error",
+          estimatedInputTokens,
+          estimatedInputCostUsd,
+          abortSignal: input.abortSignal,
         });
       }
 
@@ -238,7 +317,12 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     reasonCode: AiSuggestionGuardrailReasonCode;
     estimatedInputTokens: number;
     estimatedInputCostUsd: number | null;
+    abortSignal?: AbortSignal;
   }): Promise<AiSuggestion[]> {
+    if (input.abortSignal?.aborted) {
+      throw buildCallerAbortedError(input.abortSignal.reason);
+    }
+
     const eventPayload = buildGuardrailEventPayload({
       payload: input.payload,
       providerName: this.input.providerName,
@@ -252,10 +336,18 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     this.logger.warn("ai_suggestion_guardrail_triggered", eventPayload);
 
     try {
-      return await this.input.fallbackProvider.generateSuggestions({
+      const suggestions = await this.input.fallbackProvider.generateSuggestions({
         payload: input.payload,
+        abortSignal: input.abortSignal,
       });
+      if (input.abortSignal?.aborted) {
+        throw buildCallerAbortedError(input.abortSignal.reason);
+      }
+      return suggestions;
     } catch (error) {
+      if (input.abortSignal?.aborted) {
+        throw buildCallerAbortedError(error);
+      }
       this.logger.error("ai_suggestion_guardrail_fallback_failed", {
         ...eventPayload,
         message: error instanceof Error ? error.message : String(error),

@@ -32,13 +32,28 @@ function toClassifiedProviderError(error: unknown): Error {
   );
 }
 
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) {
+    return;
+  }
+
+  throw new AiSuggestionProviderTemporaryError(
+    "Heuristic AI suggestion generation was aborted.",
+    signal.reason,
+  );
+}
+
 export class HeuristicAiSuggestionProvider implements AiSuggestionProvider {
   constructor(
     private readonly suggestionGenerator: SuggestionGenerator = generateAiSuggestionsFromPayload,
   ) {}
 
-  async generateSuggestions(input: { payload: AiSuggestionPayload }): Promise<AiSuggestion[]> {
+  async generateSuggestions(input: {
+    payload: AiSuggestionPayload;
+    abortSignal?: AbortSignal;
+  }): Promise<AiSuggestion[]> {
     try {
+      throwIfAborted(input.abortSignal);
       return await this.suggestionGenerator(input.payload);
     } catch (error) {
       throw toClassifiedProviderError(error);
