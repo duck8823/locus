@@ -8,6 +8,14 @@
 
 Issue #75 に向け、現行プロトタイプの永続化と運用を、より安全な本番運用へ段階的に移行するための最小ベースラインを定義する。
 
+## オペレーター用ランブックセット
+
+本ドキュメントは次と併用する:
+
+- [DB移行 / ロールバック ランブック](db-migration-rollback-runbook.ja.md)
+- [SLOダッシュボード基準とアラート分類](slo-alert-taxonomy.ja.md)
+- [インシデント対応ランブック](incident-response-runbook.ja.md)
+
 ## 前提 / 非対象
 
 前提:

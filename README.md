@@ -216,6 +216,8 @@ npm run demo:data:reseed   # recreate baseline directories + empty job queue
 - [`docs/testing/exploratory-test-session-2026-03-11.md`](docs/testing/exploratory-test-session-2026-03-11.md) / [`docs/testing/exploratory-test-session-2026-03-11.ja.md`](docs/testing/exploratory-test-session-2026-03-11.ja.md)
 - [`docs/operations/ai-review-workflow.md`](docs/operations/ai-review-workflow.md) / [`docs/operations/ai-review-workflow.ja.md`](docs/operations/ai-review-workflow.ja.md)
 - [`docs/operations/ai-suggestion-audit-redaction-policy.md`](docs/operations/ai-suggestion-audit-redaction-policy.md) / [`docs/operations/ai-suggestion-audit-redaction-policy.ja.md`](docs/operations/ai-suggestion-audit-redaction-policy.ja.md)
+- [`docs/operations/db-migration-rollback-runbook.md`](docs/operations/db-migration-rollback-runbook.md) / [`docs/operations/db-migration-rollback-runbook.ja.md`](docs/operations/db-migration-rollback-runbook.ja.md)
+- [`docs/operations/slo-alert-taxonomy.md`](docs/operations/slo-alert-taxonomy.md) / [`docs/operations/slo-alert-taxonomy.ja.md`](docs/operations/slo-alert-taxonomy.ja.md)
 - [`docs/operations/security-review-checklist.md`](docs/operations/security-review-checklist.md) / [`docs/operations/security-review-checklist.ja.md`](docs/operations/security-review-checklist.ja.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) / [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md)
 
