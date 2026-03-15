@@ -52,9 +52,9 @@ const gitlabDemoErrorCopyByLocale: Record<WorkspaceLocale, Record<GitLabDemoErro
     start_failed: "Failed to open GitLab demo. Check your inputs and try again.",
   },
   ja: {
-    project_path_required: "GitLab project path を入力してください。",
-    merge_request_iid_required: "GitLab merge request IID を入力してください。",
-    merge_request_iid_invalid: "GitLab merge request IID は 1 以上の整数で入力してください。",
+    project_path_required: "GitLab プロジェクトパスを入力してください。",
+    merge_request_iid_required: "GitLab MR IID を入力してください。",
+    merge_request_iid_invalid: "GitLab MR IID は 1 以上の整数で入力してください。",
     start_failed: "GitLab デモを開始できませんでした。入力内容を確認して再試行してください。",
   },
 };
@@ -78,10 +78,10 @@ const marketingCopyByLocale = {
     pullRequestNumberLabel: "PR number",
     pullRequestNumberPlaceholder: "123",
     openGitHubDemo: "Open GitHub demo",
-    gitlabDemoCardTitle: "GitLab merge request",
-    gitlabProjectPathLabel: "Project path",
+    gitlabDemoCardTitle: "GitLab マージリクエスト",
+    gitlabProjectPathLabel: "プロジェクトパス",
     gitlabProjectPathPlaceholder: "gitlab-org/gitlab",
-    gitlabMergeRequestIidLabel: "Merge request IID",
+    gitlabMergeRequestIidLabel: "MR IID",
     gitlabMergeRequestIidPlaceholder: "123",
     openGitLabDemo: "Open GitLab demo",
     hints: [
