@@ -92,6 +92,7 @@ Locusは最初から拡張可能な設計で作られています：
 - `src/server/**` 配下のレイヤードサーバースケルトン
 - 選択中の change group と進捗状態を保持できる file-backed demo review session
 - 実際の PR ファイルを semantic analysis に流し込める GitHub pull request snapshot adapter
+- provider-agnostic 境界の背後で動く GitLab merge request snapshot adapter（read-only）
 - parser adapter 経由のセマンティック差分グルーピング（TS/JS先行）
 - live GitHub Issue context + fallback diagnostics を持つ business-context bridge
 - ヒューリスティック provider を使う AI提案パネルと採否保持
@@ -154,8 +155,10 @@ export LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS=3
 export LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS=500
 export LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS=600000
 
-# 任意: provider-agnostic code-host 境界で GitLab adapter skeleton を有効化
+# 任意: provider-agnostic code-host 境界で GitLab adapter を有効化
 export LOCUS_ENABLE_GITLAB_ADAPTER=true
+export LOCUS_GITLAB_API_BASE_URL=https://gitlab.com/api/v4
+export GITLAB_TOKEN=your-gitlab-token
 
 # 任意: plugin capability policy（最小権限）
 # カンマ区切りキー、例: pull-request-snapshot-provider:github
@@ -188,6 +191,7 @@ export LOCUS_AI_SUGGESTION_PROVIDER_OPENAI_COMPAT_ESTIMATED_INPUT_USD_PER_1K_TOK
 `LOCUS_AI_SUGGESTION_PROVIDER=openai_compat` を設定していても `LOCUS_AI_SUGGESTION_OPENAI_API_KEY` が未設定なら、自動で heuristic provider にフォールバックします。
 
 `GITHUB_TOKEN` は public repository なら必須ではありません（ただし匿名アクセスはレート制限が厳しいため、設定を推奨します）。
+`GITLAB_TOKEN` も public GitLab repository では必須ではありませんが、private project や匿名レート制限回避のために設定を推奨します。
 
 確認コマンド:
 

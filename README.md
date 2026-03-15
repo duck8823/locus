@@ -87,6 +87,7 @@ Already runnable today:
 - a layered `src/server/**` backend skeleton
 - a file-backed demo review session that preserves selected change group and status
 - a GitHub pull-request snapshot adapter that can ingest real PR files into semantic analysis
+- a GitLab merge-request snapshot adapter (read-only) behind the provider-agnostic boundary
 - parser-adapter based semantic grouping (TS/JS-first)
 - business-context bridge with live GitHub issue-context fetch + fallback diagnostics
 - AI suggestion panel with heuristic provider and decision persistence
@@ -149,8 +150,10 @@ export LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS=3
 export LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS=500
 export LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS=600000
 
-# Optional: enable GitLab adapter skeleton in provider-agnostic code-host boundary
+# Optional: enable GitLab adapter in provider-agnostic code-host boundary
 export LOCUS_ENABLE_GITLAB_ADAPTER=true
+export LOCUS_GITLAB_API_BASE_URL=https://gitlab.com/api/v4
+export GITLAB_TOKEN=your-gitlab-token
 
 # Optional: plugin capability policy (least privilege)
 # comma-separated keys, e.g. pull-request-snapshot-provider:github
@@ -183,6 +186,7 @@ export LOCUS_AI_SUGGESTION_PROVIDER_OPENAI_COMPAT_ESTIMATED_INPUT_USD_PER_1K_TOK
 If `LOCUS_AI_SUGGESTION_PROVIDER=openai_compat` is set but `LOCUS_AI_SUGGESTION_OPENAI_API_KEY` is missing, Locus automatically falls back to the heuristic provider.
 
 `GITHUB_TOKEN` is optional for public repositories (but recommended to avoid low anonymous rate limits).
+`GITLAB_TOKEN` is also optional for public GitLab repositories; set it for private projects or to avoid stricter anonymous limits.
 
 Validation commands:
 
