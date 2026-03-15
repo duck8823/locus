@@ -209,6 +209,8 @@ npm run demo:data:reseed   # recreate baseline directories + empty job queue
 - [`docs/architecture/confluence-context-contract.md`](docs/architecture/confluence-context-contract.md) / [`docs/architecture/confluence-context-contract.ja.md`](docs/architecture/confluence-context-contract.ja.md)
 - [`docs/architecture/jira-context-contract.md`](docs/architecture/jira-context-contract.md) / [`docs/architecture/jira-context-contract.ja.md`](docs/architecture/jira-context-contract.ja.md)
 - [`docs/performance/analysis-benchmark-baseline.md`](docs/performance/analysis-benchmark-baseline.md) / [`docs/performance/analysis-benchmark-baseline.ja.md`](docs/performance/analysis-benchmark-baseline.ja.md)
+- [`docs/performance/ai-suggestion-evaluation-format.md`](docs/performance/ai-suggestion-evaluation-format.md) / [`docs/performance/ai-suggestion-evaluation-format.ja.md`](docs/performance/ai-suggestion-evaluation-format.ja.md)
+- [`docs/performance/ai-suggestion-quality-gate-policy.md`](docs/performance/ai-suggestion-quality-gate-policy.md) / [`docs/performance/ai-suggestion-quality-gate-policy.ja.md`](docs/performance/ai-suggestion-quality-gate-policy.ja.md)
 - [`docs/testing/exploratory-test-playbook.md`](docs/testing/exploratory-test-playbook.md) / [`docs/testing/exploratory-test-playbook.ja.md`](docs/testing/exploratory-test-playbook.ja.md)
 - [`docs/testing/exploratory-test-session-2026-03-11.md`](docs/testing/exploratory-test-session-2026-03-11.md) / [`docs/testing/exploratory-test-session-2026-03-11.ja.md`](docs/testing/exploratory-test-session-2026-03-11.ja.md)
 - [`docs/operations/ai-review-workflow.md`](docs/operations/ai-review-workflow.md) / [`docs/operations/ai-review-workflow.ja.md`](docs/operations/ai-review-workflow.ja.md)

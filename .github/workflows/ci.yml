@@ -106,3 +106,39 @@ jobs:
           name: dogfooding-metrics
           path: artifacts/dogfooding-metrics*
           if-no-files-found: error
+
+  ai-suggestion-quality:
+    name: AI Suggestion Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint-typecheck-unit
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Evaluate AI suggestion quality fixtures
+        run: |
+          npm run ai:suggest:evaluate:artifact -- \
+            --fixtures-file scripts/fixtures/ai-suggestion-evaluation/sample-fixtures.json \
+            --json-out artifacts/ai-suggestion-evaluation.json \
+            --markdown-out artifacts/ai-suggestion-evaluation-summary.md \
+            --min-useful-rate-percent 80 \
+            --max-false-positive-rate-percent 20
+
+      - name: Upload AI suggestion evaluation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-suggestion-evaluation
+          path: artifacts/ai-suggestion-evaluation*
+          if-no-files-found: error
