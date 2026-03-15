@@ -8,6 +8,14 @@ Operations index: [README.md](README.md)
 
 Define a practical baseline for Issue #75 to move prototype persistence and operations toward a safer production posture.
 
+## Operator runbook set
+
+Use this document together with:
+
+- [DB Migration / Rollback Runbook](db-migration-rollback-runbook.md)
+- [SLO Dashboard Baseline and Alert Taxonomy](slo-alert-taxonomy.md)
+- [Incident Response Runbook](incident-response-runbook.md)
+
 ## Assumptions / Non-goals
 
 Assumptions:
