@@ -80,6 +80,7 @@ describe("evaluateThresholdViolations", () => {
     const violations = evaluateThresholdViolations(
       {
         summary: {
+          fixtureCount: 1,
           usefulRatePercent: 70,
           falsePositiveRatePercent: 25,
         },
@@ -102,6 +103,27 @@ describe("evaluateThresholdViolations", () => {
       "summary falsePositiveRatePercent 25 exceeded max 20",
       "fixture fixture-1 usefulRatePercent 60 fell below min 80",
       "fixture fixture-1 falsePositiveRatePercent 40 exceeded max 20",
+    ]);
+  });
+
+  it("fails quality gate when no valid fixtures are evaluated", () => {
+    const violations = evaluateThresholdViolations(
+      {
+        summary: {
+          fixtureCount: 0,
+          usefulRatePercent: null,
+          falsePositiveRatePercent: null,
+        },
+        fixtures: [],
+      },
+      {
+        minUsefulRatePercent: 80,
+        maxFalsePositiveRatePercent: 20,
+      },
+    );
+
+    expect(violations).toEqual([
+      "fixtureCount was 0; at least one valid fixture is required",
     ]);
   });
 });

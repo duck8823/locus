@@ -130,6 +130,10 @@ export function evaluateThresholdViolations(result, thresholdOptions) {
   const violations = [];
   const summary = result.summary;
 
+  if (summary.fixtureCount <= 0) {
+    violations.push("fixtureCount was 0; at least one valid fixture is required");
+  }
+
   if (
     thresholdOptions.minUsefulRatePercent !== undefined &&
     summary.usefulRatePercent !== null &&
