@@ -86,6 +86,7 @@ function createWorkspaceShellDto() {
     },
     queueHealth: null,
     aiSuggestionPayload: null,
+    aiSuggestionAudit: null,
     aiSuggestions: [],
     reanalysisStatus: "idle" as const,
     lastOpenedAt: "2026-03-15T00:00:00.000Z",
@@ -199,6 +200,13 @@ describe("loadReviewWorkspaceDto (mixed context fixtures)", () => {
       aiSuggestionProvider: {
         generateSuggestions: generateSuggestionsMock,
       },
+      aiSuggestionAuditProfile: {
+        requestedMode: "heuristic",
+        provider: "heuristic",
+        fallbackProvider: "heuristic",
+        promptTemplateId: "heuristic.rule_set.v1",
+        promptVersion: "heuristic.v1",
+      },
     });
 
     const dto = await loadReviewWorkspaceDto({
@@ -251,6 +259,13 @@ describe("loadReviewWorkspaceDto (mixed context fixtures)", () => {
       },
       aiSuggestionProvider: {
         generateSuggestions: generateSuggestionsMock,
+      },
+      aiSuggestionAuditProfile: {
+        requestedMode: "heuristic",
+        provider: "heuristic",
+        fallbackProvider: "heuristic",
+        promptTemplateId: "heuristic.rule_set.v1",
+        promptVersion: "heuristic.v1",
       },
     });
 

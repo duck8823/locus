@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AiSuggestionPayload } from "@/server/application/ai/ai-suggestion-types";
-import { createAiSuggestionProvider } from "@/server/infrastructure/ai/create-ai-suggestion-provider";
+import {
+  createAiSuggestionProvider,
+  createAiSuggestionProviderBundle,
+} from "@/server/infrastructure/ai/create-ai-suggestion-provider";
 
 function createPayload(): AiSuggestionPayload {
   return {
@@ -53,23 +56,32 @@ function createPayload(): AiSuggestionPayload {
 
 describe("createAiSuggestionProvider", () => {
   it("uses heuristic provider by default", async () => {
-    const provider = createAiSuggestionProvider({ env: {} });
+    const bundle = createAiSuggestionProviderBundle({ env: {} });
+    const provider = bundle.provider;
 
     const suggestions = await provider.generateSuggestions({
       payload: createPayload(),
     });
 
     expect(suggestions.length).toBeGreaterThan(0);
+    expect(bundle.auditProfile).toEqual({
+      requestedMode: "heuristic",
+      provider: "heuristic",
+      fallbackProvider: "heuristic",
+      promptTemplateId: "heuristic.rule_set.v1",
+      promptVersion: "heuristic.v1",
+    });
   });
 
   it("falls back to heuristic provider when openai mode has no api key", async () => {
     const warn = vi.fn();
-    const provider = createAiSuggestionProvider({
+    const bundle = createAiSuggestionProviderBundle({
       env: {
         LOCUS_AI_SUGGESTION_PROVIDER: "openai_compat",
       },
       logger: { warn },
     });
+    const provider = bundle.provider;
 
     const suggestions = await provider.generateSuggestions({
       payload: createPayload(),
@@ -83,6 +95,13 @@ describe("createAiSuggestionProvider", () => {
         mode: "openai_compat",
       }),
     );
+    expect(bundle.auditProfile).toEqual({
+      requestedMode: "openai_compat",
+      provider: "heuristic",
+      fallbackProvider: "heuristic",
+      promptTemplateId: "heuristic.rule_set.v1",
+      promptVersion: "heuristic.v1",
+    });
   });
 
   it("uses openai-compatible provider when mode and api key are configured", async () => {
@@ -111,15 +130,17 @@ describe("createAiSuggestionProvider", () => {
         { status: 200 },
       ),
     );
-    const provider = createAiSuggestionProvider({
+    const bundle = createAiSuggestionProviderBundle({
       env: {
         LOCUS_AI_SUGGESTION_PROVIDER: "openai_compat",
         LOCUS_AI_SUGGESTION_OPENAI_API_KEY: "test-key",
         LOCUS_AI_SUGGESTION_OPENAI_BASE_URL: "https://example.local/v1",
         LOCUS_AI_SUGGESTION_PROVIDER_OPENAI_COMPAT_TIMEOUT_MS: "3000",
+        LOCUS_AI_SUGGESTION_PROMPT_VERSION: "openai_compat.v9",
       },
       fetchFn,
     });
+    const provider = bundle.provider;
 
     const suggestions = await provider.generateSuggestions({
       payload: createPayload(),
@@ -136,6 +157,13 @@ describe("createAiSuggestionProvider", () => {
         rationale: ["Adapter boundary allows backend swap."],
       },
     ]);
+    expect(bundle.auditProfile).toEqual({
+      requestedMode: "openai_compat",
+      provider: "openai_compat",
+      fallbackProvider: "heuristic",
+      promptTemplateId: "openai_compat.chat_completions.json_object.v1",
+      promptVersion: "openai_compat.v9",
+    });
   });
 
   it("applies guardrail fallback when openai token budget is exceeded", async () => {
@@ -154,6 +182,16 @@ describe("createAiSuggestionProvider", () => {
     });
 
     expect(fetchFn).not.toHaveBeenCalled();
+    expect(suggestions.length).toBeGreaterThan(0);
+  });
+
+  it("keeps createAiSuggestionProvider backward-compatible with provider-only factory", async () => {
+    const provider = createAiSuggestionProvider({ env: {} });
+
+    const suggestions = await provider.generateSuggestions({
+      payload: createPayload(),
+    });
+
     expect(suggestions.length).toBeGreaterThan(0);
   });
 });

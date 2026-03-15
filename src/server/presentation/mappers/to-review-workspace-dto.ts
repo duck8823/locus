@@ -325,6 +325,7 @@ export function toReviewWorkspaceDto(reviewSession: ReviewSession): ReviewWorksp
     },
     queueHealth: null,
     aiSuggestionPayload: null,
+    aiSuggestionAudit: null,
     aiSuggestions: [],
     reanalysisStatus: record.reanalysisStatus ?? "idle",
     lastOpenedAt: record.lastOpenedAt,

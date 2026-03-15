@@ -28,6 +28,22 @@ const PROMPT_VERSION_ENV = "LOCUS_AI_SUGGESTION_PROMPT_VERSION";
 
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 const DEFAULT_PROMPT_VERSION = "openai_compat.v1";
+const HEURISTIC_PROMPT_VERSION = "heuristic.v1";
+const HEURISTIC_PROMPT_TEMPLATE_ID = "heuristic.rule_set.v1";
+const OPENAI_COMPAT_PROMPT_TEMPLATE_ID = "openai_compat.chat_completions.json_object.v1";
+
+export interface AiSuggestionProviderAuditProfile {
+  requestedMode: AiSuggestionProviderMode;
+  provider: "heuristic" | "openai_compat";
+  fallbackProvider: "heuristic";
+  promptTemplateId: string;
+  promptVersion: string;
+}
+
+export interface AiSuggestionProviderBundle {
+  provider: AiSuggestionProvider;
+  auditProfile: AiSuggestionProviderAuditProfile;
+}
 
 function readOptionalPositiveIntegerEnv(name: string, env: EnvMap): number | undefined {
   const value = env[name]?.trim();
@@ -100,7 +116,32 @@ function resolveProviderMode(raw: string | undefined): AiSuggestionProviderMode 
   return raw.trim().toLowerCase() === "openai_compat" ? "openai_compat" : "heuristic";
 }
 
-export function createAiSuggestionProvider(input: FactoryInput = {}): AiSuggestionProvider {
+function createHeuristicAuditProfile(
+  requestedMode: AiSuggestionProviderMode,
+): AiSuggestionProviderAuditProfile {
+  return {
+    requestedMode,
+    provider: "heuristic",
+    fallbackProvider: "heuristic",
+    promptTemplateId: HEURISTIC_PROMPT_TEMPLATE_ID,
+    promptVersion: HEURISTIC_PROMPT_VERSION,
+  };
+}
+
+function createOpenAiAuditProfile(input: {
+  requestedMode: AiSuggestionProviderMode;
+  promptVersion: string;
+}): AiSuggestionProviderAuditProfile {
+  return {
+    requestedMode: input.requestedMode,
+    provider: "openai_compat",
+    fallbackProvider: "heuristic",
+    promptTemplateId: OPENAI_COMPAT_PROMPT_TEMPLATE_ID,
+    promptVersion: input.promptVersion,
+  };
+}
+
+export function createAiSuggestionProviderBundle(input: FactoryInput = {}): AiSuggestionProviderBundle {
   const env = input.env ?? process.env;
   const logger = input.logger ?? console;
   const mode = resolveProviderMode(env[PROVIDER_MODE_ENV]);
@@ -108,14 +149,16 @@ export function createAiSuggestionProvider(input: FactoryInput = {}): AiSuggesti
   const heuristicPrimaryProvider = new HeuristicAiSuggestionProvider();
   const heuristicFallbackProvider = new HeuristicAiSuggestionProvider();
 
-  const fallbackToHeuristicProvider = () =>
-    new GuardrailedAiSuggestionProvider({
+  const fallbackToHeuristicProvider = (): AiSuggestionProviderBundle => ({
+    provider: new GuardrailedAiSuggestionProvider({
       providerName: "heuristic",
       provider: heuristicPrimaryProvider,
       fallbackProviderName: "heuristic",
       fallbackProvider: heuristicFallbackProvider,
       guardrailPolicy: readAiSuggestionGuardrailPolicy("heuristic", env),
-    });
+    }),
+    auditProfile: createHeuristicAuditProfile(mode),
+  });
 
   if (mode !== "openai_compat") {
     return fallbackToHeuristicProvider();
@@ -145,11 +188,21 @@ export function createAiSuggestionProvider(input: FactoryInput = {}): AiSuggesti
     }),
   });
 
-  return new GuardrailedAiSuggestionProvider({
-    providerName: "openai_compat",
-    provider: llmProvider,
-    fallbackProviderName: "heuristic",
-    fallbackProvider: heuristicFallbackProvider,
-    guardrailPolicy: readAiSuggestionGuardrailPolicy("openai_compat", env),
-  });
+  return {
+    provider: new GuardrailedAiSuggestionProvider({
+      providerName: "openai_compat",
+      provider: llmProvider,
+      fallbackProviderName: "heuristic",
+      fallbackProvider: heuristicFallbackProvider,
+      guardrailPolicy: readAiSuggestionGuardrailPolicy("openai_compat", env),
+    }),
+    auditProfile: createOpenAiAuditProfile({
+      requestedMode: mode,
+      promptVersion,
+    }),
+  };
+}
+
+export function createAiSuggestionProvider(input: FactoryInput = {}): AiSuggestionProvider {
+  return createAiSuggestionProviderBundle(input).provider;
 }

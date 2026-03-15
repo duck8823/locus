@@ -1,6 +1,10 @@
 import { GetReviewWorkspaceUseCase } from "@/server/application/usecases/get-review-workspace";
 import { buildAiSuggestionPayload } from "@/server/application/ai/build-ai-suggestion-payload";
 import {
+  AI_SUGGESTION_REDACTION_POLICY_VERSION,
+  redactAiSuggestionPayload,
+} from "@/server/application/ai/ai-suggestion-redaction-policy";
+import {
   type AiSuggestion,
   type AiSuggestionPayload,
 } from "@/server/application/ai/ai-suggestion-types";
@@ -82,6 +86,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     businessContextProvider,
     connectionTokenRepository,
     aiSuggestionProvider,
+    aiSuggestionAuditProfile,
   } = getDependencies();
   const useCase = new GetReviewWorkspaceUseCase({ reviewSessionRepository });
   const reviewSession = await useCase.execute({ reviewId });
@@ -257,6 +262,15 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       href: item.href,
     })),
   });
+  const aiSuggestionAudit = {
+    generatedAt: aiSuggestionPayload.generatedAt,
+    provider: aiSuggestionAuditProfile.provider,
+    fallbackProvider: aiSuggestionAuditProfile.fallbackProvider,
+    requestedMode: aiSuggestionAuditProfile.requestedMode,
+    promptTemplateId: aiSuggestionAuditProfile.promptTemplateId,
+    promptVersion: aiSuggestionAuditProfile.promptVersion,
+    redactionPolicyVersion: AI_SUGGESTION_REDACTION_POLICY_VERSION,
+  } as const;
   let aiSuggestions: AiSuggestion[];
 
   try {
@@ -269,6 +283,8 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
       reviewId: workspace.reviewId,
       errorType,
       message: error instanceof Error ? error.message : String(error),
+      audit: aiSuggestionAudit,
+      payload: redactAiSuggestionPayload(aiSuggestionPayload),
     });
     aiSuggestions = buildAiSuggestionFailureFallback({
       payload: aiSuggestionPayload,
@@ -290,7 +306,8 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     analysisHistory: analysisJobHistory.history,
     dogfoodingMetrics: analysisJobHistory.metrics,
     queueHealth: analysisJobHistory.queueHealth,
-    aiSuggestionPayload,
+    aiSuggestionPayload: redactAiSuggestionPayload(aiSuggestionPayload),
+    aiSuggestionAudit,
     aiSuggestions,
     reanalysisStatus: effectiveReanalysisState.reanalysisStatus,
     lastReanalyzeRequestedAt: effectiveReanalysisState.lastReanalyzeRequestedAt,

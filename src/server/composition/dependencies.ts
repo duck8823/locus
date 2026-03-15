@@ -3,7 +3,7 @@ import { SqliteConnectionStateRepository } from "@/server/infrastructure/db/sqli
 import { FileConnectionTokenRepository } from "@/server/infrastructure/db/file-connection-token-repository";
 import { FileOAuthStateRepository } from "@/server/infrastructure/db/file-oauth-state-repository";
 import { PrototypeConnectionProviderCatalog } from "@/server/application/services/connection-catalog";
-import { createAiSuggestionProvider } from "@/server/infrastructure/ai/create-ai-suggestion-provider";
+import { createAiSuggestionProviderBundle } from "@/server/infrastructure/ai/create-ai-suggestion-provider";
 import { LiveBusinessContextProvider } from "@/server/infrastructure/context/live-business-context-provider";
 import { StubBusinessContextProvider } from "@/server/infrastructure/context/stub-business-context-provider";
 import { GitHubIssueContextProvider } from "@/server/infrastructure/github/github-issue-context-provider";
@@ -44,7 +44,9 @@ const connectionProviderCatalog = new PrototypeConnectionProviderCatalog();
 const connectionTokenRepository = new FileConnectionTokenRepository();
 const oauthStateRepository = new FileOAuthStateRepository();
 const oauthCodeExchangeProvider = new GitHubOAuthCodeExchangeProvider();
-const aiSuggestionProvider = createAiSuggestionProvider();
+const aiSuggestionProviderBundle = createAiSuggestionProviderBundle();
+const aiSuggestionProvider = aiSuggestionProviderBundle.provider;
+const aiSuggestionAuditProfile = aiSuggestionProviderBundle.auditProfile;
 const issueContextProvider = new GitHubIssueContextProvider();
 const businessContextProvider = new LiveBusinessContextProvider({
   issueContextProvider,
@@ -88,6 +90,7 @@ export function getDependencies() {
     oauthCodeExchangeProvider,
     businessContextProvider,
     aiSuggestionProvider,
+    aiSuggestionAuditProfile,
     issueContextProvider,
     analysisJobScheduler,
     parserAdapters,

@@ -95,6 +95,13 @@ describe("loadReviewWorkspaceDto", () => {
       aiSuggestionProvider: {
         generateSuggestions: generateSuggestionsMock,
       },
+      aiSuggestionAuditProfile: {
+        requestedMode: "heuristic",
+        provider: "heuristic",
+        fallbackProvider: "heuristic",
+        promptTemplateId: "heuristic.rule_set.v1",
+        promptVersion: "heuristic.v1",
+      },
     });
     executeMock.mockResolvedValue({
       id: "review-session",
@@ -123,6 +130,7 @@ describe("loadReviewWorkspaceDto", () => {
       },
       queueHealth: null,
       aiSuggestionPayload: null,
+      aiSuggestionAudit: null,
       aiSuggestions: [],
       businessContext: {
         generatedAt: "2026-03-12T00:00:00.000Z",
@@ -209,10 +217,19 @@ describe("loadReviewWorkspaceDto", () => {
     expect(dto.aiSuggestionPayload).toMatchObject({
       review: {
         reviewId: "review-1",
+        title: expect.stringMatching(/^\[redacted:/),
       },
       semanticContext: {
         totalCount: 0,
       },
+    });
+    expect(dto.aiSuggestionAudit).toMatchObject({
+      provider: "heuristic",
+      requestedMode: "heuristic",
+      fallbackProvider: "heuristic",
+      promptTemplateId: "heuristic.rule_set.v1",
+      promptVersion: "heuristic.v1",
+      redactionPolicyVersion: "ai_suggestion_redaction.v1",
     });
     expect(dto.aiSuggestions[0]).toMatchObject({
       suggestionId: "baseline-manual-review",
@@ -354,6 +371,13 @@ describe("loadReviewWorkspaceDto", () => {
       aiSuggestionProvider: {
         generateSuggestions: generateSuggestionsMock,
       },
+      aiSuggestionAuditProfile: {
+        requestedMode: "heuristic",
+        provider: "heuristic",
+        fallbackProvider: "heuristic",
+        promptTemplateId: "heuristic.rule_set.v1",
+        promptVersion: "heuristic.v1",
+      },
     });
 
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
@@ -475,6 +499,13 @@ describe("loadReviewWorkspaceDto", () => {
       aiSuggestionProvider: {
         generateSuggestions: generateSuggestionsMock,
       },
+      aiSuggestionAuditProfile: {
+        requestedMode: "heuristic",
+        provider: "heuristic",
+        fallbackProvider: "heuristic",
+        promptTemplateId: "heuristic.rule_set.v1",
+        promptVersion: "heuristic.v1",
+      },
     });
 
     const dto = await loadReviewWorkspaceDto({ reviewId: "review-1" });
@@ -531,6 +562,13 @@ describe("loadReviewWorkspaceDto", () => {
       },
       aiSuggestionProvider: {
         generateSuggestions: generateSuggestionsMock,
+      },
+      aiSuggestionAuditProfile: {
+        requestedMode: "heuristic",
+        provider: "heuristic",
+        fallbackProvider: "heuristic",
+        promptTemplateId: "heuristic.rule_set.v1",
+        promptVersion: "heuristic.v1",
       },
     });
 
@@ -602,6 +640,13 @@ describe("loadReviewWorkspaceDto", () => {
       aiSuggestionProvider: {
         generateSuggestions: generateSuggestionsMock,
       },
+      aiSuggestionAuditProfile: {
+        requestedMode: "heuristic",
+        provider: "heuristic",
+        fallbackProvider: "heuristic",
+        promptTemplateId: "heuristic.rule_set.v1",
+        promptVersion: "heuristic.v1",
+      },
     });
     executeMock.mockResolvedValueOnce({
       id: "review-session",
@@ -660,6 +705,15 @@ describe("loadReviewWorkspaceDto", () => {
         reviewId: "review-1",
         errorType: "temporary",
         message: "rate limited",
+        audit: expect.objectContaining({
+          promptVersion: "heuristic.v1",
+          redactionPolicyVersion: "ai_suggestion_redaction.v1",
+        }),
+        payload: expect.objectContaining({
+          review: expect.objectContaining({
+            title: expect.stringMatching(/^\[redacted:/),
+          }),
+        }),
       }),
     );
     consoleErrorSpy.mockRestore();
@@ -685,6 +739,15 @@ describe("loadReviewWorkspaceDto", () => {
         reviewId: "review-1",
         errorType: "permanent",
         message: "invalid response schema",
+        audit: expect.objectContaining({
+          promptVersion: "heuristic.v1",
+          redactionPolicyVersion: "ai_suggestion_redaction.v1",
+        }),
+        payload: expect.objectContaining({
+          review: expect.objectContaining({
+            title: expect.stringMatching(/^\[redacted:/),
+          }),
+        }),
       }),
     );
     consoleErrorSpy.mockRestore();
@@ -720,6 +783,13 @@ describe("loadReviewWorkspaceDto", () => {
       },
       aiSuggestionProvider: {
         generateSuggestions: generateSuggestionsMock,
+      },
+      aiSuggestionAuditProfile: {
+        requestedMode: "heuristic",
+        provider: "heuristic",
+        fallbackProvider: "heuristic",
+        promptTemplateId: "heuristic.rule_set.v1",
+        promptVersion: "heuristic.v1",
       },
     });
     executeMock.mockResolvedValueOnce({
