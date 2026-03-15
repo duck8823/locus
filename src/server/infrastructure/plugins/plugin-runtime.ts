@@ -4,6 +4,7 @@ import {
   isCodeHostPlugin,
   validatePluginActivationResult,
   validatePluginManifest,
+  type PluginCapabilityKind,
   type CodeHostPlugin,
   type PluginActivationResult,
   type PluginCapabilityBinding,
@@ -15,6 +16,10 @@ import {
   type PullRequestSourceProvider,
   type PullRequestSourceRef,
 } from "@/server/application/ports/pull-request-snapshot-provider";
+import {
+  createPluginCapabilityPolicy,
+  type PluginCapabilityPolicy,
+} from "@/server/infrastructure/plugins/plugin-capability-policy";
 
 export type PluginLoadStatus = "active" | "disabled" | "skipped";
 
@@ -35,6 +40,7 @@ export interface PluginRuntimeOptions {
   importModule?: (specifier: string) => Promise<unknown>;
   logger?: PluginRuntimeLogger;
   shouldDisableOnCapabilityError?: (error: unknown) => boolean;
+  capabilityPolicy?: PluginCapabilityPolicy;
 }
 
 interface LoadedPluginState {
@@ -49,6 +55,11 @@ interface LoadedPluginState {
 interface PullRequestCapabilityRegistration {
   pluginId: string;
   implementation: ProviderAgnosticPullRequestSnapshotProvider;
+}
+
+interface DeniedPullRequestCapabilityRecord {
+  reason: "allowlist" | "denylist";
+  key: string;
 }
 
 const noopLogger: PluginRuntimeLogger = {
@@ -119,14 +130,33 @@ export class PluginCapabilityUnavailableError extends Error {
   }
 }
 
+export class PluginCapabilityDeniedError extends Error {
+  constructor(
+    readonly capability: PluginCapabilityKind,
+    readonly provider: PullRequestSourceProvider,
+    readonly reason: "allowlist" | "denylist",
+    readonly key: string,
+  ) {
+    super(
+      `Plugin capability denied by policy (${capability}:${provider}, reason=${reason}, key=${key})`,
+    );
+    this.name = "PluginCapabilityDeniedError";
+  }
+}
+
 export class PluginRuntime {
   private readonly moduleImporter: (specifier: string) => Promise<unknown>;
   private readonly logger: PluginRuntimeLogger;
   private readonly shouldDisableOnCapabilityError: (error: unknown) => boolean;
+  private readonly capabilityPolicy: PluginCapabilityPolicy;
   private readonly plugins = new Map<string, LoadedPluginState>();
   private readonly pullRequestCapabilityByProvider = new Map<
     PullRequestSourceProvider,
     PullRequestCapabilityRegistration
+  >();
+  private readonly deniedPullRequestCapabilityByProvider = new Map<
+    PullRequestSourceProvider,
+    DeniedPullRequestCapabilityRecord
   >();
 
   constructor(options: PluginRuntimeOptions = {}) {
@@ -135,6 +165,12 @@ export class PluginRuntime {
     this.shouldDisableOnCapabilityError =
       options.shouldDisableOnCapabilityError ??
       ((error: unknown) => !isCrossModuleAuthError(error));
+    this.capabilityPolicy =
+      options.capabilityPolicy ??
+      createPluginCapabilityPolicy({
+        allowlist: process.env.LOCUS_PLUGIN_CAPABILITY_ALLOWLIST,
+        denylist: process.env.LOCUS_PLUGIN_CAPABILITY_DENYLIST,
+      });
   }
 
   async loadFromModulePaths(input: {
@@ -284,6 +320,21 @@ export class PluginRuntime {
       };
     }
 
+    const deniedCapability = this.findDeniedCapability(activationResult.capabilities);
+
+    if (deniedCapability) {
+      abortController.abort();
+      await this.safeDeactivate(activationResult.deactivate);
+      this.registerDeniedCapability(deniedCapability);
+
+      return {
+        pluginId,
+        source: input.source,
+        status: "disabled",
+        reason: `capability_denied_by_policy:${deniedCapability.kind}:${deniedCapability.provider}:${deniedCapability.reason}`,
+      };
+    }
+
     this.plugins.set(pluginId, {
       pluginId,
       deactivate: activationResult.deactivate,
@@ -295,6 +346,7 @@ export class PluginRuntime {
 
     for (const capability of activationResult.capabilities) {
       if (capability.kind === "pull-request-snapshot-provider") {
+        this.deniedPullRequestCapabilityByProvider.delete(capability.provider);
         this.pullRequestCapabilityByProvider.set(capability.provider, {
           pluginId,
           implementation: capability.implementation,
@@ -328,6 +380,17 @@ export class PluginRuntime {
         const registration = this.pullRequestCapabilityByProvider.get(input.source.provider);
 
         if (!registration) {
+          const denied = this.deniedPullRequestCapabilityByProvider.get(input.source.provider);
+
+          if (denied) {
+            throw new PluginCapabilityDeniedError(
+              "pull-request-snapshot-provider",
+              input.source.provider,
+              denied.reason,
+              denied.key,
+            );
+          }
+
           throw new PluginCapabilityUnavailableError(
             "pull-request-snapshot-provider",
             input.source.provider,
@@ -406,5 +469,44 @@ export class PluginRuntime {
     }
 
     return null;
+  }
+
+  private findDeniedCapability(capabilities: PluginCapabilityBinding[]): {
+    kind: PluginCapabilityKind;
+    provider: PullRequestSourceProvider;
+    reason: "allowlist" | "denylist";
+    key: string;
+  } | null {
+    for (const capability of capabilities) {
+      const decision = this.capabilityPolicy.evaluate({
+        kind: capability.kind,
+        provider: capability.provider,
+      });
+
+      if (!decision.allowed) {
+        return {
+          kind: capability.kind,
+          provider: capability.provider,
+          reason: decision.reason,
+          key: decision.key,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private registerDeniedCapability(input: {
+    kind: PluginCapabilityKind;
+    provider: PullRequestSourceProvider;
+    reason: "allowlist" | "denylist";
+    key: string;
+  }): void {
+    if (input.kind === "pull-request-snapshot-provider") {
+      this.deniedPullRequestCapabilityByProvider.set(input.provider, {
+        reason: input.reason,
+        key: input.key,
+      });
+    }
   }
 }

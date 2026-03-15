@@ -6,8 +6,10 @@ import {
 import { PullRequestProviderAuthError } from "@/server/application/ports/pull-request-snapshot-provider";
 import {
   PluginCapabilityUnavailableError,
+  PluginCapabilityDeniedError,
   PluginRuntime,
 } from "@/server/infrastructure/plugins/plugin-runtime";
+import { createPluginCapabilityPolicy } from "@/server/infrastructure/plugins/plugin-capability-policy";
 import { sampleCodeHostPlugin } from "@/server/infrastructure/plugins/sample/sample-codehost-plugin";
 
 describe("PluginRuntime", () => {
@@ -221,6 +223,60 @@ describe("PluginRuntime", () => {
       pluginId: "auth.foreign.plugin",
       status: "active",
       reason: null,
+    });
+  });
+
+  it("blocks plugin capability by denylist policy and returns typed diagnostics", async () => {
+    const runtime = new PluginRuntime({
+      capabilityPolicy: createPluginCapabilityPolicy({
+        denylist: "pull-request-snapshot-provider:sample",
+      }),
+    });
+
+    const record = await runtime.loadPlugin({
+      plugin: sampleCodeHostPlugin,
+      source: "sample-denied",
+    });
+    const provider = runtime.createPullRequestSnapshotProvider();
+
+    expect(record).toMatchObject({
+      status: "disabled",
+      reason: "capability_denied_by_policy:pull-request-snapshot-provider:sample:denylist",
+    });
+
+    await expect(
+      provider.fetchPullRequestSnapshots({
+        reviewId: "review-1",
+        source: {
+          provider: "sample",
+          owner: "duck8823",
+          repository: "locus",
+          pullRequestNumber: 1,
+        },
+      }),
+    ).rejects.toMatchObject({
+      name: "PluginCapabilityDeniedError",
+      capability: "pull-request-snapshot-provider",
+      provider: "sample",
+      reason: "denylist",
+    } satisfies Partial<PluginCapabilityDeniedError>);
+  });
+
+  it("blocks undeclared provider by allowlist policy", async () => {
+    const runtime = new PluginRuntime({
+      capabilityPolicy: createPluginCapabilityPolicy({
+        allowlist: "pull-request-snapshot-provider:github",
+      }),
+    });
+
+    const record = await runtime.loadPlugin({
+      plugin: sampleCodeHostPlugin,
+      source: "sample-allowlist-blocked",
+    });
+
+    expect(record).toMatchObject({
+      status: "disabled",
+      reason: "capability_denied_by_policy:pull-request-snapshot-provider:sample:allowlist",
     });
   });
 });
