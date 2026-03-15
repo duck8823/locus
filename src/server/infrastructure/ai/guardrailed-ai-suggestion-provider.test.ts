@@ -298,6 +298,41 @@ describe("GuardrailedAiSuggestionProvider", () => {
     expectGuardrailReason(logger, "provider_temporary_error");
   });
 
+  it("does not invoke fallback when caller abort signal is already aborted", async () => {
+    const abortController = new AbortController();
+    abortController.abort("caller canceled");
+
+    const primaryProvider: AiSuggestionProvider = {
+      generateSuggestions: vi.fn().mockResolvedValue(createSuggestions("primary")),
+    };
+    const fallbackProvider: AiSuggestionProvider = {
+      generateSuggestions: vi.fn().mockResolvedValue(createSuggestions("fallback")),
+    };
+    const logger = createLoggerSpies();
+
+    const provider = new GuardrailedAiSuggestionProvider({
+      providerName: "llm_primary",
+      provider: primaryProvider,
+      fallbackProviderName: "heuristic_fallback",
+      fallbackProvider,
+      guardrailPolicy: {
+        timeoutMs: 1000,
+      },
+      logger,
+    });
+
+    await expect(
+      provider.generateSuggestions({
+        payload: createPayload(),
+        abortSignal: abortController.signal,
+      }),
+    ).rejects.toBeInstanceOf(AiSuggestionProviderTemporaryError);
+
+    expect(primaryProvider.generateSuggestions).not.toHaveBeenCalled();
+    expect(fallbackProvider.generateSuggestions).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it("propagates permanent provider errors", async () => {
     const primaryProvider: AiSuggestionProvider = {
       generateSuggestions: vi

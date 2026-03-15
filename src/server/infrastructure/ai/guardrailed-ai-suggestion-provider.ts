@@ -200,6 +200,13 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
     payload: AiSuggestionPayload;
     abortSignal?: AbortSignal;
   }): Promise<AiSuggestion[]> {
+    if (input.abortSignal?.aborted) {
+      throw new AiSuggestionProviderTemporaryError(
+        "AI suggestion generation was aborted by caller.",
+        input.abortSignal.reason,
+      );
+    }
+
     const estimatedInputTokens = estimateAiSuggestionInputTokens(input.payload);
     const estimatedInputCostUsd = estimateAiSuggestionInputCostUsd({
       estimatedInputTokens,
@@ -247,6 +254,13 @@ export class GuardrailedAiSuggestionProvider implements AiSuggestionProvider {
           ),
       });
     } catch (error) {
+      if (input.abortSignal?.aborted) {
+        throw new AiSuggestionProviderTemporaryError(
+          "AI suggestion generation was aborted by caller.",
+          error,
+        );
+      }
+
       if (error instanceof AiSuggestionGuardrailTriggeredError) {
         return this.generateFallbackSuggestions({
           payload: input.payload,
