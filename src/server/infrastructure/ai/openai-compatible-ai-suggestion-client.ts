@@ -3,6 +3,7 @@ import {
   AiSuggestionProviderTemporaryError,
 } from "@/server/application/ports/ai-suggestion-provider";
 import type { LlmAiSuggestionClient, LlmAiSuggestionClientInput } from "@/server/infrastructure/ai/llm-ai-suggestion-provider";
+import { resolvePromptTemplate } from "@/server/application/ai/prompt-templates/resolve-prompt-template";
 
 interface OpenAiCompatibleChatChoiceMessage {
   content?: unknown;
@@ -86,26 +87,6 @@ function extractChatCompletionContent(response: unknown): string {
   );
 }
 
-function buildSystemInstruction(promptVersion: string): string {
-  return [
-    `You are Locus AI reviewer assistant (${promptVersion}).`,
-    "Return JSON only.",
-    "Output shape:",
-    "{",
-    '  "suggestions": [',
-    "    {",
-    '      "suggestionId": string,',
-    '      "category": "semantic" | "architecture" | "business" | "general",',
-    '      "confidence": "high" | "medium" | "low",',
-    '      "headline": string,',
-    '      "recommendation": string,',
-    '      "rationale": string[]',
-    "    }",
-    "  ]",
-    "}",
-    "Do not include markdown fences.",
-  ].join("\n");
-}
 
 export class OpenAiCompatibleAiSuggestionClient implements LlmAiSuggestionClient {
   private readonly endpointUrl: string;
@@ -128,6 +109,7 @@ export class OpenAiCompatibleAiSuggestionClient implements LlmAiSuggestionClient
       headers["OpenAI-Project"] = this.input.project;
     }
 
+    const template = resolvePromptTemplate(input.promptVersion);
     const requestBody = {
       model: this.input.model,
       response_format: { type: "json_object" },
@@ -135,14 +117,11 @@ export class OpenAiCompatibleAiSuggestionClient implements LlmAiSuggestionClient
       messages: [
         {
           role: "system",
-          content: buildSystemInstruction(input.promptVersion),
+          content: template.buildSystemInstruction(),
         },
         {
           role: "user",
-          content: JSON.stringify({
-            promptVersion: input.promptVersion,
-            payload: input.payload,
-          }),
+          content: template.buildUserMessage(input.payload),
         },
       ],
     };
