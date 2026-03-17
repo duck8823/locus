@@ -27,7 +27,8 @@
     "react-dom": "19.2.3",
     "tree-sitter-go": "^0.25.0",
     "tree-sitter-python": "^0.25.0",
-    "web-tree-sitter": "^0.26.7"
+    "web-tree-sitter": "^0.26.7",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",

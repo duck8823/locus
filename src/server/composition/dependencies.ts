@@ -18,6 +18,7 @@ import { FallbackLineParserAdapter } from "@/server/infrastructure/parser/fallba
 import { ParserAdapterRegistry } from "@/server/application/services/parser-adapter-registry";
 import { RunScheduledAnalysisJobUseCase } from "@/server/application/usecases/run-scheduled-analysis-job";
 import { FileAnalysisJobScheduler } from "@/server/infrastructure/queue/file-analysis-job-scheduler";
+import { getEnv } from "@/server/composition/env";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
 import type { ConnectionStateRepository } from "@/server/domain/repositories/connection-state-repository";
 import type {
@@ -28,42 +29,15 @@ import type { ConnectionTokenRepository } from "@/server/application/ports/conne
 import type { OAuthStateRepository } from "@/server/application/ports/oauth-state-repository";
 import type { AnalysisJobScheduler } from "@/server/application/ports/analysis-job-scheduler";
 
-function readOptionalNonNegativeIntegerEnv(name: string): number | undefined {
-  const value = process.env[name]?.trim();
-
-  if (!value) {
-    return undefined;
-  }
-
-  if (!/^\d+$/.test(value)) {
-    return undefined;
-  }
-
-  const parsed = Number(value);
-
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
-    return undefined;
-  }
-
-  return parsed;
-}
-
-function readFeatureFlagEnv(name: string): boolean {
-  const value = process.env[name]?.trim().toLowerCase();
-
-  return value === "1" || value === "true" || value === "yes" || value === "on";
-}
-
 function isPostgresMode(): boolean {
-  return !!process.env.DATABASE_URL;
+  return !!getEnv().DATABASE_URL;
 }
 
 function createFileDependencies() {
+  const env = getEnv();
   const reviewSessionRepository: ReviewSessionRepository = new FileReviewSessionRepository();
   const connectionStateRepository = new SqliteConnectionStateRepository({
-    maxTransitionsPerReviewer: readOptionalNonNegativeIntegerEnv(
-      "LOCUS_CONNECTION_TRANSITION_MAX_RETAINED",
-    ),
+    maxTransitionsPerReviewer: env.LOCUS_CONNECTION_TRANSITION_MAX_RETAINED,
   });
   const connectionStateTransitionRepository: ConnectionStateTransitionRepository &
     ConnectionStateTransitionTransactionalRepository = connectionStateRepository;
@@ -80,6 +54,7 @@ function createFileDependencies() {
 }
 
 async function createPostgresDependencies() {
+  const env = getEnv();
   const { getPostgresSql, runMigrations } = await import(
     "@/server/infrastructure/db/postgres/index"
   );
@@ -100,9 +75,7 @@ async function createPostgresDependencies() {
   await runMigrations(sql);
 
   const pgConnectionStateRepository = new PgConnectionStateRepository(sql, {
-    maxTransitionsPerReviewer: readOptionalNonNegativeIntegerEnv(
-      "LOCUS_CONNECTION_TRANSITION_MAX_RETAINED",
-    ),
+    maxTransitionsPerReviewer: env.LOCUS_CONNECTION_TRANSITION_MAX_RETAINED,
   });
 
   const reviewSessionRepository: ReviewSessionRepository = new PgReviewSessionRepository(sql);
@@ -125,6 +98,7 @@ async function createPostgresDependencies() {
 let dependenciesPromise: Promise<ReturnType<typeof buildDependencies>> | null = null;
 
 function buildDependencies() {
+  const env = getEnv();
   const connectionProviderCatalog = new PrototypeConnectionProviderCatalog();
   const oauthCodeExchangeProvider = new GitHubOAuthCodeExchangeProvider();
   const aiSuggestionProviderBundle = createAiSuggestionProviderBundle();
@@ -147,7 +121,7 @@ function buildDependencies() {
     new DefaultProviderAgnosticPullRequestSnapshotProvider({
       githubProvider: githubPullRequestSnapshotProvider,
       gitlabProvider: gitlabPullRequestSnapshotProvider,
-      enableGitLabAdapter: readFeatureFlagEnv("LOCUS_ENABLE_GITLAB_ADAPTER"),
+      enableGitLabAdapter: env.LOCUS_ENABLE_GITLAB_ADAPTER,
     });
   const pullRequestSnapshotProvider = githubPullRequestSnapshotProvider;
 
@@ -165,6 +139,7 @@ function buildDependencies() {
 }
 
 async function initializeDependencies() {
+  const env = getEnv();
   const shared = buildDependencies();
 
   let dbDeps: Awaited<ReturnType<typeof createFileDependencies | typeof createPostgresDependencies>>;
@@ -190,11 +165,9 @@ async function initializeDependencies() {
     });
 
     analysisJobScheduler = new PgAnalysisJobScheduler(pgDeps.sql, {
-      maxAttempts: readOptionalNonNegativeIntegerEnv("LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS"),
-      maxRetainedTerminalJobs: readOptionalNonNegativeIntegerEnv(
-        "LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS",
-      ),
-      staleRunningMs: readOptionalNonNegativeIntegerEnv("LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS"),
+      maxAttempts: env.LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS,
+      maxRetainedTerminalJobs: env.LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS,
+      staleRunningMs: env.LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS,
       onJob: async (job) => {
         await runScheduledAnalysisJobUseCase.execute({
           jobId: job.jobId,
@@ -219,11 +192,9 @@ async function initializeDependencies() {
     });
 
     analysisJobScheduler = new FileAnalysisJobScheduler({
-      maxAttempts: readOptionalNonNegativeIntegerEnv("LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS"),
-      maxRetainedTerminalJobs: readOptionalNonNegativeIntegerEnv(
-        "LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS",
-      ),
-      staleRunningMs: readOptionalNonNegativeIntegerEnv("LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS"),
+      maxAttempts: env.LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS,
+      maxRetainedTerminalJobs: env.LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS,
+      staleRunningMs: env.LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS,
       onJob: async (job) => {
         await runScheduledAnalysisJobUseCase.execute({
           jobId: job.jobId,
@@ -266,21 +237,22 @@ const fileRunScheduledAnalysisJobUseCase = fileDeps
   : null;
 
 const fileAnalysisJobScheduler = fileDeps
-  ? new FileAnalysisJobScheduler({
-      maxAttempts: readOptionalNonNegativeIntegerEnv("LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS"),
-      maxRetainedTerminalJobs: readOptionalNonNegativeIntegerEnv(
-        "LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS",
-      ),
-      staleRunningMs: readOptionalNonNegativeIntegerEnv("LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS"),
-      onJob: async (job) => {
-        await fileRunScheduledAnalysisJobUseCase!.execute({
-          jobId: job.jobId,
-          reviewId: job.reviewId,
-          requestedAt: job.requestedAt,
-          reason: job.reason,
-        });
-      },
-    })
+  ? (() => {
+      const env = getEnv();
+      return new FileAnalysisJobScheduler({
+        maxAttempts: env.LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS,
+        maxRetainedTerminalJobs: env.LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS,
+        staleRunningMs: env.LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS,
+        onJob: async (job) => {
+          await fileRunScheduledAnalysisJobUseCase!.execute({
+            jobId: job.jobId,
+            reviewId: job.reviewId,
+            requestedAt: job.requestedAt,
+            reason: job.reason,
+          });
+        },
+      });
+    })()
   : null;
 
 /**
