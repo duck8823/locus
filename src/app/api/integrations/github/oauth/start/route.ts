@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { PrepareGitHubOAuthStartUseCase } from "@/server/application/usecases/prepare-github-oauth-start";
 import { getDependencies } from "@/server/composition/dependencies";
 import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
-import { resolveReviewerId } from "@/server/presentation/actions/reviewer-identity";
+import { resolveAuthenticatedReviewerId } from "@/server/presentation/actions/reviewer-identity";
 
 const DEFAULT_REDIRECT_PATH = "/settings/connections";
 
@@ -51,7 +51,9 @@ export async function GET(request: Request): Promise<Response> {
   const scope = readOptionalEnvironmentVariable("GITHUB_OAUTH_SCOPE") || "repo read:org";
   const clientId = readOptionalEnvironmentVariable("GITHUB_OAUTH_CLIENT_ID");
   const cookieStore = await cookies();
-  const reviewerId = resolveReviewerId(cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value);
+  const { reviewerId } = await resolveAuthenticatedReviewerId(
+    cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value,
+  );
   const { oauthStateRepository } = getDependencies();
   const useCase = new PrepareGitHubOAuthStartUseCase({
     oauthStateRepository,
