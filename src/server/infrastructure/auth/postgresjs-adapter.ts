@@ -1,4 +1,4 @@
-import type { Adapter, AdapterUser, AdapterAccount, AdapterSession, VerificationToken } from "next-auth/adapters";
+import type { Adapter, AdapterUser, AdapterSession, VerificationToken } from "next-auth/adapters";
 import type { Sql } from "@/server/infrastructure/db/postgres/types";
 
 /**

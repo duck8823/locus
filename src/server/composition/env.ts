@@ -12,26 +12,6 @@ const optionalNonNegativeInteger = z
     return Number.isSafeInteger(n) && n >= 0 ? n : undefined;
   });
 
-const optionalPositiveInteger = z
-  .string()
-  .optional()
-  .transform((val) => {
-    const trimmed = val?.trim();
-    if (!trimmed) return undefined;
-    const n = Number(trimmed);
-    return Number.isSafeInteger(n) && n > 0 && String(n) === trimmed ? n : undefined;
-  });
-
-const optionalPositiveNumber = z
-  .string()
-  .optional()
-  .transform((val) => {
-    const trimmed = val?.trim();
-    if (!trimmed) return undefined;
-    const n = Number(trimmed);
-    return Number.isFinite(n) && n > 0 ? n : undefined;
-  });
-
 const featureFlag = z
   .string()
   .optional()
