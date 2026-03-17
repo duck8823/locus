@@ -12,15 +12,22 @@ function isPublicPath(pathname: string): boolean {
   return false;
 }
 
+function isAuthEnabled(): boolean {
+  return !!process.env.AUTH_SECRET;
+}
+
 export default auth((req) => {
+  // Skip auth enforcement when AUTH_SECRET is not configured (demo/CI mode)
+  if (!isAuthEnabled()) {
+    return NextResponse.next();
+  }
+
   const { pathname } = req.nextUrl;
 
-  // Allow public paths and static assets
   if (isPublicPath(pathname)) {
     return NextResponse.next();
   }
 
-  // Redirect unauthenticated users to login
   if (!req.auth) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
