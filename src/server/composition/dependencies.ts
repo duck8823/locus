@@ -12,6 +12,7 @@ import { GitHubPullRequestSnapshotProvider } from "@/server/infrastructure/githu
 import { GitHubOAuthCodeExchangeProvider } from "@/server/infrastructure/github/github-oauth-code-exchange-provider";
 import { GitLabPullRequestSnapshotProvider } from "@/server/infrastructure/gitlab/gitlab-pull-request-snapshot-provider";
 import { TypeScriptParserAdapter } from "@/server/infrastructure/parser/typescript-parser-adapter";
+import { ParserAdapterRegistry } from "@/server/application/services/parser-adapter-registry";
 import { RunScheduledAnalysisJobUseCase } from "@/server/application/usecases/run-scheduled-analysis-job";
 import { FileAnalysisJobScheduler } from "@/server/infrastructure/queue/file-analysis-job-scheduler";
 import type { ReviewSessionRepository } from "@/server/domain/repositories/review-session-repository";
@@ -131,7 +132,9 @@ function buildDependencies() {
     issueContextProvider,
     fallbackProvider: new StubBusinessContextProvider(),
   });
-  const parserAdapters = [new TypeScriptParserAdapter()];
+  const parserAdapterRegistry = new ParserAdapterRegistry();
+  parserAdapterRegistry.register(new TypeScriptParserAdapter());
+  const parserAdapters = parserAdapterRegistry.toArray();
   const githubPullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
   const gitlabPullRequestSnapshotProvider = new GitLabPullRequestSnapshotProvider();
   const providerAgnosticPullRequestSnapshotProvider =
