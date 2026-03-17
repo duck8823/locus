@@ -27,6 +27,7 @@ export interface ReviewSessionRecord {
   repositoryName: string;
   branchLabel: string;
   viewerName: string;
+  userId?: string;
   source?: ReviewSessionSource;
   selectedGroupId: string | null;
   groups: ReviewGroupRecord[];
@@ -52,6 +53,7 @@ export interface CreateReviewSessionParams {
   repositoryName: string;
   branchLabel: string;
   viewerName: string;
+  userId?: string;
   source?: ReviewSessionSource;
   groups: ReviewGroupRecord[];
   semanticChanges?: SemanticChange[];
@@ -208,6 +210,7 @@ export class ReviewSession {
       repositoryName: params.repositoryName,
       branchLabel: params.branchLabel,
       viewerName: params.viewerName,
+      userId: params.userId,
       source: cloneSource(params.source),
       selectedGroupId,
       groups: params.groups.map(cloneGroup),
@@ -277,6 +280,14 @@ export class ReviewSession {
 
   get viewerName(): string {
     return this.record.viewerName;
+  }
+
+  get userId(): string | undefined {
+    return this.record.userId;
+  }
+
+  setUserId(userId: string): void {
+    this.record.userId = userId;
   }
 
   markOpened(at: string, viewerName = this.record.viewerName): void {
