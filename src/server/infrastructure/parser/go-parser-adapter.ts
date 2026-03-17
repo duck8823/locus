@@ -5,7 +5,7 @@ import type {
   ParserDiffItem,
   ParserDiffResult,
 } from "@/server/application/ports/parser-adapter";
-import type { CodeRegionRef } from "@/server/domain/value-objects/semantic-change";
+
 import type { SourceSnapshot } from "@/server/domain/value-objects/source-snapshot";
 import { createParser, type TreeSitterNode } from "./tree-sitter-base";
 
@@ -136,7 +136,7 @@ function extractSignature(node: TreeSitterNode, source: string): string {
   return (lines[0] ?? "").trim();
 }
 
-function normalizeBody(node: TreeSitterNode, source: string): string {
+function normalizeBody(node: TreeSitterNode, _source: string): string {
   const bodyNode = node.childForFieldName("body") ?? node.childForFieldName("type");
 
   if (!bodyNode) {

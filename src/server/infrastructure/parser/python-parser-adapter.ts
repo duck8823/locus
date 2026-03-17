@@ -5,7 +5,7 @@ import type {
   ParserDiffItem,
   ParserDiffResult,
 } from "@/server/application/ports/parser-adapter";
-import type { CodeRegionRef } from "@/server/domain/value-objects/semantic-change";
+
 import type { SourceSnapshot } from "@/server/domain/value-objects/source-snapshot";
 import { createParser, type TreeSitterNode } from "./tree-sitter-base";
 
@@ -141,7 +141,6 @@ function extractSingleDefinition(
   } else if (node.type === "function_definition") {
     const isMethod = containerPath.length > 0;
     const kind = isMethod ? "method" : "function";
-    const scope = isMethod ? "instance" : undefined;
     const prefix = containerPath.length > 0 ? `${containerPath.join("::")}::` : "<root>::";
 
     symbols.push({
@@ -173,7 +172,7 @@ function extractSignatureLine(node: TreeSitterNode, source: string): string {
   return (lines[0] ?? "").trim();
 }
 
-function normalizeBody(node: TreeSitterNode, source: string): string {
+function normalizeBody(node: TreeSitterNode, _source: string): string {
   const bodyNode = node.childForFieldName("body");
 
   if (!bodyNode) {

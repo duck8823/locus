@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ParserAdapterRegistry } from "./parser-adapter-registry";
-import type { ParserAdapter, ParsedSnapshot, ParserDiffResult, ParserCapabilities } from "@/server/application/ports/parser-adapter";
+import type { ParserAdapter } from "@/server/application/ports/parser-adapter";
 import type { SourceSnapshot } from "@/server/domain/value-objects/source-snapshot";
 
 function createStubAdapter(overrides: Partial<ParserAdapter> & { language: string; adapterName: string }): ParserAdapter {

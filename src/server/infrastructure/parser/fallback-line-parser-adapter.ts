@@ -64,7 +64,7 @@ function simpleHash(text: string): string {
   return hash.toString(36);
 }
 
-function detectSymbols(content: string, filePath: string): DetectedSymbol[] {
+function detectSymbols(content: string, _filePath: string): DetectedSymbol[] {
   const lines = content.split("\n");
   const symbols: DetectedSymbol[] = [];
   let currentContainer: string | undefined;
