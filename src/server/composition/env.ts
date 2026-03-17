@@ -61,6 +61,11 @@ export const envSchema = z.object({
   // Node
   NODE_ENV: z.enum(["development", "production", "test"]).optional(),
 
+  // Auth.js
+  AUTH_SECRET: optionalTrimmed,
+  AUTH_GITHUB_ID: optionalTrimmed,
+  AUTH_GITHUB_SECRET: optionalTrimmed,
+
   // Database
   DATABASE_URL: optionalTrimmed,
 
@@ -138,6 +143,8 @@ const SECRET_KEYS: ReadonlySet<string> = new Set([
   "CONFLUENCE_ACCESS_TOKEN",
   "LOCUS_AI_SUGGESTION_OPENAI_API_KEY",
   "LOCUS_AI_SUGGESTION_ANTHROPIC_API_KEY",
+  "AUTH_SECRET",
+  "AUTH_GITHUB_SECRET",
 ]);
 
 function maskValue(key: string, value: unknown): string {
