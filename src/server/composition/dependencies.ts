@@ -12,6 +12,7 @@ import { GitHubPullRequestSnapshotProvider } from "@/server/infrastructure/githu
 import { GitHubOAuthCodeExchangeProvider } from "@/server/infrastructure/github/github-oauth-code-exchange-provider";
 import { GitLabPullRequestSnapshotProvider } from "@/server/infrastructure/gitlab/gitlab-pull-request-snapshot-provider";
 import { TypeScriptParserAdapter } from "@/server/infrastructure/parser/typescript-parser-adapter";
+import { PythonParserAdapter } from "@/server/infrastructure/parser/python-parser-adapter";
 import { FallbackLineParserAdapter } from "@/server/infrastructure/parser/fallback-line-parser-adapter";
 import { ParserAdapterRegistry } from "@/server/application/services/parser-adapter-registry";
 import { RunScheduledAnalysisJobUseCase } from "@/server/application/usecases/run-scheduled-analysis-job";
@@ -135,6 +136,7 @@ function buildDependencies() {
   });
   const parserAdapterRegistry = new ParserAdapterRegistry();
   parserAdapterRegistry.register(new TypeScriptParserAdapter());
+  parserAdapterRegistry.register(new PythonParserAdapter());
   parserAdapterRegistry.register(new FallbackLineParserAdapter());
   const parserAdapters = parserAdapterRegistry.toArray();
   const githubPullRequestSnapshotProvider = new GitHubPullRequestSnapshotProvider();
