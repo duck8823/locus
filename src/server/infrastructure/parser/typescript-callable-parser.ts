@@ -1,0 +1,714 @@
+import ts from "typescript";
+import type { CodeRegionRef } from "@/server/domain/value-objects/semantic-change";
+import type { SourceSnapshot } from "@/server/domain/value-objects/source-snapshot";
+
+export interface ParsedTypeScriptSnapshotRaw {
+  callables: ParsedCallable[];
+}
+
+export type MethodScope = "instance" | "static";
+
+export interface ImportAliasContext {
+  namedImportAliases: Map<string, string>;
+}
+
+export interface ParsedCallable {
+  symbolKey: string;
+  displayName: string;
+  kind: "function" | "method";
+  container?: string;
+  methodScope?: MethodScope;
+  signatureSummary?: string;
+  bodySummary?: string;
+  normalizedSignature: string;
+  normalizedBody: string;
+  normalizedText: string;
+  region: CodeRegionRef;
+  references: string[];
+}
+
+function toScriptKind(filePath: string): ts.ScriptKind {
+  const normalized = filePath.toLowerCase();
+
+  if (normalized.endsWith(".tsx")) {
+    return ts.ScriptKind.TSX;
+  }
+
+  if (normalized.endsWith(".jsx")) {
+    return ts.ScriptKind.JSX;
+  }
+
+  if (
+    normalized.endsWith(".js") ||
+    normalized.endsWith(".mjs") ||
+    normalized.endsWith(".cjs")
+  ) {
+    return ts.ScriptKind.JS;
+  }
+
+  return ts.ScriptKind.TS;
+}
+
+function isTriviaToken(token: ts.SyntaxKind): boolean {
+  return (
+    token === ts.SyntaxKind.WhitespaceTrivia ||
+    token === ts.SyntaxKind.NewLineTrivia ||
+    token === ts.SyntaxKind.SingleLineCommentTrivia ||
+    token === ts.SyntaxKind.MultiLineCommentTrivia
+  );
+}
+
+function normalizeCode(text: string): string {
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, text);
+  let token = scanner.scan();
+  const normalizedTokens: string[] = [];
+
+  while (token !== ts.SyntaxKind.EndOfFileToken) {
+    if (!isTriviaToken(token)) {
+      normalizedTokens.push(scanner.getTokenText());
+    }
+
+    token = scanner.scan();
+  }
+
+  return JSON.stringify(normalizedTokens);
+}
+
+function toLineNumber(sourceFile: ts.SourceFile, position: number): number {
+  return sourceFile.getLineAndCharacterOfPosition(position).line + 1;
+}
+
+function toRegion(sourceFile: ts.SourceFile, node: ts.Node): CodeRegionRef {
+  return {
+    filePath: sourceFile.fileName,
+    startLine: toLineNumber(sourceFile, node.getStart(sourceFile)),
+    endLine: toLineNumber(sourceFile, node.getEnd()),
+  };
+}
+
+function readName(name: ts.PropertyName | ts.BindingName | ts.ModuleName | undefined): string | null {
+  if (!name) {
+    return null;
+  }
+
+  if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name)) {
+    return name.text;
+  }
+
+  if (ts.isStringLiteral(name) || ts.isNumericLiteral(name)) {
+    return name.text;
+  }
+
+  return name.getText();
+}
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+
+  while (true) {
+    if (
+      ts.isParenthesizedExpression(current) ||
+      ts.isAsExpression(current) ||
+      ts.isTypeAssertionExpression(current) ||
+      ts.isSatisfiesExpression(current) ||
+      ts.isNonNullExpression(current)
+    ) {
+      current = current.expression;
+      continue;
+    }
+
+    return current;
+  }
+}
+
+function readElementAccessName(argumentExpression: ts.Expression): string | null {
+  if (ts.isStringLiteral(argumentExpression)) {
+    return argumentExpression.text;
+  }
+
+  if (ts.isNoSubstitutionTemplateLiteral(argumentExpression)) {
+    return argumentExpression.text;
+  }
+
+  return null;
+}
+
+function normalizeMemberChain(expression: ts.Expression): string | null {
+  const normalizedExpression = unwrapExpression(expression);
+
+  if (ts.isIdentifier(normalizedExpression) || ts.isPrivateIdentifier(normalizedExpression)) {
+    return normalizedExpression.text;
+  }
+
+  if (normalizedExpression.kind === ts.SyntaxKind.ThisKeyword) {
+    return "this";
+  }
+
+  if (ts.isPropertyAccessExpression(normalizedExpression)) {
+    const base = normalizeMemberChain(normalizedExpression.expression);
+
+    if (!base) {
+      return null;
+    }
+
+    return `${base}.${normalizedExpression.name.text}`;
+  }
+
+  if (ts.isElementAccessExpression(normalizedExpression)) {
+    const base = normalizeMemberChain(normalizedExpression.expression);
+
+    if (!base || !normalizedExpression.argumentExpression) {
+      return null;
+    }
+
+    const segment = readElementAccessName(normalizedExpression.argumentExpression);
+
+    if (!segment) {
+      return null;
+    }
+
+    return `${base}.${segment}`;
+  }
+
+  return null;
+}
+
+function toSymbolKey(kind: "function" | "method", container: string, displayName: string): string {
+  if (kind === "method") {
+    return `method::${container.replace(/\./g, "::")}::static::${displayName}`;
+  }
+
+  return `function::<root>::${displayName}`;
+}
+
+function resolveCanonicalOwner(owner: string, importAliases: ImportAliasContext): string | null {
+  const [rootSegment, ...restSegments] = owner.split(".");
+
+  if (!rootSegment) {
+    return null;
+  }
+
+  const canonicalRoot = importAliases.namedImportAliases.get(rootSegment);
+
+  if (!canonicalRoot || canonicalRoot === rootSegment) {
+    return null;
+  }
+
+  return [canonicalRoot, ...restSegments].join(".");
+}
+
+function toReferenceSymbolKeys(expression: ts.Expression, importAliases: ImportAliasContext): string[] {
+  const normalizedExpression = unwrapExpression(expression);
+
+  if (ts.isIdentifier(normalizedExpression)) {
+    const keys = new Set<string>([toSymbolKey("function", "<root>", normalizedExpression.text)]);
+    const canonicalName = importAliases.namedImportAliases.get(normalizedExpression.text);
+
+    if (canonicalName && canonicalName !== normalizedExpression.text) {
+      keys.add(toSymbolKey("function", "<root>", canonicalName));
+    }
+
+    return [...keys];
+  }
+
+  if (ts.isPropertyAccessExpression(normalizedExpression)) {
+    const owner = normalizeMemberChain(normalizedExpression.expression);
+    const methodName = normalizedExpression.name.text;
+    const keys = new Set<string>([toSymbolKey("function", "<root>", methodName)]);
+    const canonicalOwner = owner ? resolveCanonicalOwner(owner, importAliases) : null;
+    const staticOwners = new Set<string>();
+
+    // Heuristic: treat owner-qualified references as type/container symbols only when
+    // the owner starts with an uppercase letter (e.g. UserService.updateProfile()).
+    // Instance calls like userService.updateProfile() stay on the root-function fallback.
+    // This is intentionally conservative until type-aware symbol resolution is added.
+    if (owner && owner !== "this" && /^[A-Z]/.test(owner)) {
+      staticOwners.add(owner);
+    }
+
+    if (canonicalOwner && canonicalOwner !== "this" && /^[A-Z]/.test(canonicalOwner)) {
+      staticOwners.add(canonicalOwner);
+    }
+
+    for (const staticOwner of staticOwners) {
+      keys.add(toSymbolKey("method", staticOwner, methodName));
+    }
+
+    return [...keys];
+  }
+
+  if (ts.isElementAccessExpression(normalizedExpression)) {
+    const owner = normalizeMemberChain(normalizedExpression.expression);
+
+    if (!normalizedExpression.argumentExpression) {
+      return [];
+    }
+
+    const memberName = readElementAccessName(normalizedExpression.argumentExpression);
+
+    if (!memberName) {
+      return [];
+    }
+
+    const keys = new Set<string>([toSymbolKey("function", "<root>", memberName)]);
+    const canonicalOwner = owner ? resolveCanonicalOwner(owner, importAliases) : null;
+    const staticOwners = new Set<string>();
+
+    if (owner && owner !== "this" && /^[A-Z]/.test(owner)) {
+      staticOwners.add(owner);
+    }
+
+    if (canonicalOwner && canonicalOwner !== "this" && /^[A-Z]/.test(canonicalOwner)) {
+      staticOwners.add(canonicalOwner);
+    }
+
+    for (const staticOwner of staticOwners) {
+      keys.add(toSymbolKey("method", staticOwner, memberName));
+    }
+
+    return [...keys];
+  }
+
+  if (ts.isCallExpression(normalizedExpression)) {
+    return toReferenceSymbolKeys(normalizedExpression.expression, importAliases);
+  }
+
+  return [];
+}
+
+function extractCallReferences(node: ts.Node | undefined, importAliases: ImportAliasContext): string[] {
+  if (!node) {
+    return [];
+  }
+
+  const references = new Set<string>();
+
+  const visit = (current: ts.Node) => {
+    if (ts.isCallExpression(current)) {
+      for (const reference of toReferenceSymbolKeys(current.expression, importAliases)) {
+        references.add(reference);
+      }
+    }
+
+    ts.forEachChild(current, visit);
+  };
+
+  visit(node);
+
+  return [...references].sort((a, b) => a.localeCompare(b));
+}
+
+function renderSignature(name: string, parameters: readonly ts.ParameterDeclaration[]): string {
+  const parameterNames = parameters.map((parameter) => parameter.name.getText()).join(", ");
+  return `${name}(${parameterNames})`;
+}
+
+function summarizeBody(body: ts.ConciseBody | undefined): string | undefined {
+  if (!body) {
+    return undefined;
+  }
+
+  if (ts.isBlock(body)) {
+    return `${body.statements.length} statement(s)`;
+  }
+
+  return "expression body";
+}
+
+function toContainerLabel(containerPath: string[]): string | undefined {
+  return containerPath.length > 0 ? containerPath.join("::") : undefined;
+}
+
+function createSymbolKey(params: {
+  kind: "function" | "method";
+  displayName: string;
+  containerPath: string[];
+  methodScope?: MethodScope;
+}): string {
+  if (params.kind === "method") {
+    return [
+      params.kind,
+      toContainerLabel(params.containerPath) ?? "<root>",
+      params.methodScope ?? "instance",
+      params.displayName,
+    ].join("::");
+  }
+
+  return [params.kind, toContainerLabel(params.containerPath) ?? "<root>", params.displayName].join("::");
+}
+
+function isCallableInitializer(
+  initializer: ts.Expression | undefined,
+): initializer is ts.ArrowFunction | ts.FunctionExpression {
+  return !!initializer && (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer));
+}
+
+function resolveCallableExpression(
+  expression: ts.Expression | undefined,
+): ts.ArrowFunction | ts.FunctionExpression | null {
+  if (!expression) {
+    return null;
+  }
+
+  let current: ts.Expression = expression;
+
+  while (true) {
+    if (isCallableInitializer(current)) {
+      return current;
+    }
+
+    if (ts.isParenthesizedExpression(current) || ts.isAsExpression(current) || ts.isTypeAssertionExpression(current)) {
+      current = current.expression;
+      continue;
+    }
+
+    if (ts.isSatisfiesExpression(current)) {
+      current = current.expression;
+      continue;
+    }
+
+    return null;
+  }
+}
+
+function hasDefaultModifier(node: { modifiers?: ts.NodeArray<ts.ModifierLike> }): boolean {
+  return node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword) ?? false;
+}
+
+function resolveClassContainerName(classDeclaration: ts.ClassDeclaration): string | null {
+  return readName(classDeclaration.name) ?? (hasDefaultModifier(classDeclaration) ? "default" : null);
+}
+
+function resolveFunctionDisplayName(functionDeclaration: ts.FunctionDeclaration): string | null {
+  return readName(functionDeclaration.name) ?? (hasDefaultModifier(functionDeclaration) ? "default" : null);
+}
+
+function inferMethodScope(node: ts.MethodDeclaration | ts.PropertyDeclaration): MethodScope {
+  return node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword)
+    ? "static"
+    : "instance";
+}
+
+function extractSignatureText(
+  sourceFile: ts.SourceFile,
+  signatureNode: ts.Node,
+  body: ts.ConciseBody | undefined,
+): string {
+  if (!body) {
+    // Used for declarations that have no executable body span. In those cases,
+    // the whole signature node text is the best available contract surface.
+    return signatureNode.getText(sourceFile);
+  }
+
+  const signatureStart = signatureNode.getStart(sourceFile);
+  const bodyStart = body.getStart(sourceFile);
+  return sourceFile.text.slice(signatureStart, bodyStart).trimEnd();
+}
+
+function createCallable(params: {
+  sourceFile: ts.SourceFile;
+  importAliases: ImportAliasContext;
+  kind: "function" | "method";
+  displayName: string;
+  containerPath: string[];
+  methodScope?: MethodScope;
+  parameters: readonly ts.ParameterDeclaration[];
+  signatureText: string;
+  body: ts.ConciseBody | undefined;
+  regionNode: ts.Node;
+}): ParsedCallable {
+  const signatureSummary = renderSignature(params.displayName, params.parameters);
+  const bodyText = params.body ? params.body.getText(params.sourceFile) : "";
+  const normalizedSignature = normalizeCode(params.signatureText);
+  const normalizedBody = normalizeCode(bodyText);
+
+  return {
+    symbolKey: createSymbolKey({
+      kind: params.kind,
+      displayName: params.displayName,
+      containerPath: params.containerPath,
+      methodScope: params.methodScope,
+    }),
+    displayName: params.displayName,
+    kind: params.kind,
+    container: toContainerLabel(params.containerPath),
+    methodScope: params.methodScope,
+    signatureSummary,
+    bodySummary: summarizeBody(params.body),
+    normalizedSignature,
+    normalizedBody,
+    normalizedText: `${normalizedSignature}=>${normalizedBody}`,
+    region: toRegion(params.sourceFile, params.regionNode),
+    references: extractCallReferences(params.body, params.importAliases),
+  };
+}
+
+function collectVariableCallableDeclarations(
+  sourceFile: ts.SourceFile,
+  importAliases: ImportAliasContext,
+  statement: ts.VariableStatement,
+  containerPath: string[],
+): ParsedCallable[] {
+  const callables: ParsedCallable[] = [];
+
+  for (const declaration of statement.declarationList.declarations) {
+    const callableInitializer = resolveCallableExpression(declaration.initializer);
+
+    if (!callableInitializer) {
+      continue;
+    }
+
+    const displayName = readName(declaration.name);
+
+    if (!displayName) {
+      continue;
+    }
+
+    callables.push(
+      createCallable({
+        sourceFile,
+        importAliases,
+        kind: "function",
+        displayName,
+        containerPath,
+        parameters: callableInitializer.parameters,
+        signatureText: extractSignatureText(sourceFile, declaration, callableInitializer.body),
+        body: callableInitializer.body,
+        regionNode: declaration,
+      }),
+    );
+  }
+
+  return callables;
+}
+
+function collectExportAssignmentCallable(
+  sourceFile: ts.SourceFile,
+  importAliases: ImportAliasContext,
+  statement: ts.ExportAssignment,
+  containerPath: string[],
+): ParsedCallable[] {
+  if (statement.isExportEquals) {
+    return [];
+  }
+
+  const callableExpression = resolveCallableExpression(statement.expression);
+
+  if (!callableExpression) {
+    return [];
+  }
+
+  return [
+    createCallable({
+      sourceFile,
+      importAliases,
+      kind: "function",
+      displayName: "default",
+      containerPath,
+      parameters: callableExpression.parameters,
+      signatureText: extractSignatureText(sourceFile, callableExpression, callableExpression.body),
+      body: callableExpression.body,
+      regionNode: statement,
+    }),
+  ];
+}
+
+function collectClassMemberCallables(
+  sourceFile: ts.SourceFile,
+  importAliases: ImportAliasContext,
+  classDeclaration: ts.ClassDeclaration,
+  containerPath: string[],
+): ParsedCallable[] {
+  const callables: ParsedCallable[] = [];
+
+  for (const member of classDeclaration.members) {
+    if (ts.isConstructorDeclaration(member)) {
+      callables.push(
+        createCallable({
+          sourceFile,
+          importAliases,
+          kind: "method",
+          displayName: "constructor",
+          containerPath,
+          methodScope: "instance",
+          parameters: member.parameters,
+          signatureText: extractSignatureText(sourceFile, member, member.body),
+          body: member.body,
+          regionNode: member,
+        }),
+      );
+      continue;
+    }
+
+    if (ts.isMethodDeclaration(member)) {
+      const displayName = readName(member.name);
+      const methodScope = inferMethodScope(member);
+
+      if (!displayName) {
+        continue;
+      }
+
+      callables.push(
+        createCallable({
+          sourceFile,
+          importAliases,
+          kind: "method",
+          displayName,
+          containerPath,
+          methodScope,
+          parameters: member.parameters,
+          signatureText: extractSignatureText(sourceFile, member, member.body),
+          body: member.body,
+          regionNode: member,
+        }),
+      );
+      continue;
+    }
+
+    if (ts.isPropertyDeclaration(member)) {
+      const callableInitializer = resolveCallableExpression(member.initializer);
+
+      if (!callableInitializer) {
+        continue;
+      }
+
+      const displayName = readName(member.name);
+
+      if (!displayName) {
+        continue;
+      }
+
+      callables.push(
+        createCallable({
+          sourceFile,
+          importAliases,
+          kind: "method",
+          displayName,
+          containerPath,
+          methodScope: inferMethodScope(member),
+          parameters: callableInitializer.parameters,
+          signatureText: extractSignatureText(sourceFile, member, callableInitializer.body),
+          body: callableInitializer.body,
+          regionNode: member,
+        }),
+      );
+    }
+  }
+
+  return callables;
+}
+
+function collectCallablesFromStatement(
+  sourceFile: ts.SourceFile,
+  importAliases: ImportAliasContext,
+  statement: ts.Statement | ts.ModuleDeclaration,
+  containerPath: string[],
+): ParsedCallable[] {
+  if (ts.isClassDeclaration(statement)) {
+    const classContainerName = resolveClassContainerName(statement);
+
+    if (!classContainerName) {
+      return [];
+    }
+
+    const classContainerPath = [...containerPath, classContainerName];
+    return collectClassMemberCallables(sourceFile, importAliases, statement, classContainerPath);
+  }
+
+  if (ts.isFunctionDeclaration(statement)) {
+    const displayName = resolveFunctionDisplayName(statement);
+
+    if (!displayName) {
+      return [];
+    }
+
+    return [
+      createCallable({
+        sourceFile,
+        importAliases,
+        kind: "function",
+        displayName,
+        containerPath,
+        parameters: statement.parameters,
+        signatureText: extractSignatureText(sourceFile, statement, statement.body),
+        body: statement.body,
+        regionNode: statement,
+      }),
+    ];
+  }
+
+  if (ts.isVariableStatement(statement)) {
+    return collectVariableCallableDeclarations(sourceFile, importAliases, statement, containerPath);
+  }
+
+  if (ts.isExportAssignment(statement)) {
+    return collectExportAssignmentCallable(sourceFile, importAliases, statement, containerPath);
+  }
+
+  if (ts.isModuleDeclaration(statement)) {
+    const moduleName = readName(statement.name);
+    const nextContainerPath = moduleName ? [...containerPath, moduleName] : containerPath;
+
+    if (!statement.body) {
+      return [];
+    }
+
+    if (ts.isModuleBlock(statement.body)) {
+      return statement.body.statements.flatMap((nestedStatement) =>
+        collectCallablesFromStatement(sourceFile, importAliases, nestedStatement, nextContainerPath),
+      );
+    }
+
+    if (ts.isModuleDeclaration(statement.body)) {
+      return collectCallablesFromStatement(sourceFile, importAliases, statement.body, nextContainerPath);
+    }
+
+    return [];
+  }
+
+  return [];
+}
+
+function collectImportAliases(sourceFile: ts.SourceFile): ImportAliasContext {
+  const namedImportAliases = new Map<string, string>();
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement)) {
+      continue;
+    }
+
+    const importClause = statement.importClause;
+    const namedBindings = importClause?.namedBindings;
+
+    if (!namedBindings || !ts.isNamedImports(namedBindings)) {
+      continue;
+    }
+
+    for (const element of namedBindings.elements) {
+      const localName = element.name.text;
+      const importedName = element.propertyName?.text ?? element.name.text;
+      namedImportAliases.set(localName, importedName);
+    }
+  }
+
+  return {
+    namedImportAliases,
+  };
+}
+
+export function collectCallables(snapshot: SourceSnapshot): ParsedCallable[] {
+  const sourceFile = ts.createSourceFile(
+    snapshot.filePath,
+    snapshot.content,
+    ts.ScriptTarget.Latest,
+    true,
+    toScriptKind(snapshot.filePath),
+  );
+  const importAliases = collectImportAliases(sourceFile);
+
+  const callables = sourceFile.statements.flatMap((statement) =>
+    collectCallablesFromStatement(sourceFile, importAliases, statement, []),
+  );
+
+  return callables.sort((a, b) => a.symbolKey.localeCompare(b.symbolKey));
+}
