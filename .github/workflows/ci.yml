@@ -145,3 +145,71 @@ jobs:
           name: ai-suggestion-evaluation
           path: artifacts/ai-suggestion-evaluation*
           if-no-files-found: error
+
+  preview-deploy:
+    name: Preview Deploy (Vercel)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint-typecheck-unit
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy to Vercel Preview
+        id: deploy
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-comment: true
+
+  migration-dry-run:
+    name: Migration Dry-Run
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: lint-typecheck-unit
+    if: github.event_name == 'pull_request'
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: locus_ci
+          POSTGRES_PASSWORD: locus_ci_password
+          POSTGRES_DB: locus_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U locus_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migration dry-run
+        env:
+          DATABASE_URL: postgres://locus_ci:locus_ci_password@localhost:5432/locus_ci
+        run: node scripts/migration-dry-run.mjs
+
+      - name: Verify migration applies cleanly
+        env:
+          DATABASE_URL: postgres://locus_ci:locus_ci_password@localhost:5432/locus_ci
+        run: node scripts/migration-apply-verify.mjs
