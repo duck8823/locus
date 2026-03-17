@@ -269,7 +269,7 @@ export async function loadReviewWorkspaceDto({ reviewId }: LoadReviewWorkspaceIn
     promptVersion: aiSuggestionAuditProfile.promptVersion,
     redactionPolicyVersion: AI_SUGGESTION_REDACTION_POLICY_VERSION,
   } as const;
-  let aiSuggestionProviderUsed: "heuristic" | "openai_compat" | null = null;
+  let aiSuggestionProviderUsed: "heuristic" | "openai_compat" | "anthropic" | null = null;
   let aiSuggestionFallbackApplied = false;
   let aiSuggestionReasonCode:
     | "timeout"
