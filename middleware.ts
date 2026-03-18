@@ -1,5 +1,4 @@
-import { auth } from "auth";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 
 const PUBLIC_PATHS = new Set(["/login", "/api/auth"]);
 
@@ -16,8 +15,8 @@ function isAuthEnabled(): boolean {
   return !!process.env.AUTH_SECRET;
 }
 
-export default auth((req) => {
-  // Skip auth enforcement when AUTH_SECRET is not configured (demo/CI mode)
+export default async function middleware(req: NextRequest) {
+  // Skip auth entirely when AUTH_SECRET is not configured (demo/CI mode)
   if (!isAuthEnabled()) {
     return NextResponse.next();
   }
@@ -28,14 +27,18 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  if (!req.auth) {
+  // Lazy import to avoid loading next-auth when auth is disabled
+  const { auth } = await import("auth");
+  const session = await auth();
+
+  if (!session) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: [
