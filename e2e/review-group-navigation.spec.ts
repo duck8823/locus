@@ -50,7 +50,7 @@ test("displays change groups with semantic change details", async ({ page }) => 
     page.getByRole("heading", { level: 2, name: /Change groups|変更グループ/ }),
   ).toBeVisible();
 
-  const groupCards = page.getByTestId(/^group-card-/);
+  const groupCards = page.getByTestId(/^group-button-/);
   const groupCount = await groupCards.count();
   expect(groupCount).toBeGreaterThan(0);
 });
@@ -58,7 +58,7 @@ test("displays change groups with semantic change details", async ({ page }) => 
 test("selects a group and shows detail pane", async ({ page }) => {
   await openSeedWorkspace(page);
 
-  const firstGroupCard = page.getByTestId(/^group-card-/).first();
+  const firstGroupCard = page.getByTestId(/^group-button-/).first();
   await expect(firstGroupCard).toBeVisible();
 
   await expect(
