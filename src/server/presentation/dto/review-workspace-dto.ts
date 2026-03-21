@@ -125,7 +125,7 @@ export interface ReviewWorkspaceAiSuggestionDto {
 
 export interface ReviewWorkspaceAiSuggestionAuditDto {
   generatedAt: string;
-  provider: "heuristic" | "openai_compat";
+  provider: "heuristic" | "openai_compat" | "anthropic";
   fallbackProvider: "heuristic";
   fallbackApplied: boolean;
   reasonCode:
@@ -134,7 +134,7 @@ export interface ReviewWorkspaceAiSuggestionAuditDto {
     | "estimated_input_cost_exceeded"
     | "provider_temporary_error"
     | null;
-  requestedMode: "heuristic" | "openai_compat";
+  requestedMode: "heuristic" | "openai_compat" | "anthropic";
   promptTemplateId: string;
   promptVersion: string;
   redactionPolicyVersion: string;

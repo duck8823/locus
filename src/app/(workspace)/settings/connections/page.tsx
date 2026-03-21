@@ -7,7 +7,7 @@ import type { ConnectionProviderKey } from "@/server/application/services/connec
 import { loadConnectionsWorkspaceDto } from "@/server/presentation/api/load-connections-workspace";
 import { listConnectionStateTransitions } from "@/server/presentation/api/list-connection-state-transitions";
 import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
-import { resolveReviewerId } from "@/server/presentation/actions/reviewer-identity";
+import { resolveAuthenticatedReviewerId } from "@/server/presentation/actions/reviewer-identity";
 import { setConnectionStateAction } from "@/server/presentation/actions/set-connection-state-action";
 import { setWorkspaceLocaleAction } from "@/server/presentation/actions/set-workspace-locale-action";
 import {
@@ -166,8 +166,8 @@ export default async function ConnectionsPage({
   });
   const copy = connectionsCopyByLocale[workspaceLocale];
   const viewerCookie = cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value;
+  const { reviewerId } = await resolveAuthenticatedReviewerId(viewerCookie);
   const viewerName = viewerCookie ?? copy.signedOut;
-  const reviewerId = resolveReviewerId(viewerCookie);
   const historyReason = parseHistoryReason(
     resolveSearchParamValue(resolvedSearchParams.historyReason),
   );

@@ -8,7 +8,7 @@ import { getDependencies } from "@/server/composition/dependencies";
 import { assertWritableConnectionStatus } from "@/server/domain/value-objects/connection-lifecycle-status";
 import { DEMO_VIEWER_COOKIE_NAME } from "@/server/presentation/actions/demo-viewer-cookie-name";
 import { readRequiredString } from "@/server/presentation/actions/read-required-string";
-import { resolveReviewerId } from "@/server/presentation/actions/reviewer-identity";
+import { resolveAuthenticatedReviewerId } from "@/server/presentation/actions/reviewer-identity";
 
 const MAX_CONNECTED_ACCOUNT_LABEL_LENGTH = 200;
 
@@ -46,7 +46,7 @@ function assertRelativeRedirectPath(value: string): string {
 
 export async function setConnectionStateAction(formData: FormData): Promise<void> {
   const cookieStore = await cookies();
-  const reviewerId = resolveReviewerId(
+  const { reviewerId } = await resolveAuthenticatedReviewerId(
     cookieStore.get(DEMO_VIEWER_COOKIE_NAME)?.value,
   );
   const provider = readRequiredString(formData, "provider");

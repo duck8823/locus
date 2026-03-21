@@ -13,6 +13,14 @@ export default defineConfig([
   ...nextVitals,
   ...nextTs,
   {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+    },
+  },
+  {
     files: ["src/app/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-imports": layerBoundaryRule([

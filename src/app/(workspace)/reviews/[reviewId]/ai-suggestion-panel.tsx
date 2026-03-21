@@ -99,7 +99,7 @@ export function AiSuggestionPanel(props: {
               : copy.text.aiDecisionNone;
 
         return (
-          <li key={suggestion.suggestionId} className={styles.aiSuggestionCard}>
+          <li key={suggestion.suggestionId} className={styles.aiSuggestionCard} data-testid={`ai-suggestion-${suggestion.suggestionId}`}>
             <div className={styles.semanticChangeHeader}>
               <strong>{localizedText.headline}</strong>
               <span className={styles.changeBadge} data-change-type="modified">
@@ -126,6 +126,7 @@ export function AiSuggestionPanel(props: {
               <button
                 type="button"
                 className={styles.statusButton}
+                data-testid={`ai-suggestion-adopt-${suggestion.suggestionId}`}
                 data-active={decision === "adopted"}
                 onClick={() => setDecision(suggestion.suggestionId, "adopted")}
               >
