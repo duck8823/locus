@@ -2,8 +2,11 @@
 
 > English: [0002-web-first-nextjs-typescript.md](0002-web-first-nextjs-typescript.md)
 
-- Status: Accepted
+- Status: Superseded by [ADR 0005](0005-rust-slint-native-rewrite.ja.md)
 - Date: 2026-03-07
+- Superseded: 2026-04-15
+
+> **Superseded.** 本 ADR は当初プロトタイプの Next.js + TypeScript web-first 方針を記録したものです。ADR 0005 により Rust + Slint ネイティブアプリへ転換しました。以下の決定は歴史参照として残していますが、新規の作業を拘束しません。
 
 ## Context
 

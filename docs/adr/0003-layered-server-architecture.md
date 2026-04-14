@@ -2,8 +2,11 @@
 
 > 日本語: [0003-layered-server-architecture.ja.md](0003-layered-server-architecture.ja.md)
 
-- Status: Accepted
+- Status: Superseded by [ADR 0005](0005-rust-slint-native-rewrite.md)
 - Date: 2026-03-07
+- Superseded: 2026-04-15
+
+> **Superseded.** This ADR describes the server-side layering inside the Next.js web prototype. The Rust + Slint native application has a different execution model (no web server) and is governed by ADR 0005. The layer-ownership principles below may still inform the Rust module layout, but this ADR no longer normatively constrains new work.
 
 ## Context
 

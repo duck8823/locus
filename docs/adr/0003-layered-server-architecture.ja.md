@@ -2,8 +2,11 @@
 
 > English: [0003-layered-server-architecture.md](0003-layered-server-architecture.md)
 
-- Status: Accepted
+- Status: Superseded by [ADR 0005](0005-rust-slint-native-rewrite.ja.md)
 - Date: 2026-03-07
+- Superseded: 2026-04-15
+
+> **Superseded.** 本 ADR は Next.js web プロトタイプのサーバー側レイヤリングを記述したものです。Rust + Slint ネイティブ版は Web サーバーを持たない別の実行モデルであり、ADR 0005 に従います。以下のレイヤ責務の原則は Rust 版のモジュール構成を考える際の参考にはなり得ますが、新規作業を規範的には拘束しません。
 
 ## Context
 
