@@ -54,8 +54,9 @@
 ## 配送スライス
 
 実装補助ドキュメント:
-- [Webアプリケーション設計図](architecture/web-application-blueprint.ja.md)
 - [セマンティック分析パイプライン](architecture/semantic-analysis-pipeline.ja.md)
+
+> 注: この文書は Next.js プロトタイプ時代の MVP 定義を歴史参照として残しています。Rust/Slint 版への作り直しにより下記の配送スライスは superseded です。現在の方向性は最上位 README を参照してください。
 
 ### Slice 1 — Web shell と server boundary
 

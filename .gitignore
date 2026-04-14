@@ -1,5 +1,12 @@
 /target
-Cargo.lock
 .DS_Store
 *.log
 .env*
+
+# Leftover Next.js-era artifacts (ignored so local cleanup is unnecessary for this branch)
+/node_modules
+/.next
+/.locus-data
+/playwright-report
+/test-results
+*.tsbuildinfo

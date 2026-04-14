@@ -43,11 +43,11 @@ Locus は macOS 向けの **ローカルネイティブアプリ** として Rus
 - **`tree-sitter-go`**（最初の対象言語）— セマンティック Diff
 - **`octocrab`** — GitHub PR スナップショット
 
-Terminal ペインの設計が成立することを示す動作する PoC は `poc/terminal-pane/` にあります。
+`cargo run -- bash` で現在のビルドを起動し、Slint ウィンドウ内の Terminal ペインで対話シェルが動くことを確認できます。`claude` / `codex` / `gemini` に置き換えれば各 Agent CLI を同居させられます。
 
 ## 現在このリポジトリに残っているもの
 
-- `poc/terminal-pane/` — 動作する PoC: Slint + PTY + `alacritty_terminal` でシェル / Agent CLI を同居
+- `Cargo.toml` / `src/` / `ui/` / `build.rs` — Rust + Slint 本体（Terminal ペイン動作確認済み）
 - `docs/adr/0001`, `docs/adr/0004` — 方法論と semantic-change-IR の思想（継承）
 - `docs/architecture/semantic-analysis-pipeline.*` — parser adapter + IR の設計
 - `docs/mvp.*` — 参照用の過去 MVP スコープ

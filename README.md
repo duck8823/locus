@@ -43,11 +43,11 @@ The new Locus **does not call LLMs itself**. Instead, it hosts a Terminal pane (
 - **`tree-sitter-go`** (first target language) — semantic diff
 - **`octocrab`** — GitHub PR snapshots
 
-See `poc/terminal-pane/` for the running PoC that validates the Terminal pane design.
+Run `cargo run -- bash` to launch the current build and verify the Terminal pane hosts an interactive shell inside the Slint window. Substitute `claude` / `codex` / `gemini` for the target agent CLI.
 
 ## What's in this repo right now
 
-- `poc/terminal-pane/` — working PoC: Slint + PTY + `alacritty_terminal` hosting a shell / agent CLI
+- `Cargo.toml` / `src/` / `ui/` / `build.rs` — Rust + Slint binary (Terminal pane working)
 - `docs/adr/0001`, `docs/adr/0004` — methodology and semantic-change-IR thinking (carried over)
 - `docs/architecture/semantic-analysis-pipeline.*` — parser adapter + IR architecture
 - `docs/mvp.*` — historical MVP scope (retained for context)

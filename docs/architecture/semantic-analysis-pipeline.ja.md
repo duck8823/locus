@@ -7,7 +7,6 @@
 この文書は semantic analysis pipeline の契約を実装可能な粒度で定義し、最初の parser spike、GitHub ingestion、persistence、UI を同じモデルの上で進められるようにするものです。
 
 関連ドキュメント:
-- [Webアプリケーション設計図](web-application-blueprint.ja.md)
 - [ADR 0004: Semantic Change IR](../adr/0004-semantic-change-ir.ja.md)
 
 ## End-to-end pipeline

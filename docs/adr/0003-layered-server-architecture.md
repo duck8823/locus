@@ -72,7 +72,7 @@ The operational rules in this ADR are intentionally self-contained. A reader sho
 
 ## Project structure
 
-The canonical project-structure example lives in [Web Application Blueprint](../architecture/web-application-blueprint.md). This ADR constrains the dependency direction and the layer ownership:
+This ADR constrains the dependency direction and the layer ownership (for the Next.js prototype; see note at the top of this file):
 
 - `src/app/**` stays framework-facing
 - `src/server/presentation/**` handles request/response shaping outside framework files

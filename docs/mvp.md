@@ -54,8 +54,9 @@ The numbered capabilities above define MVP scope, not implementation order. The 
 ## Delivery Slices
 
 Supporting implementation docs:
-- [Web Application Blueprint](architecture/web-application-blueprint.md)
 - [Semantic Analysis Pipeline](architecture/semantic-analysis-pipeline.md)
+
+> Note: this document is retained as the historical MVP of the Next.js prototype. The Rust/Slint rewrite supersedes the delivery slices below; see the top-level README for the current direction.
 
 ### Slice 1 — Web shell and server boundaries
 
