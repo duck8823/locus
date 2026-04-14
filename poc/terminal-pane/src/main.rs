@@ -5,7 +5,7 @@
 
 use std::io::{Read, Write};
 use std::rc::Rc;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -63,8 +63,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     cmd.env("TERM", "xterm-256color");
 
-    let _child = pair.slave.spawn_command(cmd)?;
+    let mut child = pair.slave.spawn_command(cmd)?;
     drop(pair.slave);
+
+    // 子プロセスが終了したらイベントループを抜ける
+    thread::spawn(move || {
+        let _ = child.wait();
+        let _ = slint::quit_event_loop();
+    });
 
     let mut reader = pair.master.try_clone_reader()?;
     let writer = Arc::new(Mutex::new(pair.master.take_writer()?));
@@ -75,7 +81,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let term = Arc::new(Mutex::new(Term::new(Config::default(), &size, EventProxy)));
 
-    let (byte_tx, byte_rx): (Sender<Vec<u8>>, Receiver<Vec<u8>>) = channel();
+    // bounded channel で PTY → UI のバックプレッシャを確保する
+    let (byte_tx, byte_rx): (SyncSender<Vec<u8>>, Receiver<Vec<u8>>) = sync_channel(1024);
     thread::spawn(move || {
         let mut buf = [0u8; 4096];
         loop {
@@ -104,7 +111,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         let writer = writer.clone();
         ui.on_key_pressed(move |text: SharedString| {
-            let bytes = text.as_str().as_bytes().to_vec();
+            let bytes = translate_key(text.as_str());
+            if bytes.is_empty() {
+                return;
+            }
             if let Ok(mut w) = writer.lock() {
                 let _ = w.write_all(&bytes);
                 let _ = w.flush();
@@ -174,6 +184,31 @@ fn build_row(term: &Term<EventProxy>, row: usize) -> TerminalRow {
     }
     TerminalRow {
         cells: ModelRc::from(Rc::new(cells) as Rc<dyn Model<Data = TerminalCell>>),
+    }
+}
+
+/// Slint の KeyEvent.text を VT 互換のバイト列に翻訳する。
+/// Slint は矢印等の特殊キーを Private Use Area の文字で表現するため、
+/// それらを ANSI エスケープシーケンスに変換してから PTY に流す。
+fn translate_key(text: &str) -> Vec<u8> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+    match text {
+        // Arrow keys (Slint private use area → CSI sequences)
+        "\u{F700}" => b"\x1b[A".to_vec(), // Up
+        "\u{F701}" => b"\x1b[B".to_vec(), // Down
+        "\u{F702}" => b"\x1b[D".to_vec(), // Left
+        "\u{F703}" => b"\x1b[C".to_vec(), // Right
+        // Backspace / Delete → TTY erase (DEL, 0x7f)
+        "\u{8}" | "\u{7f}" => vec![0x7f],
+        // Enter → CR
+        "\n" | "\r" => b"\r".to_vec(),
+        // Tab / Escape はそのまま
+        "\t" => b"\t".to_vec(),
+        "\u{1b}" => b"\x1b".to_vec(),
+        // 通常文字は UTF-8 をそのまま流す
+        other => other.as_bytes().to_vec(),
     }
 }
 
