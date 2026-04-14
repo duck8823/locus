@@ -2,7 +2,7 @@
 
 > 日本語: [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md)
 
-Locus is currently a documentation-first repository. The immediate goal is to align on product scope, architectural boundaries, and evaluation criteria before committing to a long-term implementation path.
+Locus is currently being rewritten as a Rust + Slint native application for macOS. The earlier Next.js prototype is preserved on the `legacy/nextjs` branch. Contributions should target the Rust rewrite unless explicitly coordinated against legacy maintenance.
 
 ## Working Agreement
 
@@ -23,9 +23,10 @@ Locus is currently a documentation-first repository. The immediate goal is to al
 ## Repository Layout
 
 - `README.md` / `README.ja.md` — product overview
-- `docs/mvp.md` / `docs/mvp.ja.md` — MVP scope and delivery slices
+- `Cargo.toml` / `src/` / `ui/` / `build.rs` — Rust + Slint application
 - `docs/adr/` — architecture decisions
-- `docs/operations/` — review/ops/security runbooks
+- `docs/architecture/` — architecture notes carried over from the prototype
+- `docs/mvp.md` / `docs/mvp.ja.md` — historical MVP scope reference
 - `CONTRIBUTING.md` / `CONTRIBUTING.ja.md` — contribution policy
 
 ## Change Policy
@@ -33,26 +34,15 @@ Locus is currently a documentation-first repository. The immediate goal is to al
 Open or update an ADR before making one of these changes:
 
 - locking the long-term parser family
-- locking the long-term implementation language
 - replacing the parser abstraction strategy
-- introducing a persistence layer
-- coupling GitHub ingestion directly to the diff engine
-- broadening the MVP beyond the scope in `docs/mvp.md`
+- changing the Terminal pane / AI agent handoff contract
+- broadening the MVP beyond the scope recorded in `docs/mvp.md`
 
 ## Pull Request Checklist
 
-- [ ] Scope matches the current MVP or an approved ADR
+- [ ] Scope matches the current milestone or an approved ADR
 - [ ] English and Japanese docs stay consistent when both are affected
 - [ ] Cross-links between language variants are updated if needed
 - [ ] README / docs updated when the documented direction changes
-- [ ] AI review loop completed (Gemini + Codex) or blocking reason documented
-- [ ] If OAuth/token/data-handling is touched, Security checklist is completed in PR body
-
-## AI Review Workflow
-
-See:
-
-- [`docs/operations/ai-review-workflow.md`](docs/operations/ai-review-workflow.md)
-- [`docs/operations/ai-review-workflow.ja.md`](docs/operations/ai-review-workflow.ja.md)
-- [`docs/operations/security-review-checklist.md`](docs/operations/security-review-checklist.md)
-- [`docs/operations/security-review-checklist.ja.md`](docs/operations/security-review-checklist.ja.md)
+- [ ] `cargo build` / `cargo clippy --all-targets` / `cargo test` pass locally
+- [ ] AI review loop completed (Gemini scout + Codex verifier) or blocking reason documented

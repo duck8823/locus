@@ -2,265 +2,58 @@
 
 # Locus
 
-**From checking diffs to understanding the meaning of changes.**
+**From "diff checking" to "understanding the meaning of changes".**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![license-ja](https://img.shields.io/badge/license-ja-lightgrey.svg)](LICENSE.ja.md)
-[![Status](https://img.shields.io/badge/status-prototype-yellow.svg)]()
-[![ja](https://img.shields.io/badge/lang-ja-green.svg)](README.ja.md)
+[![Status](https://img.shields.io/badge/status-rewriting-orange.svg)]()
+[![ja](https://img.shields.io/badge/lang-ja-red.svg)](README.ja.md)
 
 </div>
 
 ---
 
-## The Problem
+## Status: rewriting from scratch (Rust + Slint)
 
-Code review today is broken — not because reviewers lack skill, but because the tools give them an impossible task.
+Locus is being rewritten as a **local native application** for macOS using Rust + Slint. The original Next.js web prototype is preserved on the [`legacy/nextjs`](https://github.com/duck8823/locus/tree/legacy/nextjs) branch (force-push / delete protected).
 
-- **Narrow context** — 3 lines of surrounding code tell you *what* changed, but not *why* or *where in the system*
-- **Fragmented diffs** — changes spanning multiple files lose their narrative; the connection between them disappears
-- **Line-based noise** — indentation fixes and meaningful logic changes look identical in a unified diff
-- **No map** — in a large PR, you lose track of where you are, what you've reviewed, and what's left
+Tracking: [`v1.0: Rust/Slint rewrite` milestone](https://github.com/duck8823/locus/milestone/10)
 
-Studies confirm the consequences: PRs over 400 lines receive exponentially worse reviews. The average PR waits **4 days** for review. And today's AI review tools — despite impressive marketing — behave like smart linters; they analyze changed lines in isolation with no understanding of how the code fits into the broader system.
+## Why the rewrite
 
-## What Locus Does Differently
+The original prototype pursued a Web SaaS form factor, which pulled in heavy infrastructure (LLM provider adapters with guardrails, OAuth token encryption, durable job queues, plugin capability policies). In practice the realistic usage pattern became "a personal local reviewer that lives next to an AI agent CLI (Claude Code / Codex / Gemini)". That made the SaaS-grade machinery unnecessary.
 
-Locus gives reviewers **two simultaneous views** of every change:
+The native rewrite keeps the **core ideas** of Locus:
 
-### Architecture Map
-An auto-generated minimap of your system — always visible, always current. At a glance you know:
-- Which layer this change lives in (controller, service, repository, domain…)
-- Which use cases call this code
-- Which endpoints are downstream
+- **Architecture map** — where does this change sit in the system?
+- **Semantic diff** — function/method-level changes via parser adapters over a common IR
+- **Business logic context** — link code changes back to the requirements behind them
+- **"Understanding" over "checking"** — the whole stack is designed around *why*, not just *what*
 
-The map is generated automatically from static analysis and AI inference, requiring no manual maintenance.
+…and drops everything that only existed to serve the Web SaaS form factor.
 
-### Semantic Diff
-Instead of line-by-line diffs, Locus shows you **AST-based, function-level changes**:
+## The key design shift: no in-app LLM
 
-```
-Before                          After
-────────────────────────────    ────────────────────────────
-UserService.updateProfile()     UserService.updateProfile()
-  └─ validates email only         └─ validates email
-                                  └─ validates phone format  ← added
-```
+The new Locus **does not call LLMs itself**. Instead, it hosts a Terminal pane (built on `alacritty_terminal` + `portable-pty`) where Claude Code / Codex / Gemini run as child processes. The Viewer composes structured prompts from the PR / diff / comment selection and **sends them to the Terminal pane**. Authentication, provider selection, cost control, and review history all live in the agent CLI of your choice — not in Locus.
 
-Related changes across multiple files are automatically grouped. Noise (whitespace, renames, comments) is folded away so you can focus on what actually matters.
+## Core stack
 
-### Business Logic Context
-Locus connects your code changes to the requirements behind them. By integrating with Confluence and GitHub Issues/Projects, it surfaces relevant specs inline — so you can ask not just "does this code work?" but "does this code do what it was supposed to do?"
+- **Rust + Slint** — native UI
+- **`alacritty_terminal` + `portable-pty`** — Terminal pane hosting the agent CLI
+- **`tree-sitter-go`** (first target language) — semantic diff
+- **`octocrab`** — GitHub PR snapshots
 
-### AI Review Assistant
-With full knowledge of your system's architecture and the linked specifications, Locus's AI reviewer gives feedback that's specific to *your* codebase — not generic best-practice suggestions.
+Run `cargo run -- bash` to launch the current build and verify the Terminal pane hosts an interactive shell inside the Slint window. Substitute `claude` / `codex` / `gemini` for the target agent CLI.
 
-## Core Features
+## What's in this repo right now
 
-| Feature | Description | Status |
-|---|---|---|
-| Architecture Minimap v0 | Immediate upstream/downstream mini-map with change-group navigation | 🟡 Prototype |
-| Semantic Diff | AST-based, function-level change visualization (TS/JS-first) | 🟡 Prototype |
-| Business Logic Context | GitHub issue-context bridge with fallback diagnostics (Confluence planned) | 🟡 Prototype |
-| AI Review Assistant | In-workspace suggestion panel with heuristic provider (LLM adapters planned) | 🟡 Prototype |
-| Web Review Workspace v0 | Next.js review shell with layered server boundaries and stub navigation | 🟡 Prototype |
-| Review Progress Tracking | Never lose your place in a large PR | 🟡 Prototype |
-| Pluggable Connections | Plugin SDK/runtime boundary with GitHub-first contracts | 🟡 Prototype |
+- `Cargo.toml` / `src/` / `ui/` / `build.rs` — Rust + Slint binary (Terminal pane working)
+- `docs/adr/0001`, `docs/adr/0004` — methodology and semantic-change-IR thinking (carried over)
+- `docs/architecture/semantic-analysis-pipeline.*` — parser adapter + IR architecture
+- `docs/mvp.*` — historical MVP scope (retained for context)
 
-## Pluggable by Design
-
-Locus is built from the ground up to be extensible:
-
-- **Code hosts** — GitHub (initial), GitLab, Bitbucket
-- **Context sources** — Confluence, GitHub Issues/Projects (initial), Jira, Notion
-- **AI models** — OpenAI, Anthropic Claude, local models
-- **Language parsers** — parser adapters with multi-language support as a product goal
-
-All external integrations use OAuth, so Locus works with your existing authentication.
-
-## Project Status
-
-This repository now has a **runnable end-to-end prototype** across the core review flow, while productization and external integrations remain in progress.
-
-Already runnable today:
-- a Next.js App Router web shell
-- a layered `src/server/**` backend skeleton
-- a file-backed demo review session that preserves selected change group and status
-- a GitHub pull-request snapshot adapter that can ingest real PR files into semantic analysis
-- a GitLab merge-request snapshot adapter (read-only) behind the provider-agnostic boundary
-- parser-adapter based semantic grouping (TS/JS-first)
-- business-context bridge with live GitHub issue-context fetch + fallback diagnostics
-- AI suggestion panel with heuristic provider and decision persistence
-- plugin SDK/runtime prototype boundary for future code-host/context extensions
-- route handlers and server actions that exercise the presentation/application boundary
-
-What is already decided:
-- the product surface is a **web application**
-- the first implementation target is **TypeScript + Next.js App Router**
-- the server follows a **Go-inspired layered architecture** based on the conceptual rules captured in our ADRs
-- semantic analysis must cross a **parser adapter + common IR** boundary
-
-What is intentionally still open:
-- the long-term parser family per analysis language
-- production-ready external integrations (Confluence/Jira, additional code hosts)
-- LLM-backed suggestion providers with production safeguards
-- production infrastructure details that are unnecessary for MVP validation
-
-### Local development
-
-Prerequisite: **Node.js 22.5+** (required for `node:sqlite`).
-If your runtime disables experimental Node APIs, set `NODE_OPTIONS=--experimental-sqlite` before launch.
-
-```bash
-npm install
-npm run dev
-```
-
-If you want to exercise the GitHub webhook route locally, set:
-
-```bash
-export GITHUB_WEBHOOK_SECRET=your-local-webhook-secret
-```
-
-If you want to exercise a real GitHub OAuth handshake from `/settings/connections`, set:
-
-```bash
-export GITHUB_OAUTH_CLIENT_ID=your-github-oauth-client-id
-export GITHUB_OAUTH_CLIENT_SECRET=your-github-oauth-client-secret
-export GITHUB_OAUTH_SCOPE="repo read:org"
-
-# Optional but recommended: connection-token encryption key
-# format: base64:<32-byte-key>  or  64-char hex
-export LOCUS_CONNECTION_TOKEN_ENCRYPTION_KEY=base64:...
-```
-
-Without `GITHUB_OAUTH_CLIENT_ID`, the connections page uses a local demo OAuth fallback so you can validate the state machine without external setup.
-
-If you want to run the live GitHub/GitLab demo buttons from the marketing page, you can enter
-owner/repo/PR number (GitHub) or project path/MR IID (GitLab) directly in the form.
-The environment variables below are optional defaults:
-
-```bash
-export GITHUB_TOKEN=your-github-token
-export LOCUS_GITHUB_DEMO_OWNER=owner
-export LOCUS_GITHUB_DEMO_REPO=repository
-export LOCUS_GITHUB_DEMO_PR_NUMBER=123
-export LOCUS_GITLAB_DEMO_PROJECT_PATH=group/project
-export LOCUS_GITLAB_DEMO_MERGE_REQUEST_IID=123
-
-# Optional: durable analysis queue tuning
-export LOCUS_ANALYSIS_JOB_MAX_ATTEMPTS=3
-export LOCUS_ANALYSIS_JOB_MAX_RETAINED_TERMINAL_JOBS=500
-export LOCUS_ANALYSIS_JOB_STALE_RUNNING_MS=600000
-
-# Optional: enable GitLab adapter in provider-agnostic code-host boundary
-export LOCUS_ENABLE_GITLAB_ADAPTER=true
-export LOCUS_GITLAB_API_BASE_URL=https://gitlab.com/api/v4
-export GITLAB_TOKEN=your-gitlab-token
-
-# Optional: plugin capability policy (least privilege)
-# comma-separated keys, e.g. pull-request-snapshot-provider:github
-export LOCUS_PLUGIN_CAPABILITY_ALLOWLIST=
-export LOCUS_PLUGIN_CAPABILITY_DENYLIST=
-
-# Optional: connection transition audit retention
-export LOCUS_CONNECTION_TRANSITION_MAX_RETAINED=200
-
-# Optional: AI suggestion guardrails (heuristic provider policy)
-export LOCUS_AI_SUGGESTION_PROVIDER_HEURISTIC_TIMEOUT_MS=3000
-export LOCUS_AI_SUGGESTION_PROVIDER_HEURISTIC_MAX_ESTIMATED_INPUT_TOKENS=12000
-export LOCUS_AI_SUGGESTION_PROVIDER_HEURISTIC_MAX_ESTIMATED_INPUT_COST_USD=0.02
-export LOCUS_AI_SUGGESTION_PROVIDER_HEURISTIC_ESTIMATED_INPUT_USD_PER_1K_TOKENS=0.0015
-
-# Optional: enable LLM-backed AI suggestion provider (abstraction-first adapter)
-export LOCUS_AI_SUGGESTION_PROVIDER=openai_compat
-export LOCUS_AI_SUGGESTION_OPENAI_API_KEY=your-openai-key
-export LOCUS_AI_SUGGESTION_OPENAI_MODEL=gpt-4o-mini
-export LOCUS_AI_SUGGESTION_OPENAI_BASE_URL=https://api.openai.com/v1
-export LOCUS_AI_SUGGESTION_PROMPT_VERSION=openai_compat.v1
-
-# Optional: guardrails for openai_compat provider profile
-export LOCUS_AI_SUGGESTION_PROVIDER_OPENAI_COMPAT_TIMEOUT_MS=3000
-export LOCUS_AI_SUGGESTION_PROVIDER_OPENAI_COMPAT_MAX_ESTIMATED_INPUT_TOKENS=12000
-export LOCUS_AI_SUGGESTION_PROVIDER_OPENAI_COMPAT_MAX_ESTIMATED_INPUT_COST_USD=0.02
-export LOCUS_AI_SUGGESTION_PROVIDER_OPENAI_COMPAT_ESTIMATED_INPUT_USD_PER_1K_TOKENS=0.0015
-```
-
-If `LOCUS_AI_SUGGESTION_PROVIDER=openai_compat` is set but `LOCUS_AI_SUGGESTION_OPENAI_API_KEY` is missing, Locus automatically falls back to the heuristic provider.
-
-`GITHUB_TOKEN` is optional for public repositories (but recommended to avoid low anonymous rate limits).
-`GITLAB_TOKEN` is also optional for public GitLab repositories; set it for private projects or to avoid stricter anonymous limits.
-
-Validation commands:
-
-```bash
-npm run lint
-npm run security:sanity
-npm run typecheck
-npm test
-npm run test:e2e
-npm run build
-```
-
-Demo data helper commands (local-only, no external dependency):
-
-```bash
-npm run demo:data:status   # inspect .locus-data summary
-npm run demo:data:reset    # remove .locus-data
-npm run demo:data:reseed   # recreate baseline directories + empty job queue
-```
-
-### Recommended reading
-
-- [`docs/mvp.md`](docs/mvp.md) / [`docs/mvp.ja.md`](docs/mvp.ja.md)
-- [`docs/adr/0001-prototype-first-mvp.md`](docs/adr/0001-prototype-first-mvp.md) / [`docs/adr/0001-prototype-first-mvp.ja.md`](docs/adr/0001-prototype-first-mvp.ja.md)
-- [`docs/adr/0002-web-first-nextjs-typescript.md`](docs/adr/0002-web-first-nextjs-typescript.md) / [`docs/adr/0002-web-first-nextjs-typescript.ja.md`](docs/adr/0002-web-first-nextjs-typescript.ja.md)
-- [`docs/adr/0003-layered-server-architecture.md`](docs/adr/0003-layered-server-architecture.md) / [`docs/adr/0003-layered-server-architecture.ja.md`](docs/adr/0003-layered-server-architecture.ja.md)
-- [`docs/adr/0004-semantic-change-ir.md`](docs/adr/0004-semantic-change-ir.md) / [`docs/adr/0004-semantic-change-ir.ja.md`](docs/adr/0004-semantic-change-ir.ja.md)
-- [`docs/architecture/web-application-blueprint.md`](docs/architecture/web-application-blueprint.md) / [`docs/architecture/web-application-blueprint.ja.md`](docs/architecture/web-application-blueprint.ja.md)
-- [`docs/architecture/semantic-analysis-pipeline.md`](docs/architecture/semantic-analysis-pipeline.md) / [`docs/architecture/semantic-analysis-pipeline.ja.md`](docs/architecture/semantic-analysis-pipeline.ja.md)
-- [`docs/architecture/connections-workspace-contract.md`](docs/architecture/connections-workspace-contract.md) / [`docs/architecture/connections-workspace-contract.ja.md`](docs/architecture/connections-workspace-contract.ja.md)
-- [`docs/architecture/business-context-bridge.md`](docs/architecture/business-context-bridge.md) / [`docs/architecture/business-context-bridge.ja.md`](docs/architecture/business-context-bridge.ja.md)
-- [`docs/architecture/context-arbitration-policy.md`](docs/architecture/context-arbitration-policy.md) / [`docs/architecture/context-arbitration-policy.ja.md`](docs/architecture/context-arbitration-policy.ja.md)
-- [`docs/architecture/confluence-context-contract.md`](docs/architecture/confluence-context-contract.md) / [`docs/architecture/confluence-context-contract.ja.md`](docs/architecture/confluence-context-contract.ja.md)
-- [`docs/architecture/jira-context-contract.md`](docs/architecture/jira-context-contract.md) / [`docs/architecture/jira-context-contract.ja.md`](docs/architecture/jira-context-contract.ja.md)
-- [`docs/performance/analysis-benchmark-baseline.md`](docs/performance/analysis-benchmark-baseline.md) / [`docs/performance/analysis-benchmark-baseline.ja.md`](docs/performance/analysis-benchmark-baseline.ja.md)
-- [`docs/performance/ai-suggestion-evaluation-format.md`](docs/performance/ai-suggestion-evaluation-format.md) / [`docs/performance/ai-suggestion-evaluation-format.ja.md`](docs/performance/ai-suggestion-evaluation-format.ja.md)
-- [`docs/performance/ai-suggestion-quality-gate-policy.md`](docs/performance/ai-suggestion-quality-gate-policy.md) / [`docs/performance/ai-suggestion-quality-gate-policy.ja.md`](docs/performance/ai-suggestion-quality-gate-policy.ja.md)
-- [`docs/testing/exploratory-test-playbook.md`](docs/testing/exploratory-test-playbook.md) / [`docs/testing/exploratory-test-playbook.ja.md`](docs/testing/exploratory-test-playbook.ja.md)
-- [`docs/testing/exploratory-test-session-2026-03-11.md`](docs/testing/exploratory-test-session-2026-03-11.md) / [`docs/testing/exploratory-test-session-2026-03-11.ja.md`](docs/testing/exploratory-test-session-2026-03-11.ja.md)
-- [`docs/operations/ai-review-workflow.md`](docs/operations/ai-review-workflow.md) / [`docs/operations/ai-review-workflow.ja.md`](docs/operations/ai-review-workflow.ja.md)
-- [`docs/operations/ai-suggestion-audit-redaction-policy.md`](docs/operations/ai-suggestion-audit-redaction-policy.md) / [`docs/operations/ai-suggestion-audit-redaction-policy.ja.md`](docs/operations/ai-suggestion-audit-redaction-policy.ja.md)
-- [`docs/operations/db-migration-rollback-runbook.md`](docs/operations/db-migration-rollback-runbook.md) / [`docs/operations/db-migration-rollback-runbook.ja.md`](docs/operations/db-migration-rollback-runbook.ja.md)
-- [`docs/operations/slo-alert-taxonomy.md`](docs/operations/slo-alert-taxonomy.md) / [`docs/operations/slo-alert-taxonomy.ja.md`](docs/operations/slo-alert-taxonomy.ja.md)
-- [`docs/operations/security-review-checklist.md`](docs/operations/security-review-checklist.md) / [`docs/operations/security-review-checklist.ja.md`](docs/operations/security-review-checklist.ja.md)
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) / [`CONTRIBUTING.ja.md`](CONTRIBUTING.ja.md)
-
-## Roadmap
-
-### MVP (prototype track)
-- ✅ GitHub ingestion + review workspace flow
-- ✅ Semantic change grouping (TS/JS-first)
-- ✅ Architecture minimap v0
-- ✅ Review progress persistence
-
-### Phase 2 (productization & integration)
-- ⏳ Confluence / richer requirement-context integration
-- ⏳ LLM-backed AI review assistant providers
-- ⏳ Reliability hardening for live context + analysis operations
-
-### Phase 3 (ecosystem & scale)
-- ⏳ Additional code host adapters (GitLab / Bitbucket)
-- ⏳ Plugin ecosystem hardening
-- ⏳ Production rollout hardening (migration, SLO, security operations)
-
-## Contributing
-
-Locus is in the prototype phase. Feedback, ideas, and discussion are very welcome.
-
-- Open an [Issue](https://github.com/duck8823/locus/issues) to share thoughts or report problems
-- See [CONTRIBUTING.md](CONTRIBUTING.md) or [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md) for contribution guidelines
+Everything else from the Next.js era lives on [`legacy/nextjs`](https://github.com/duck8823/locus/tree/legacy/nextjs).
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for the authoritative text, or [LICENSE.ja.md](LICENSE.ja.md) for a Japanese reference translation.
+MIT — see [LICENSE](LICENSE). Japanese reference translation: [LICENSE.ja.md](LICENSE.ja.md).

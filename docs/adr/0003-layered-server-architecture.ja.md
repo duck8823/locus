@@ -72,7 +72,7 @@ Presentation -> Application -> Domain <- Infrastructure
 
 ## 推奨プロジェクト構成
 
-[Webアプリケーション設計図](../architecture/web-application-blueprint.ja.md) に、正本となるプロジェクト構成例を置きます。この ADR では依存方向とレイヤ責務だけを拘束します。
+この ADR では、Next.js 版プロトタイプにおける依存方向とレイヤ責務だけを拘束します（本 ADR 先頭の注記も参照）。
 
 - `src/app/**` は framework-facing な層にとどめる
 - `src/server/presentation/**` は framework file の外で request/response shaping を担う
