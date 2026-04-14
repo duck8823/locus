@@ -1,0 +1,78 @@
+import { VerticalBox } from "std-widgets.slint";
+
+export struct TerminalCell {
+    ch: string,
+    fg: color,
+    bg: color,
+}
+
+export struct TerminalRow {
+    cells: [TerminalCell],
+}
+
+export component AppWindow inherits Window {
+    in property <[TerminalRow]> rows;
+    in property <int> cols: 80;
+    in property <int> visible-rows: 24;
+    in property <length> cell-w: 9px;
+    in property <length> cell-h: 18px;
+    in property <int> cursor-col: 0;
+    in property <int> cursor-row: 0;
+
+    callback key-pressed(string);
+    callback resized(length, length);
+
+    title: "locus PoC — Terminal Pane";
+    preferred-width: 900px;
+    preferred-height: 540px;
+    background: #0b0b0b;
+
+    forward-focus: focus-area;
+
+    focus-area := FocusScope {
+        key-pressed(event) => {
+            root.key-pressed(event.text);
+            accept
+        }
+
+        Rectangle {
+            background: #0b0b0b;
+
+            // セルグリッドを行ごとに重ねる
+            for row[ri] in root.rows: Rectangle {
+                x: 0;
+                y: ri * root.cell-h;
+                height: root.cell-h;
+                width: parent.width;
+
+                for cell[ci] in row.cells: Rectangle {
+                    x: ci * root.cell-w;
+                    y: 0;
+                    width: root.cell-w;
+                    height: root.cell-h;
+                    background: cell.bg;
+
+                    Text {
+                        text: cell.ch;
+                        color: cell.fg;
+                        font-family: "Menlo, Consolas, monospace";
+                        font-size: 13px;
+                        horizontal-alignment: left;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            // カーソル
+            Rectangle {
+                x: root.cursor-col * root.cell-w;
+                y: root.cursor-row * root.cell-h;
+                width: root.cell-w;
+                height: root.cell-h;
+                background: #ffffff40;
+                border-width: 1px;
+                border-color: #ffffff;
+            }
+        }
+    }
+}
