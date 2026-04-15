@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::term::{Config, Term};
+use alacritty_terminal::term::{Config, Term, TermDamage};
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
@@ -52,6 +52,25 @@ impl Dimensions for TermSize {
     fn total_lines(&self) -> usize {
         self.rows
     }
+}
+
+/// terminal grid 上で再描画が必要な行集合。
+///
+/// alacritty_terminal の damage API から取り出して即座に reset_damage する
+/// ため、TermDamage の借用を持ち歩かないようリスト化している。
+enum DamageList {
+    All,
+    Some(Vec<usize>),
+}
+
+fn collect_damaged_lines<T: EventListener>(term: &mut Term<T>) -> DamageList {
+    let damage = term.damage();
+    let result = match damage {
+        TermDamage::Full => DamageList::All,
+        TermDamage::Partial(iter) => DamageList::Some(iter.map(|d| d.line).collect()),
+    };
+    term.reset_damage();
+    result
 }
 
 /// Slint の KeyEvent.text を VT 互換のバイト列に翻訳する。
@@ -161,20 +180,35 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
         Duration::from_millis(16),
         move || {
             let mut updated = false;
-            while let Ok(bytes) = byte_rx.try_recv() {
-                let mut term_guard = term_for_timer.lock().unwrap();
+            let mut term_guard = term_for_timer.lock().unwrap();
+            {
                 let mut proc_guard = processor_for_timer.lock().unwrap();
-                proc_guard.advance(&mut *term_guard, &bytes);
-                updated = true;
+                while let Ok(bytes) = byte_rx.try_recv() {
+                    proc_guard.advance(&mut *term_guard, &bytes);
+                    updated = true;
+                }
             }
             if !updated {
                 return;
             }
-            let term_guard = term_for_timer.lock().unwrap();
+            let damage = collect_damaged_lines(&mut *term_guard);
             let cursor = term_guard.grid().cursor.point;
-            for r in 0..ROWS as usize {
-                let row = build_row(&term_guard, r, COLS as usize);
-                row_model_for_timer.set_row_data(r, row);
+            let total_rows = ROWS as usize;
+            match damage {
+                DamageList::All => {
+                    for r in 0..total_rows {
+                        let row = build_row(&*term_guard, r, COLS as usize);
+                        row_model_for_timer.set_row_data(r, row);
+                    }
+                }
+                DamageList::Some(lines) => {
+                    for r in lines {
+                        if r < total_rows {
+                            let row = build_row(&*term_guard, r, COLS as usize);
+                            row_model_for_timer.set_row_data(r, row);
+                        }
+                    }
+                }
             }
             if let Some(ui) = ui_weak.upgrade() {
                 ui.set_cursor_col(cursor.column.0 as i32);
@@ -281,20 +315,35 @@ pub fn launch_for_diff_viewer(
         Duration::from_millis(16),
         move || {
             let mut updated = false;
-            while let Ok(bytes) = byte_rx.try_recv() {
-                let mut term_guard = term_for_timer.lock().unwrap();
+            let mut term_guard = term_for_timer.lock().unwrap();
+            {
                 let mut proc_guard = processor_for_timer.lock().unwrap();
-                proc_guard.advance(&mut *term_guard, &bytes);
-                updated = true;
+                while let Ok(bytes) = byte_rx.try_recv() {
+                    proc_guard.advance(&mut *term_guard, &bytes);
+                    updated = true;
+                }
             }
             if !updated {
                 return;
             }
-            let term_guard = term_for_timer.lock().unwrap();
+            let damage = collect_damaged_lines(&mut *term_guard);
             let cursor = term_guard.grid().cursor.point;
-            for r in 0..ROWS as usize {
-                let row = build_row(&term_guard, r, COLS as usize);
-                row_model_for_timer.set_row_data(r, row);
+            let total_rows = ROWS as usize;
+            match damage {
+                DamageList::All => {
+                    for r in 0..total_rows {
+                        let row = build_row(&*term_guard, r, COLS as usize);
+                        row_model_for_timer.set_row_data(r, row);
+                    }
+                }
+                DamageList::Some(lines) => {
+                    for r in lines {
+                        if r < total_rows {
+                            let row = build_row(&*term_guard, r, COLS as usize);
+                            row_model_for_timer.set_row_data(r, row);
+                        }
+                    }
+                }
             }
             if let Some(ui) = ui_weak.upgrade() {
                 ui.set_terminal_cursor_col(cursor.column.0 as i32);
