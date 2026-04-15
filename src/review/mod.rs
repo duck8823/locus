@@ -13,6 +13,7 @@
 //! いずれも I/O を持たない純粋な型で、UI / PTY / GitHub から独立している。
 
 pub mod diff;
+pub mod diff_builder;
 pub mod draft;
 pub mod selection;
 pub mod snapshot;
