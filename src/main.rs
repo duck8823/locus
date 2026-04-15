@@ -27,6 +27,7 @@ use slint::{ComponentHandle, SharedString};
 
 slint::include_modules!();
 
+mod config;
 mod github;
 mod i18n;
 mod review;
@@ -69,7 +70,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let ui_cfg = config::UiConfig::from_env();
     let ui = AppWindow::new()?;
+    ui.set_font_family(SharedString::from(ui_cfg.font_family.as_str()));
+    ui.set_font_size(ui_cfg.terminal_font_size);
+    ui.set_cell_w(ui_cfg.terminal_cell_w());
+    ui.set_cell_h(ui_cfg.terminal_cell_h());
     let _pane = terminal::launch(&ui, command)?;
     ui.run()?;
     Ok(())
@@ -267,7 +273,13 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         files: Vec::new(),
     };
 
+    let ui_cfg = config::UiConfig::from_env();
     let ui = DiffViewerWindow::new()?;
+    ui.set_font_family(SharedString::from(ui_cfg.font_family.as_str()));
+    ui.set_terminal_font_size(ui_cfg.terminal_font_size);
+    ui.set_diff_font_size(ui_cfg.diff_font_size);
+    ui.set_terminal_cell_w(ui_cfg.terminal_cell_w());
+    ui.set_terminal_cell_h(ui_cfg.terminal_cell_h());
     apply_snapshot_to_ui(&ui, &placeholder_snapshot, &[]);
     ui.set_current_pr_number(pr_number as i32);
     ui.set_pr_list(build_pr_list_model(&[]));
