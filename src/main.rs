@@ -3,13 +3,12 @@
 //! 起動モードは argv で切り替える:
 //!
 //! - `cargo run` / `cargo run -- <command>` — Terminal ペインモード
-//!   AI agent CLI（既定は `claude`）を PTY で同居させる。
 //! - `cargo run -- github <owner>/<repo>#<pr_number>` — Diff viewer モード
-//!   GitHub PR の unified diff を表示する。
-//!
-//! 複雑な argv handling は v0.1 では入れず、2 モードを最小の分岐で切り替える。
 
-use slint::ComponentHandle;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use slint::{ComponentHandle, SharedString};
 
 slint::include_modules!();
 
@@ -18,8 +17,14 @@ mod review;
 mod terminal;
 mod ui_state;
 
-use github::pull_request::{build_client, fetch_pr_snapshot, parse_pr_spec};
+use github::pull_request::{
+    build_client, fetch_pr_snapshot, parse_pr_spec, PullRequestFile, PullRequestSnapshot,
+};
+use review::draft::{DraftEntry, PromptDraft};
+use review::selection::{Granularity, SelectionAnchor, Side};
+use review::snapshot::FileId;
 use ui_state::diff_view::build_diff_file_views;
+use ui_state::draft_view::{anchor_label, build_draft_entry_views, side_from_line_kind};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -45,6 +50,66 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// Diff viewer mode 用の状態。Slint の複数コールバックから共有する。
+struct DiffAppState {
+    snapshot: PullRequestSnapshot,
+    draft: PromptDraft,
+    current_anchor: Option<SelectionAnchor>,
+    pending_range: bool,
+}
+
+impl DiffAppState {
+    fn file(&self, index: usize) -> Option<&PullRequestFile> {
+        self.snapshot.files.get(index)
+    }
+
+    fn set_anchor(&mut self, anchor: SelectionAnchor) {
+        self.current_anchor = Some(anchor);
+        self.pending_range = false;
+    }
+
+    fn start_range_mode(&mut self) {
+        // range モードは「すでに Line 選択がある状態」で Range への昇格を宣言する。
+        self.pending_range = true;
+    }
+
+    /// 現在の anchor と引数の line を使って Range 選択を作る。
+    fn complete_range(&mut self, line: u32, side: Side) {
+        let Some(current) = self.current_anchor.clone() else {
+            self.pending_range = false;
+            return;
+        };
+        let Granularity::Line {
+            line: start_line,
+            side: start_side,
+        } = current.granularity
+        else {
+            self.pending_range = false;
+            return;
+        };
+        if start_side != side {
+            // 違う side 間の range は意味が薄いので pending を解除して単純 Line 選択に置き換える。
+            self.pending_range = false;
+            return;
+        }
+        let (from, to) = if start_line <= line {
+            (start_line, line)
+        } else {
+            (line, start_line)
+        };
+        self.current_anchor = Some(SelectionAnchor {
+            file_id: current.file_id,
+            file_path: current.file_path,
+            granularity: Granularity::Range {
+                start_line: from,
+                end_line: to,
+                side,
+            },
+        });
+        self.pending_range = false;
+    }
+}
+
 fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     let (owner, repo, pr_number) = parse_pr_spec(spec)
         .ok_or_else(|| format!("invalid PR spec: {spec} (expected owner/repo#N)"))?;
@@ -59,17 +124,187 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     let ui = DiffViewerWindow::new()?;
-    ui.set_pr_title(slint::SharedString::from(snapshot.title.as_str()));
-    ui.set_head_sha(slint::SharedString::from(short_sha(&snapshot.head_sha)));
-    ui.set_base_sha(slint::SharedString::from(short_sha(&snapshot.base_sha)));
+    ui.set_pr_title(SharedString::from(snapshot.title.as_str()));
+    ui.set_head_sha(SharedString::from(short_sha(&snapshot.head_sha)));
+    ui.set_base_sha(SharedString::from(short_sha(&snapshot.base_sha)));
 
     let file_views = build_diff_file_views(&snapshot.files);
     let model = std::rc::Rc::new(slint::VecModel::from(file_views));
     ui.set_files(slint::ModelRc::from(model));
     ui.set_selected_file_index(0);
 
+    let state = Rc::new(RefCell::new(DiffAppState {
+        snapshot,
+        draft: PromptDraft::new(),
+        current_anchor: None,
+        pending_range: false,
+    }));
+
+    refresh_current_anchor_label(&ui, &state);
+    refresh_draft_panel(&ui, &state);
+
+    // select-line
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_select_line(move |file_index, line_kind, old_no_str, new_no_str| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let line = resolve_line_number(line_kind, &old_no_str, &new_no_str);
+            let side = side_from_line_kind(line_kind);
+            let mut st = state.borrow_mut();
+            let Some(file) = st.file(file_index as usize).cloned() else {
+                return;
+            };
+            if st.pending_range {
+                st.complete_range(line, side);
+            } else {
+                st.set_anchor(SelectionAnchor {
+                    file_id: FileId::new(file.file_path.clone()),
+                    file_path: file.file_path,
+                    granularity: Granularity::Line { line, side },
+                });
+            }
+            drop(st);
+            refresh_current_anchor_label(&ui, &state);
+        });
+    }
+
+    // select-hunk
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_select_hunk(move |file_index, hunk_index| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let mut st = state.borrow_mut();
+            let Some(file) = st.file(file_index as usize).cloned() else {
+                return;
+            };
+            st.set_anchor(SelectionAnchor {
+                file_id: FileId::new(file.file_path.clone()),
+                file_path: file.file_path,
+                granularity: Granularity::Hunk {
+                    hunk_index: hunk_index as usize,
+                },
+            });
+            drop(st);
+            refresh_current_anchor_label(&ui, &state);
+        });
+    }
+
+    // select-whole-file
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_select_whole_file(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let file_index = ui.get_selected_file_index() as usize;
+            let mut st = state.borrow_mut();
+            let Some(file) = st.file(file_index).cloned() else {
+                return;
+            };
+            st.set_anchor(SelectionAnchor {
+                file_id: FileId::new(file.file_path.clone()),
+                file_path: file.file_path,
+                granularity: Granularity::File,
+            });
+            drop(st);
+            refresh_current_anchor_label(&ui, &state);
+        });
+    }
+
+    // extend-to-range
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_extend_to_range(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            state.borrow_mut().start_range_mode();
+            refresh_current_anchor_label(&ui, &state);
+        });
+    }
+
+    // add-to-draft
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_add_to_draft(move |note: SharedString| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let mut st = state.borrow_mut();
+            let Some(anchor) = st.current_anchor.clone() else {
+                return;
+            };
+            let note_trimmed = note.trim();
+            let note_opt = if note_trimmed.is_empty() {
+                None
+            } else {
+                Some(note_trimmed.to_string())
+            };
+            st.draft.push(DraftEntry::new(anchor, note_opt));
+            drop(st);
+            refresh_draft_panel(&ui, &state);
+        });
+    }
+
+    // remove-draft-entry
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_remove_draft_entry(move |index: i32| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            state.borrow_mut().draft.remove(index as usize);
+            refresh_draft_panel(&ui, &state);
+        });
+    }
+
+    // clear-current-selection
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_clear_current_selection(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let mut st = state.borrow_mut();
+            st.current_anchor = None;
+            st.pending_range = false;
+            drop(st);
+            refresh_current_anchor_label(&ui, &state);
+        });
+    }
+
     ui.run()?;
     Ok(())
+}
+
+fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
+    let st = state.borrow();
+    let label = match &st.current_anchor {
+        Some(a) => {
+            let base = anchor_label(a);
+            if st.pending_range {
+                format!("{base}  [range mode: click end line]")
+            } else {
+                base
+            }
+        }
+        None => "(no selection)".into(),
+    };
+    ui.set_current_anchor_label(SharedString::from(label));
+}
+
+fn refresh_draft_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
+    let st = state.borrow();
+    ui.set_draft_entries(build_draft_entry_views(&st.draft));
+}
+
+fn resolve_line_number(line_kind: i32, old_no: &str, new_no: &str) -> u32 {
+    // Removed 行は old 側を、それ以外は new 側を優先する。
+    // number が取れなければ old→new→0 のフォールバックでゼロ埋め。
+    let prefer_old = line_kind == 2;
+    let a = if prefer_old { old_no } else { new_no };
+    let b = if prefer_old { new_no } else { old_no };
+    a.parse::<u32>()
+        .ok()
+        .or_else(|| b.parse::<u32>().ok())
+        .unwrap_or(0)
 }
 
 fn short_sha(sha: &str) -> String {
@@ -78,7 +313,150 @@ fn short_sha(sha: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::short_sha;
+    use super::*;
+    use crate::github::pull_request::{FileStatus, PullRequestFile};
+    use crate::review::snapshot::{FileId, UnsupportedFile};
+    use crate::review::target::ReviewTarget;
+
+    fn make_state() -> DiffAppState {
+        let snapshot = PullRequestSnapshot {
+            target: ReviewTarget::GitHubPr {
+                owner: "o".into(),
+                repo: "r".into(),
+                pr_number: 1,
+            },
+            title: "t".into(),
+            head_sha: "abcdefg".into(),
+            base_sha: "0000000".into(),
+            files: vec![PullRequestFile {
+                file_id: FileId::new("a.rs"),
+                file_path: "a.rs".into(),
+                status: FileStatus::Modified,
+                before_content: Some("a\nb\n".into()),
+                after_content: Some("a\nB\n".into()),
+                patch: None,
+                is_binary: false,
+                unsupported: None::<UnsupportedFile>,
+            }],
+        };
+        DiffAppState {
+            snapshot,
+            draft: PromptDraft::new(),
+            current_anchor: None,
+            pending_range: false,
+        }
+    }
+
+    #[test]
+    fn set_anchor_clears_pending_range() {
+        let mut st = make_state();
+        st.pending_range = true;
+        st.set_anchor(SelectionAnchor {
+            file_id: FileId::new("a.rs"),
+            file_path: "a.rs".into(),
+            granularity: Granularity::File,
+        });
+        assert!(!st.pending_range);
+        assert!(st.current_anchor.is_some());
+    }
+
+    #[test]
+    fn start_range_mode_sets_pending() {
+        let mut st = make_state();
+        st.start_range_mode();
+        assert!(st.pending_range);
+    }
+
+    #[test]
+    fn complete_range_from_line_to_range() {
+        let mut st = make_state();
+        st.set_anchor(SelectionAnchor {
+            file_id: FileId::new("a.rs"),
+            file_path: "a.rs".into(),
+            granularity: Granularity::Line {
+                line: 3,
+                side: Side::After,
+            },
+        });
+        st.start_range_mode();
+        st.complete_range(7, Side::After);
+        match &st.current_anchor.as_ref().unwrap().granularity {
+            Granularity::Range {
+                start_line,
+                end_line,
+                side,
+            } => {
+                assert_eq!(*start_line, 3);
+                assert_eq!(*end_line, 7);
+                assert_eq!(*side, Side::After);
+            }
+            _ => panic!("expected Range"),
+        }
+        assert!(!st.pending_range);
+    }
+
+    #[test]
+    fn complete_range_reverses_when_end_before_start() {
+        let mut st = make_state();
+        st.set_anchor(SelectionAnchor {
+            file_id: FileId::new("a.rs"),
+            file_path: "a.rs".into(),
+            granularity: Granularity::Line {
+                line: 7,
+                side: Side::Before,
+            },
+        });
+        st.start_range_mode();
+        st.complete_range(3, Side::Before);
+        match &st.current_anchor.as_ref().unwrap().granularity {
+            Granularity::Range {
+                start_line,
+                end_line,
+                ..
+            } => {
+                assert_eq!(*start_line, 3);
+                assert_eq!(*end_line, 7);
+            }
+            _ => panic!("expected Range"),
+        }
+    }
+
+    #[test]
+    fn complete_range_aborts_across_sides() {
+        let mut st = make_state();
+        st.set_anchor(SelectionAnchor {
+            file_id: FileId::new("a.rs"),
+            file_path: "a.rs".into(),
+            granularity: Granularity::Line {
+                line: 3,
+                side: Side::After,
+            },
+        });
+        st.start_range_mode();
+        st.complete_range(7, Side::Before);
+        // side が違うので Range 昇格はされず、現在の anchor は維持される
+        match &st.current_anchor.as_ref().unwrap().granularity {
+            Granularity::Line { line: 3, .. } => {}
+            _ => panic!("expected Line unchanged"),
+        }
+        assert!(!st.pending_range);
+    }
+
+    #[test]
+    fn resolve_line_number_prefers_old_for_removed() {
+        assert_eq!(resolve_line_number(2, "10", "11"), 10);
+    }
+
+    #[test]
+    fn resolve_line_number_prefers_new_for_added() {
+        assert_eq!(resolve_line_number(1, "10", "11"), 11);
+    }
+
+    #[test]
+    fn resolve_line_number_falls_back_to_other_side() {
+        assert_eq!(resolve_line_number(1, "10", ""), 10);
+        assert_eq!(resolve_line_number(2, "", "11"), 11);
+    }
 
     #[test]
     fn short_sha_truncates_to_seven_chars() {
