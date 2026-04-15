@@ -14,53 +14,50 @@ use slint::Color;
 const FG: Color = Color::from_rgb_u8(0xee, 0xee, 0xee);
 const BG: Color = Color::from_rgb_u8(0x0b, 0x0b, 0x0b);
 
-/// xterm 互換の標準 16 色。
+/// xterm が出荷時に使う標準 16 色 (X11 rgb.txt の名前色)。
+///
+/// 参照: https://invisible-island.net/xterm/xterm.faq.html#color_by_number
 const PALETTE_16: [Color; 16] = [
     Color::from_rgb_u8(0x00, 0x00, 0x00), // 0 black
-    Color::from_rgb_u8(0xcd, 0x31, 0x31), // 1 red
-    Color::from_rgb_u8(0x0d, 0xbc, 0x79), // 2 green
-    Color::from_rgb_u8(0xe5, 0xe5, 0x10), // 3 yellow
-    Color::from_rgb_u8(0x24, 0x72, 0xc8), // 4 blue
-    Color::from_rgb_u8(0xbc, 0x3f, 0xbc), // 5 magenta
-    Color::from_rgb_u8(0x11, 0xa8, 0xcd), // 6 cyan
-    Color::from_rgb_u8(0xe5, 0xe5, 0xe5), // 7 white (light gray)
-    Color::from_rgb_u8(0x66, 0x66, 0x66), // 8 bright black
-    Color::from_rgb_u8(0xf1, 0x4c, 0x4c), // 9 bright red
-    Color::from_rgb_u8(0x23, 0xd1, 0x8b), // 10 bright green
-    Color::from_rgb_u8(0xf5, 0xf5, 0x43), // 11 bright yellow
-    Color::from_rgb_u8(0x3b, 0x8e, 0xea), // 12 bright blue
-    Color::from_rgb_u8(0xd6, 0x70, 0xd6), // 13 bright magenta
-    Color::from_rgb_u8(0x29, 0xb8, 0xdb), // 14 bright cyan
-    Color::from_rgb_u8(0xff, 0xff, 0xff), // 15 bright white
+    Color::from_rgb_u8(0xcd, 0x00, 0x00), // 1 red3
+    Color::from_rgb_u8(0x00, 0xcd, 0x00), // 2 green3
+    Color::from_rgb_u8(0xcd, 0xcd, 0x00), // 3 yellow3
+    Color::from_rgb_u8(0x00, 0x00, 0xee), // 4 blue2
+    Color::from_rgb_u8(0xcd, 0x00, 0xcd), // 5 magenta3
+    Color::from_rgb_u8(0x00, 0xcd, 0xcd), // 6 cyan3
+    Color::from_rgb_u8(0xe5, 0xe5, 0xe5), // 7 gray90
+    Color::from_rgb_u8(0x7f, 0x7f, 0x7f), // 8 gray50
+    Color::from_rgb_u8(0xff, 0x00, 0x00), // 9 red
+    Color::from_rgb_u8(0x00, 0xff, 0x00), // 10 green
+    Color::from_rgb_u8(0xff, 0xff, 0x00), // 11 yellow
+    Color::from_rgb_u8(0x5c, 0x5c, 0xff), // 12 rgb:5c/5c/ff (xterm)
+    Color::from_rgb_u8(0xff, 0x00, 0xff), // 13 magenta
+    Color::from_rgb_u8(0x00, 0xff, 0xff), // 14 cyan
+    Color::from_rgb_u8(0xff, 0xff, 0xff), // 15 white
 ];
 
 /// 16〜231 の 6x6x6 RGB cube 用のレベル変換テーブル。
 const CUBE_LEVELS: [u8; 6] = [0x00, 0x5f, 0x87, 0xaf, 0xd7, 0xff];
 
 pub fn cell_fg(cell: &Cell) -> Color {
-    let (fg_color, bg_color) = base_colors(cell);
-    let inverse = cell.flags.contains(Flags::INVERSE);
-    if inverse {
-        bg_color
-    } else if cell.flags.contains(Flags::DIM) {
-        dim(fg_color)
-    } else {
-        fg_color
-    }
+    let (fg, bg) = resolve_fg_bg(cell);
+    if cell.flags.contains(Flags::INVERSE) { bg } else { fg }
 }
 
 pub fn cell_bg(cell: &Cell) -> Color {
-    let (fg_color, bg_color) = base_colors(cell);
-    if cell.flags.contains(Flags::INVERSE) {
-        fg_color
-    } else {
-        bg_color
-    }
+    let (fg, bg) = resolve_fg_bg(cell);
+    if cell.flags.contains(Flags::INVERSE) { fg } else { bg }
 }
 
-fn base_colors(cell: &Cell) -> (Color, Color) {
-    let fg = ansi_to_slint(cell.fg, FG);
+/// upstream alacritty に倣い、INVERSE swap の前に DIM を fg に適用する。
+/// Indexed(0..15) + DIM の場合は通常 palette ではなく dim 色 (rgb 2/3 倍) を
+/// 使う。これにより DIM+INVERSE を併用したセルで bg として dim 色が見える。
+fn resolve_fg_bg(cell: &Cell) -> (Color, Color) {
+    let mut fg = ansi_to_slint(cell.fg, FG);
     let bg = ansi_to_slint(cell.bg, BG);
+    if cell.flags.contains(Flags::DIM) {
+        fg = dim(fg);
+    }
     (fg, bg)
 }
 
@@ -173,5 +170,53 @@ mod tests {
     #[test]
     fn named_red_is_palette_red() {
         assert_eq!(named_to_color(NamedColor::Red, FG), PALETTE_16[1]);
+    }
+
+    #[test]
+    fn xterm_default_palette_values() {
+        // 主要色について xterm 既定値で固定する
+        assert_eq!(
+            (PALETTE_16[1].red(), PALETTE_16[1].green(), PALETTE_16[1].blue()),
+            (0xcd, 0x00, 0x00)
+        );
+        assert_eq!(
+            (PALETTE_16[2].red(), PALETTE_16[2].green(), PALETTE_16[2].blue()),
+            (0x00, 0xcd, 0x00)
+        );
+        assert_eq!(
+            (PALETTE_16[4].red(), PALETTE_16[4].green(), PALETTE_16[4].blue()),
+            (0x00, 0x00, 0xee)
+        );
+        assert_eq!(
+            (PALETTE_16[12].red(), PALETTE_16[12].green(), PALETTE_16[12].blue()),
+            (0x5c, 0x5c, 0xff)
+        );
+    }
+
+    fn make_cell_with(flags: Flags, fg: AnsiColor, bg: AnsiColor) -> Cell {
+        Cell {
+            fg,
+            bg,
+            flags,
+            ..Cell::default()
+        }
+    }
+
+    #[test]
+    fn dim_then_inverse_swaps_dimmed_fg_into_bg() {
+        let red = AnsiColor::Indexed(1);
+        let blue = AnsiColor::Indexed(4);
+        let cell = make_cell_with(Flags::DIM | Flags::INVERSE, red, blue);
+        // INVERSE swap 後の fg = もとの bg、bg = DIM 適用済の fg
+        let fg = cell_fg(&cell);
+        let bg = cell_bg(&cell);
+        // 元の bg=blue が fg に
+        let expected_fg = PALETTE_16[4];
+        assert_eq!(
+            (fg.red(), fg.green(), fg.blue()),
+            (expected_fg.red(), expected_fg.green(), expected_fg.blue())
+        );
+        // bg は DIM(red) なので元 red より暗い (R 成分が下がる)
+        assert!((bg.red() as u32) < 0xcd);
     }
 }
