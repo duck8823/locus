@@ -677,9 +677,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             ui.set_pr_list_loading(true);
             let weak_for_task = ui.as_weak();
             runtime.spawn(async move {
-                let summaries = fetch_pull_requests(&client, &owner, &repo, filter)
-                    .await
-                    .unwrap_or_default();
+                let result = fetch_pull_requests(&client, &owner, &repo, filter).await;
                 let _ = slint::invoke_from_event_loop(move || {
                     let stale = with_app_state(|state| {
                         state.borrow().is_stale_list(list_gen)
@@ -688,9 +686,19 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     if stale {
                         return;
                     }
-                    if let Some(ui) = weak_for_task.upgrade() {
-                        ui.set_pr_list_loading(false);
-                        ui.set_pr_list(build_pr_list_model(&summaries));
+                    let Some(ui) = weak_for_task.upgrade() else { return };
+                    ui.set_pr_list_loading(false);
+                    match result {
+                        Ok(summaries) => {
+                            ui.set_pr_list(build_pr_list_model(&summaries));
+                        }
+                        Err(e) => {
+                            show_toast(
+                                ToastKind::Error,
+                                i18n::tr("Failed to load PR list"),
+                                e.to_string(),
+                            );
+                        }
                     }
                 });
             });
@@ -723,7 +731,6 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             let (snapshot_res, list_res) = tokio::join!(snapshot_fut, list_fut);
 
             // PR list は snapshot 完了を待たずに先に hydrate する
-            let pr_list = list_res.unwrap_or_default();
             {
                 let weak = weak_for_task.clone();
                 let _ = slint::invoke_from_event_loop(move || {
@@ -732,9 +739,19 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     if stale {
                         return;
                     }
-                    if let Some(ui) = weak.upgrade() {
-                        ui.set_pr_list_loading(false);
-                        ui.set_pr_list(build_pr_list_model(&pr_list));
+                    let Some(ui) = weak.upgrade() else { return };
+                    ui.set_pr_list_loading(false);
+                    match list_res {
+                        Ok(summaries) => {
+                            ui.set_pr_list(build_pr_list_model(&summaries));
+                        }
+                        Err(e) => {
+                            show_toast(
+                                ToastKind::Error,
+                                i18n::tr("Failed to load PR list"),
+                                e.to_string(),
+                            );
+                        }
                     }
                 });
             }
@@ -879,26 +896,35 @@ fn refresh_toasts(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
 }
 
 /// 5 秒後に該当 toast を自動で dismiss する。
+///
+/// `slint::Timer::single_shot` は内部で self-manage されるため、Timer 自体を
+/// 持ち回ったり leak したりする必要がない。
 fn schedule_toast_auto_dismiss(toast_id: i32) {
     use std::time::Duration;
-    let timer = std::rc::Rc::new(slint::Timer::default());
-    let timer_for_closure = timer.clone();
-    timer.start(slint::TimerMode::SingleShot, Duration::from_secs(5), move || {
+    slint::Timer::single_shot(Duration::from_secs(5), move || {
         with_app_state(|state| {
             state.borrow_mut().dismiss_toast(toast_id);
-            if let Some(ui) = ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade())) {
+            if let Some(ui) =
+                ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade()))
+            {
                 refresh_toasts(&ui, state);
             }
         });
-        // タイマーは1回で終わり、Rc が drop されると Slint の Timer 自体も
-        // 廃棄される
-        let _ = timer_for_closure;
     });
-    // タイマー自体を leak すると永続化されてしまう。代わりに thread_local
-    // に push しておき、定期的に枯れたものを掃除する設計でも良いが、ここ
-    // ではシンプルに forget する: SingleShot は発火後に放置されても OS の
-    // Slint event loop で安全に廃棄される。
-    std::mem::forget(timer);
+}
+
+/// UI イベントループ上で toast を push し、auto-dismiss スケジュールを行う。
+/// 各エラー経路のヘルパとして使う。
+fn show_toast(kind: ToastKind, title: String, message: String) {
+    with_app_state(|state| {
+        let id = state.borrow_mut().push_toast(kind, title, message);
+        if let Some(ui) =
+            ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade()))
+        {
+            refresh_toasts(&ui, state);
+        }
+        schedule_toast_auto_dismiss(id);
+    });
 }
 
 thread_local! {
@@ -1056,14 +1082,23 @@ async fn fetch_linked_issues_parallel(
         .collect();
 
     let mut out: Vec<LinkedIssueDisplay> = Vec::new();
+    let mut error_summary: Option<String> = None;
+    let mut error_count: usize = 0;
     while let Some((n, res)) = futs.next().await {
         match res {
             Ok(Some(r)) => out.push(LinkedIssueDisplay::Found(r)),
             Ok(None) => {}
-            Err(e) => out.push(LinkedIssueDisplay::Failed {
-                number: n,
-                message: e.to_string(),
-            }),
+            Err(e) => {
+                let message = e.to_string();
+                if error_summary.is_none() {
+                    error_summary = Some(format!("#{n}: {message}"));
+                }
+                error_count += 1;
+                out.push(LinkedIssueDisplay::Failed {
+                    number: n,
+                    message,
+                });
+            }
         }
     }
     // 並列実行の完了順は不定なので number でソートして決定論的にする
@@ -1071,6 +1106,22 @@ async fn fetch_linked_issues_parallel(
         LinkedIssueDisplay::Found(r) => r.number,
         LinkedIssueDisplay::Failed { number, .. } => *number,
     });
+
+    // 1 件以上失敗していたら要約 toast を 1 つだけ出す。
+    // (各 issue chip は別途 error 表示されるため、toast は重複させない)
+    if let Some(first) = error_summary {
+        let count_str = error_count.to_string();
+        let _ = slint::invoke_from_event_loop(move || {
+            show_toast(
+                ToastKind::Warn,
+                i18n::tr_args(
+                    "Failed to fetch {} linked issue(s)",
+                    &[count_str.as_str()],
+                ),
+                first,
+            );
+        });
+    }
     out
 }
 

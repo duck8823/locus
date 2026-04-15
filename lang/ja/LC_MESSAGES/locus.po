@@ -110,3 +110,9 @@ msgstr "PR #{} の取得に失敗しました"
 
 msgid "Failed to load PR #{}"
 msgstr "PR #{} の読み込みに失敗しました"
+
+msgid "Failed to load PR list"
+msgstr "PR 一覧の取得に失敗しました"
+
+msgid "Failed to fetch {} linked issue(s)"
+msgstr "{} 件の関連 issue の取得に失敗しました"
