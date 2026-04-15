@@ -105,6 +105,35 @@ struct DiffAppState {
     snapshot_generation: u64,
     /// PR list filter の世代カウンタ。
     list_generation: u64,
+    /// 表示中のトースト。new -> bottom 順 (UI 側 index で逆順表示)。
+    toasts: Vec<ToastEntry>,
+    next_toast_id: i32,
+}
+
+#[derive(Debug, Clone)]
+struct ToastEntry {
+    id: i32,
+    kind: ToastKind,
+    title: String,
+    message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum ToastKind {
+    Error,
+    Warn,
+    Info,
+}
+
+impl ToastKind {
+    fn to_int(self) -> i32 {
+        match self {
+            ToastKind::Error => 0,
+            ToastKind::Warn => 1,
+            ToastKind::Info => 2,
+        }
+    }
 }
 
 impl DiffAppState {
@@ -189,6 +218,26 @@ impl DiffAppState {
     fn is_stale_list(&self, captured: u64) -> bool {
         captured != self.list_generation
     }
+
+    fn push_toast(&mut self, kind: ToastKind, title: String, message: String) -> i32 {
+        let id = self.next_toast_id;
+        self.next_toast_id = self.next_toast_id.wrapping_add(1);
+        self.toasts.push(ToastEntry {
+            id,
+            kind,
+            title,
+            message,
+        });
+        // 多すぎたら古い方から落とす
+        if self.toasts.len() > 5 {
+            self.toasts.remove(0);
+        }
+        id
+    }
+
+    fn dismiss_toast(&mut self, id: i32) {
+        self.toasts.retain(|t| t.id != id);
+    }
 }
 
 fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -237,8 +286,22 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         runtime: Some(runtime_handle.clone()),
         snapshot_generation: 0,
         list_generation: 0,
+        toasts: Vec::new(),
+        next_toast_id: 0,
     }));
     DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state.clone()));
+    ACTIVE_DIFF_WINDOW.with(|cell| *cell.borrow_mut() = Some(ui.as_weak()));
+
+    // dismiss-toast コールバック
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_dismiss_toast(move |id: i32| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            state.borrow_mut().dismiss_toast(id);
+            refresh_toasts(&ui, &state);
+        });
+    }
 
     // Terminal pane を立ち上げる。起動コマンドは LOCUS_AGENT_CMD 環境変数で
     // 上書きできる（既定は claude）。
@@ -263,6 +326,17 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 "{}: failed to start ({})",
                 &[agent_cmd.as_str(), err.as_str()],
             )));
+            // toast でユーザーに通知
+            let toast_id = state.borrow_mut().push_toast(
+                ToastKind::Error,
+                i18n::tr("Terminal pane failed to start"),
+                i18n::tr_args(
+                    "{}: {}",
+                    &[agent_cmd.as_str(), err.as_str()],
+                ),
+            );
+            refresh_toasts(&ui, &state);
+            schedule_toast_auto_dismiss(toast_id);
             None
         }
     };
@@ -521,6 +595,23 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     Ok(s) => s,
                     Err(e) => {
                         eprintln!("warn: failed to fetch PR #{new_number}: {e}");
+                        let err_str = e.to_string();
+                        let weak = weak_for_task.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            let Some(ui) = weak.upgrade() else { return };
+                            with_app_state(|state| {
+                                let id = state.borrow_mut().push_toast(
+                                    ToastKind::Error,
+                                    i18n::tr_args(
+                                        "Failed to fetch PR #{}",
+                                        &[new_number.to_string().as_str()],
+                                    ),
+                                    err_str.clone(),
+                                );
+                                refresh_toasts(&ui, state);
+                                schedule_toast_auto_dismiss(id);
+                            });
+                        });
                         return;
                     }
                 };
@@ -652,6 +743,24 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("warn: initial hydrate snapshot failed: {e}");
+                    let err_str = e.to_string();
+                    let weak = weak_for_task.clone();
+                    let pr_str = pr_number.to_string();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        let Some(ui) = weak.upgrade() else { return };
+                        with_app_state(|state| {
+                            let id = state.borrow_mut().push_toast(
+                                ToastKind::Error,
+                                i18n::tr_args(
+                                    "Failed to load PR #{}",
+                                    &[pr_str.as_str()],
+                                ),
+                                err_str.clone(),
+                            );
+                            refresh_toasts(&ui, state);
+                            schedule_toast_auto_dismiss(id);
+                        });
+                    });
                     return;
                 }
             };
@@ -751,6 +860,52 @@ fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAp
 fn refresh_draft_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
     let st = state.borrow();
     ui.set_draft_entries(build_draft_entry_views(&st.draft));
+}
+
+fn refresh_toasts(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
+    let st = state.borrow();
+    let model = slint::VecModel::<ToastView>::default();
+    for t in &st.toasts {
+        model.push(ToastView {
+            id: t.id,
+            kind: t.kind.to_int(),
+            title: SharedString::from(t.title.as_str()),
+            message: SharedString::from(t.message.as_str()),
+        });
+    }
+    ui.set_toasts(slint::ModelRc::from(
+        std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = ToastView>>,
+    ));
+}
+
+/// 5 秒後に該当 toast を自動で dismiss する。
+fn schedule_toast_auto_dismiss(toast_id: i32) {
+    use std::time::Duration;
+    let timer = std::rc::Rc::new(slint::Timer::default());
+    let timer_for_closure = timer.clone();
+    timer.start(slint::TimerMode::SingleShot, Duration::from_secs(5), move || {
+        with_app_state(|state| {
+            state.borrow_mut().dismiss_toast(toast_id);
+            if let Some(ui) = ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade())) {
+                refresh_toasts(&ui, state);
+            }
+        });
+        // タイマーは1回で終わり、Rc が drop されると Slint の Timer 自体も
+        // 廃棄される
+        let _ = timer_for_closure;
+    });
+    // タイマー自体を leak すると永続化されてしまう。代わりに thread_local
+    // に push しておき、定期的に枯れたものを掃除する設計でも良いが、ここ
+    // ではシンプルに forget する: SingleShot は発火後に放置されても OS の
+    // Slint event loop で安全に廃棄される。
+    std::mem::forget(timer);
+}
+
+thread_local! {
+    /// auto-dismiss timer から UI を取り出すための弱参照。run_diff_viewer 起動時に登録。
+    static ACTIVE_DIFF_WINDOW: RefCell<Option<slint::Weak<DiffViewerWindow>>> = const {
+        RefCell::new(None)
+    };
 }
 
 fn refresh_history_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
@@ -996,6 +1151,8 @@ mod tests {
             runtime: None,
             snapshot_generation: 0,
         list_generation: 0,
+        toasts: Vec::new(),
+        next_toast_id: 0,
         }
     }
 

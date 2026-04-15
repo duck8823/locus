@@ -98,3 +98,15 @@ msgstr "サポート対象外"
 msgid "(loading…)"
 msgstr "(読み込み中…)"
 
+
+msgid "Terminal pane failed to start"
+msgstr "ターミナルペインの起動に失敗しました"
+
+msgid "{}: {}"
+msgstr "{}: {}"
+
+msgid "Failed to fetch PR #{}"
+msgstr "PR #{} の取得に失敗しました"
+
+msgid "Failed to load PR #{}"
+msgstr "PR #{} の読み込みに失敗しました"
