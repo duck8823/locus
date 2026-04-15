@@ -20,7 +20,7 @@ pub fn build_diff_file_view(file: &PullRequestFile) -> DiffFileView {
     if let Some(reason) = &file.unsupported {
         return DiffFileView {
             file_path: SharedString::from(file.file_path.as_str()),
-            status_label: SharedString::from(status_label),
+            status_label: SharedString::from(status_label.as_str()),
             is_unsupported: true,
             unsupported_reason: SharedString::from(unsupported_reason(reason)),
             lines: empty_line_model(),
@@ -37,7 +37,7 @@ pub fn build_diff_file_view(file: &PullRequestFile) -> DiffFileView {
 
     DiffFileView {
         file_path: SharedString::from(file.file_path.as_str()),
-        status_label: SharedString::from(status_label),
+        status_label: SharedString::from(status_label.as_str()),
         is_unsupported: false,
         unsupported_reason: SharedString::default(),
         lines,
@@ -88,8 +88,8 @@ fn linekind_to_int(kind: LineKind) -> i32 {
     }
 }
 
-fn status_label(status: FileStatus) -> &'static str {
-    match status {
+fn status_label(status: FileStatus) -> String {
+    let key = match status {
         FileStatus::Added => "A",
         FileStatus::Modified => "M",
         FileStatus::Removed => "D",
@@ -97,14 +97,19 @@ fn status_label(status: FileStatus) -> &'static str {
         FileStatus::Copied => "C",
         FileStatus::Changed => "Ch",
         FileStatus::Unchanged => "=",
-    }
+    };
+    crate::i18n::tr(key)
 }
 
 fn unsupported_reason(reason: &UnsupportedFile) -> String {
     match reason {
-        UnsupportedFile::Binary { .. } => "binary file (content not fetched)".into(),
-        UnsupportedFile::PatchMissing { reason, .. } => format!("patch missing: {reason}"),
-        UnsupportedFile::ParserFailed { detail, .. } => format!("parser failed: {detail}"),
+        UnsupportedFile::Binary { .. } => crate::i18n::tr("binary file (content not fetched)"),
+        UnsupportedFile::PatchMissing { reason, .. } => {
+            crate::i18n::tr_args("patch missing: {}", &[reason.as_str()])
+        }
+        UnsupportedFile::ParserFailed { detail, .. } => {
+            crate::i18n::tr_args("parser failed: {}", &[detail.as_str()])
+        }
     }
 }
 
@@ -147,10 +152,11 @@ mod tests {
     }
 
     #[test]
-    fn status_labels_stable() {
-        assert_eq!(status_label(FileStatus::Added), "A");
-        assert_eq!(status_label(FileStatus::Modified), "M");
-        assert_eq!(status_label(FileStatus::Removed), "D");
-        assert_eq!(status_label(FileStatus::Renamed), "R");
+    fn status_labels_non_empty() {
+        // 翻訳結果は locale 依存。各 status で空文字を返さないことだけを保証
+        assert!(!status_label(FileStatus::Added).is_empty());
+        assert!(!status_label(FileStatus::Modified).is_empty());
+        assert!(!status_label(FileStatus::Removed).is_empty());
+        assert!(!status_label(FileStatus::Renamed).is_empty());
     }
 }

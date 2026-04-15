@@ -28,6 +28,7 @@ use slint::{ComponentHandle, SharedString};
 slint::include_modules!();
 
 mod github;
+mod i18n;
 mod review;
 mod semantic;
 mod terminal;
@@ -49,6 +50,9 @@ use ui_state::diff_view::build_diff_file_views;
 use ui_state::draft_view::{anchor_label, build_draft_entry_views, side_from_line_kind};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // i18n を最初に初期化する。LANG が未設定なら locus 既定の ja に揃える。
+    let _ = i18n::init_from_env();
+
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     match args.as_slice() {
@@ -219,7 +223,10 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     let terminal_pane = match terminal::launch_for_diff_viewer(&ui, &agent_cmd) {
         Ok(p) => {
             ui.set_terminal_available(true);
-            ui.set_terminal_status(SharedString::from(format!("{agent_cmd} (running)")));
+            ui.set_terminal_status(SharedString::from(i18n::tr_args(
+                "{} (running)",
+                &[agent_cmd.as_str()],
+            )));
             Some(Rc::new(p))
         }
         Err(e) => {
@@ -227,8 +234,10 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 "warn: failed to launch terminal pane with '{agent_cmd}': {e} (continuing without terminal)"
             );
             ui.set_terminal_available(false);
-            ui.set_terminal_status(SharedString::from(format!(
-                "{agent_cmd}: failed to start ({e})"
+            let err = e.to_string();
+            ui.set_terminal_status(SharedString::from(i18n::tr_args(
+                "{}: failed to start ({})",
+                &[agent_cmd.as_str(), err.as_str()],
             )));
             None
         }
@@ -622,12 +631,12 @@ fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAp
         Some(a) => {
             let base = anchor_label(a);
             if st.pending_range {
-                format!("{base}  [range mode: click end line]")
+                format!("{base}{}", i18n::tr("  [range mode: click end line]"))
             } else {
                 base
             }
         }
-        None => "(no selection)".into(),
+        None => i18n::tr("(no selection)"),
     };
     ui.set_current_anchor_label(SharedString::from(label));
 }
@@ -673,14 +682,17 @@ fn refresh_preview(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
 fn append_history(state: &Rc<RefCell<DiffAppState>>, mode: SendMode, body: &str) {
     let mut st = state.borrow_mut();
     let anchors_label = if st.draft.is_empty() {
-        "(edited preview)".to_string()
+        i18n::tr("(edited preview)")
     } else {
         let count = st.draft.len();
         let head = st.draft.entries().first().map(|e| anchor_label(&e.anchor));
         match head {
             Some(h) if count == 1 => h,
-            Some(h) => format!("{h} +{} more", count - 1),
-            None => "(empty)".to_string(),
+            Some(h) => {
+                let extra = (count - 1).to_string();
+                format!("{h} {}", i18n::tr_args("+{} more", &[extra.as_str()]))
+            }
+            None => i18n::tr("(empty)"),
         }
     };
     let timestamp = current_hhmmss();
@@ -692,12 +704,13 @@ fn append_history(state: &Rc<RefCell<DiffAppState>>, mode: SendMode, body: &str)
     });
 }
 
-fn send_mode_label(mode: SendMode) -> &'static str {
-    match mode {
+fn send_mode_label(mode: SendMode) -> String {
+    let key = match mode {
         SendMode::InsertOnly => "Insert",
         SendMode::InsertAndSend => "Insert+Send",
         SendMode::CopyToClipboard => "Copy",
-    }
+    };
+    i18n::tr(key)
 }
 
 fn current_hhmmss() -> String {
@@ -810,7 +823,7 @@ fn build_issue_context_model(
             LinkedIssueDisplay::Failed { number, message } => {
                 model.push(IssueContextView {
                     number: SharedString::from(format!("#{number}")),
-                    title: SharedString::from("(failed to fetch)"),
+                    title: SharedString::from(i18n::tr("(failed to fetch)")),
                     state: SharedString::from("error"),
                     body_excerpt: SharedString::from(message.as_str()),
                 });
