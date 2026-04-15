@@ -6,6 +6,8 @@ export struct TerminalCell {
     ch: string,
     fg: color,
     bg: color,
+    // 描画上の幅 (cell-w 倍数)。1=通常, 2=wide char, 0=spacer (描画しない)
+    span: int,
 }
 
 export struct TerminalRow {
@@ -50,9 +52,10 @@ export component AppWindow inherits Window {
                 for cell[ci] in row.cells: Rectangle {
                     x: ci * root.cell-w;
                     y: 0;
-                    width: root.cell-w;
+                    width: cell.span * root.cell-w;
                     height: root.cell-h;
                     background: cell.bg;
+                    visible: cell.span > 0;
 
                     Text {
                         text: cell.ch;
@@ -710,9 +713,10 @@ export component DiffViewerWindow inherits Window {
                                 for cell[ci] in row.cells: Rectangle {
                                     x: ci * root.terminal-cell-w;
                                     y: 0;
-                                    width: root.terminal-cell-w;
+                                    width: cell.span * root.terminal-cell-w;
                                     height: root.terminal-cell-h;
                                     background: cell.bg;
+                                    visible: cell.span > 0;
 
                                     Text {
                                         text: cell.ch;
