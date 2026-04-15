@@ -96,6 +96,12 @@ export struct DraftEntryView {
     note: string,
 }
 
+export struct HistoryEntryView {
+    timestamp: string,
+    mode: string,
+    label: string,
+}
+
 export struct DiffFileView {
     file-path: string,
     status-label: string,
@@ -115,6 +121,17 @@ export component DiffViewerWindow inherits Window {
     in property <[DraftEntryView]> draft-entries;
     in-out property <string> note-input-text;
 
+    in-out property <string> preview-text;
+    in property <[HistoryEntryView]> history-entries;
+
+    in property <[TerminalRow]> terminal-rows;
+    in property <int> terminal-cols: 100;
+    in property <int> terminal-rows-count: 30;
+    in property <length> terminal-cell-w: 8px;
+    in property <length> terminal-cell-h: 16px;
+    in property <int> terminal-cursor-col: 0;
+    in property <int> terminal-cursor-row: 0;
+
     callback select-line(int, int, string, string);
     callback select-hunk(int, int);
     callback select-whole-file();
@@ -124,9 +141,15 @@ export component DiffViewerWindow inherits Window {
     callback clear-current-selection();
     callback file-switched(int);
 
+    callback refresh-preview();
+    callback send-insert-only(string);
+    callback send-insert-and-send(string);
+    callback send-copy-to-clipboard(string);
+    callback terminal-key-pressed(string);
+
     title: "locus — diff viewer";
-    preferred-width: 1400px;
-    preferred-height: 780px;
+    preferred-width: 1500px;
+    preferred-height: 960px;
     background: #101014;
 
     VerticalBox {
@@ -310,14 +333,14 @@ export component DiffViewerWindow inherits Window {
 
                     // Selection controls strip
                     Rectangle {
-                        height: 90px;
+                        height: 80px;
                         background: #14141a;
                         border-width: 1px;
                         border-color: #24242c;
 
                         VerticalBox {
-                            padding: 10px;
-                            spacing: 6px;
+                            padding: 8px;
+                            spacing: 4px;
 
                             HorizontalBox {
                                 spacing: 10px;
@@ -367,12 +390,130 @@ export component DiffViewerWindow inherits Window {
                             }
                         }
                     }
+
+                    // Preview + send buttons strip
+                    Rectangle {
+                        height: 180px;
+                        background: #14141a;
+                        border-width: 1px;
+                        border-color: #24242c;
+
+                        VerticalBox {
+                            padding: 8px;
+                            spacing: 6px;
+
+                            HorizontalBox {
+                                spacing: 10px;
+                                alignment: start;
+                                Text {
+                                    text: "Preview:";
+                                    color: #8a8a95;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                Button {
+                                    text: "Refresh";
+                                    clicked => { root.refresh-preview(); }
+                                }
+                                Button {
+                                    text: "Insert";
+                                    clicked => { root.send-insert-only(root.preview-text); }
+                                }
+                                Button {
+                                    text: "Insert+Send";
+                                    clicked => { root.send-insert-and-send(root.preview-text); }
+                                }
+                                Button {
+                                    text: "Copy";
+                                    clicked => { root.send-copy-to-clipboard(root.preview-text); }
+                                }
+                            }
+
+                            Rectangle {
+                                vertical-stretch: 1;
+                                background: #0b0b0f;
+                                border-width: 1px;
+                                border-color: #24242c;
+                                preview-input := TextInput {
+                                    width: parent.width - 4px;
+                                    height: parent.height - 4px;
+                                    x: 2px;
+                                    y: 2px;
+                                    text <=> root.preview-text;
+                                    color: #d0d0d5;
+                                    font-family: "Menlo, Consolas, monospace";
+                                    font-size: 11px;
+                                    wrap: word-wrap;
+                                    single-line: false;
+                                }
+                            }
+                        }
+                    }
+
+                    // Terminal pane (bottom)
+                    Rectangle {
+                        height: 280px;
+                        background: #0b0b0b;
+                        border-width: 1px;
+                        border-color: #24242c;
+                        clip: true;
+
+                        terminal-focus := FocusScope {
+                            key-pressed(event) => {
+                                root.terminal-key-pressed(event.text);
+                                accept
+                            }
+
+                            // セルグリッド
+                            for row[ri] in root.terminal-rows: Rectangle {
+                                x: 0;
+                                y: ri * root.terminal-cell-h;
+                                height: root.terminal-cell-h;
+                                width: parent.width;
+
+                                for cell[ci] in row.cells: Rectangle {
+                                    x: ci * root.terminal-cell-w;
+                                    y: 0;
+                                    width: root.terminal-cell-w;
+                                    height: root.terminal-cell-h;
+                                    background: cell.bg;
+
+                                    Text {
+                                        text: cell.ch;
+                                        color: cell.fg;
+                                        font-family: "Menlo, Consolas, monospace";
+                                        font-size: 11px;
+                                        horizontal-alignment: left;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+
+                            // カーソル
+                            Rectangle {
+                                x: root.terminal-cursor-col * root.terminal-cell-w;
+                                y: root.terminal-cursor-row * root.terminal-cell-h;
+                                width: root.terminal-cell-w;
+                                height: root.terminal-cell-h;
+                                background: #ffffff40;
+                                border-width: 1px;
+                                border-color: #ffffff;
+                            }
+
+                            terminal-click-area := TouchArea {
+                                clicked => {
+                                    terminal-focus.focus();
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
-            // Right: draft panel
+            // Right: draft + history panel
             Rectangle {
-                width: 300px;
+                width: 320px;
                 background: #14141a;
 
                 VerticalBox {
@@ -397,6 +538,7 @@ export component DiffViewerWindow inherits Window {
                     }
 
                     ListView {
+                        vertical-stretch: 1;
                         for entry[idx] in root.draft-entries: Rectangle {
                             height: 44px;
                             background: #14141a;
@@ -444,6 +586,66 @@ export component DiffViewerWindow inherits Window {
                                             horizontal-alignment: center;
                                             vertical-alignment: center;
                                         }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // History section
+                    Rectangle {
+                        height: 32px;
+                        background: #1a1a22;
+                        HorizontalBox {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            alignment: start;
+                            Text {
+                                text: "History (" + root.history-entries.length + ")";
+                                color: #ffffff;
+                                font-size: 12px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 180px;
+                        background: #14141a;
+
+                        ListView {
+                            for h in root.history-entries: Rectangle {
+                                height: 44px;
+                                background: #14141a;
+                                border-width: 1px;
+                                border-color: #1c1c24;
+
+                                VerticalBox {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    padding-top: 4px;
+                                    padding-bottom: 4px;
+                                    spacing: 2px;
+                                    HorizontalBox {
+                                        spacing: 6px;
+                                        Text {
+                                            text: h.timestamp;
+                                            color: #8a8a95;
+                                            font-size: 10px;
+                                            font-family: "Menlo, Consolas, monospace";
+                                        }
+                                        Text {
+                                            text: h.mode;
+                                            color: #7a9ec0;
+                                            font-size: 10px;
+                                        }
+                                    }
+                                    Text {
+                                        text: h.label;
+                                        color: #d0d0d5;
+                                        font-size: 11px;
+                                        overflow: elide;
                                     }
                                 }
                             }

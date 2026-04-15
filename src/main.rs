@@ -21,7 +21,8 @@ mod ui_state;
 use github::pull_request::{
     build_client, fetch_pr_snapshot, parse_pr_spec, PullRequestFile, PullRequestSnapshot,
 };
-use review::draft::{DraftEntry, PromptDraft};
+use review::draft::{DraftEntry, PromptDraft, SendMode};
+use review::formatter::{format_prompt, FileSourceEntry};
 use review::selection::{Granularity, SelectionAnchor, Side};
 use review::snapshot::FileId;
 use ui_state::diff_view::build_diff_file_views;
@@ -51,12 +52,23 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// 送信履歴の 1 エントリ。セッション内にのみ保持される。
+#[derive(Debug, Clone)]
+struct HistoryEntry {
+    timestamp: String,
+    mode: SendMode,
+    anchors_label: String,
+    #[allow(dead_code)]
+    body: String,
+}
+
 /// Diff viewer mode 用の状態。Slint の複数コールバックから共有する。
 struct DiffAppState {
     snapshot: PullRequestSnapshot,
     draft: PromptDraft,
     current_anchor: Option<SelectionAnchor>,
     pending_range: bool,
+    history: Vec<HistoryEntry>,
 }
 
 impl DiffAppState {
@@ -152,10 +164,27 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         draft: PromptDraft::new(),
         current_anchor: None,
         pending_range: false,
+        history: Vec::new(),
     }));
+
+    // Terminal pane を立ち上げる。起動コマンドは LOCUS_AGENT_CMD 環境変数で
+    // 上書きできる（既定は claude）。
+    let agent_cmd =
+        std::env::var("LOCUS_AGENT_CMD").unwrap_or_else(|_| "claude".to_string());
+    let terminal_pane = match terminal::launch_for_diff_viewer(&ui, &agent_cmd) {
+        Ok(p) => Some(Rc::new(p)),
+        Err(e) => {
+            eprintln!(
+                "warn: failed to launch terminal pane with '{agent_cmd}': {e} (continuing without terminal)"
+            );
+            None
+        }
+    };
 
     refresh_current_anchor_label(&ui, &state);
     refresh_draft_panel(&ui, &state);
+    refresh_history_panel(&ui, &state);
+    refresh_preview(&ui, &state);
 
     // select-line
     {
@@ -312,7 +341,62 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // refresh-preview
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_refresh_preview(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            refresh_preview(&ui, &state);
+        });
+    }
+
+    // send-insert-only
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        let pane = terminal_pane.clone();
+        ui.on_send_insert_only(move |text: SharedString| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            if let Some(p) = pane.as_ref() {
+                p.insert(text.as_str());
+            }
+            append_history(&state, SendMode::InsertOnly, text.as_str());
+            refresh_history_panel(&ui, &state);
+        });
+    }
+
+    // send-insert-and-send
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        let pane = terminal_pane.clone();
+        ui.on_send_insert_and_send(move |text: SharedString| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            if let Some(p) = pane.as_ref() {
+                p.insert_and_send(text.as_str());
+            }
+            append_history(&state, SendMode::InsertAndSend, text.as_str());
+            refresh_history_panel(&ui, &state);
+        });
+    }
+
+    // send-copy-to-clipboard
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_send_copy_to_clipboard(move |text: SharedString| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            if let Ok(mut cb) = arboard::Clipboard::new() {
+                let _ = cb.set_text(text.to_string());
+            }
+            append_history(&state, SendMode::CopyToClipboard, text.as_str());
+            refresh_history_panel(&ui, &state);
+        });
+    }
+
     ui.run()?;
+    drop(terminal_pane);
     Ok(())
 }
 
@@ -335,6 +419,81 @@ fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAp
 fn refresh_draft_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
     let st = state.borrow();
     ui.set_draft_entries(build_draft_entry_views(&st.draft));
+}
+
+fn refresh_history_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
+    let st = state.borrow();
+    let model = slint::VecModel::<HistoryEntryView>::default();
+    // 新しい順
+    for entry in st.history.iter().rev() {
+        model.push(HistoryEntryView {
+            timestamp: SharedString::from(entry.timestamp.as_str()),
+            mode: SharedString::from(send_mode_label(entry.mode)),
+            label: SharedString::from(entry.anchors_label.as_str()),
+        });
+    }
+    ui.set_history_entries(slint::ModelRc::from(
+        std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = HistoryEntryView>>,
+    ));
+}
+
+fn refresh_preview(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
+    let st = state.borrow();
+    let entries: Vec<FileSourceEntry<'_>> = st
+        .snapshot
+        .files
+        .iter()
+        .map(|f| FileSourceEntry {
+            file_id: &f.file_id,
+            file_path: f.file_path.as_str(),
+            before_content: f.before_content.as_deref(),
+            after_content: f.after_content.as_deref(),
+        })
+        .collect();
+    let text = format_prompt(&st.draft, &entries);
+    ui.set_preview_text(SharedString::from(text));
+}
+
+fn append_history(state: &Rc<RefCell<DiffAppState>>, mode: SendMode, body: &str) {
+    let mut st = state.borrow_mut();
+    let anchors_label = if st.draft.is_empty() {
+        "(edited preview)".to_string()
+    } else {
+        let count = st.draft.len();
+        let head = st.draft.entries().first().map(|e| anchor_label(&e.anchor));
+        match head {
+            Some(h) if count == 1 => h,
+            Some(h) => format!("{h} +{} more", count - 1),
+            None => "(empty)".to_string(),
+        }
+    };
+    let timestamp = current_hhmmss();
+    st.history.push(HistoryEntry {
+        timestamp,
+        mode,
+        anchors_label,
+        body: body.to_string(),
+    });
+}
+
+fn send_mode_label(mode: SendMode) -> &'static str {
+    match mode {
+        SendMode::InsertOnly => "Insert",
+        SendMode::InsertAndSend => "Insert+Send",
+        SendMode::CopyToClipboard => "Copy",
+    }
+}
+
+fn current_hhmmss() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let h = (secs / 3600) % 24;
+    let m = (secs / 60) % 60;
+    let s = secs % 60;
+    format!("{h:02}:{m:02}:{s:02}")
 }
 
 fn resolve_line_number(line_kind: i32, old_no: &str, new_no: &str) -> u32 {
@@ -386,6 +545,7 @@ mod tests {
             draft: PromptDraft::new(),
             current_anchor: None,
             pending_range: false,
+            history: Vec::new(),
         }
     }
 

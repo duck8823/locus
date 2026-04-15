@@ -185,7 +185,127 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
 
     Ok(TerminalPane {
         _timer: timer,
-        _writer: writer,
+        writer,
+        _term: term,
+        _processor: processor,
+    })
+}
+
+/// Diff viewer モード用に Terminal ペインを起動する。
+///
+/// [`launch`] との差分は接続先 Slint コンポーネントだけで、PTY / Term /
+/// Timer の組み立ては同じ。将来的に共通化する候補。
+pub fn launch_for_diff_viewer(
+    ui: &crate::DiffViewerWindow,
+    command: &str,
+) -> Result<TerminalPane, Box<dyn std::error::Error>> {
+    let pty_system = native_pty_system();
+    let pair = pty_system.openpty(PtySize {
+        rows: ROWS,
+        cols: COLS,
+        pixel_width: 0,
+        pixel_height: 0,
+    })?;
+
+    let mut cmd = CommandBuilder::new(command);
+    if let Ok(cwd) = std::env::current_dir() {
+        cmd.cwd(cwd);
+    }
+    cmd.env("TERM", "xterm-256color");
+
+    let mut child = pair.slave.spawn_command(cmd)?;
+    drop(pair.slave);
+
+    thread::spawn(move || {
+        let _ = child.wait();
+        // diff viewer モードでは子プロセスが落ちても UI は閉じない（PTY だけ
+        // 死ぬのが想定される）。
+    });
+
+    let mut reader = pair.master.try_clone_reader()?;
+    let writer = Arc::new(Mutex::new(pair.master.take_writer()?));
+
+    let size = TermSize {
+        cols: COLS as usize,
+        rows: ROWS as usize,
+    };
+    let term = Arc::new(Mutex::new(Term::new(Config::default(), &size, EventProxy)));
+
+    let (byte_tx, byte_rx): (SyncSender<Vec<u8>>, Receiver<Vec<u8>>) = sync_channel(1024);
+    thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if byte_tx.send(buf[..n].to_vec()).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    ui.set_terminal_cols(COLS as i32);
+    ui.set_terminal_rows_count(ROWS as i32);
+
+    let row_model = Rc::new(VecModel::<TerminalRow>::default());
+    for _ in 0..ROWS {
+        row_model.push(empty_row(COLS as usize));
+    }
+    ui.set_terminal_rows(ModelRc::from(row_model.clone()));
+
+    {
+        let writer = writer.clone();
+        ui.on_terminal_key_pressed(move |text: SharedString| {
+            let bytes = translate_key(text.as_str());
+            if bytes.is_empty() {
+                return;
+            }
+            if let Ok(mut w) = writer.lock() {
+                let _ = w.write_all(&bytes);
+                let _ = w.flush();
+            }
+        });
+    }
+
+    let processor = Arc::new(Mutex::new(Processor::<StdSyncHandler>::new()));
+    let term_for_timer = term.clone();
+    let processor_for_timer = processor.clone();
+    let row_model_for_timer = row_model.clone();
+    let ui_weak = ui.as_weak();
+    let timer = slint::Timer::default();
+    timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(16),
+        move || {
+            let mut updated = false;
+            while let Ok(bytes) = byte_rx.try_recv() {
+                let mut term_guard = term_for_timer.lock().unwrap();
+                let mut proc_guard = processor_for_timer.lock().unwrap();
+                proc_guard.advance(&mut *term_guard, &bytes);
+                updated = true;
+            }
+            if !updated {
+                return;
+            }
+            let term_guard = term_for_timer.lock().unwrap();
+            let cursor = term_guard.grid().cursor.point;
+            for r in 0..ROWS as usize {
+                let row = build_row(&term_guard, r, COLS as usize);
+                row_model_for_timer.set_row_data(r, row);
+            }
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_terminal_cursor_col(cursor.column.0 as i32);
+                ui.set_terminal_cursor_row(cursor.line.0);
+            }
+        },
+    );
+
+    Ok(TerminalPane {
+        _timer: timer,
+        writer,
         _term: term,
         _processor: processor,
     })
@@ -197,9 +317,32 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
 /// イベントループが終わるまでこの値を保持する責任がある。
 pub struct TerminalPane {
     _timer: slint::Timer,
-    _writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     _term: Arc<Mutex<Term<EventProxy>>>,
     _processor: Arc<Mutex<Processor<StdSyncHandler>>>,
+}
+
+impl TerminalPane {
+    /// 文字列を PTY に流し込む（Enter は送らない）。
+    pub fn insert(&self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        if let Ok(mut w) = self.writer.lock() {
+            let _ = w.write_all(text.as_bytes());
+            let _ = w.flush();
+        }
+    }
+
+    /// 文字列を流し込んだあと CR を送る。誤爆防止のため呼び出し側が明示的に
+    /// InsertAndSend モードを選んだときだけ使われる想定。
+    pub fn insert_and_send(&self, text: &str) {
+        self.insert(text);
+        if let Ok(mut w) = self.writer.lock() {
+            let _ = w.write_all(b"\r");
+            let _ = w.flush();
+        }
+    }
 }
 
 #[cfg(test)]
