@@ -117,6 +117,10 @@ pub enum PrListFilter {
 }
 
 /// 指定リポジトリの PR 一覧を取得する。
+///
+/// サイドバー UI で使う想定なので all_pages は呼ばず最初の 1 ページ
+/// (per_page=50) のみを返す。これにより数千 PR のある大きなリポジトリでも
+/// フィルタ切替が速く完了する。
 pub async fn fetch_pull_requests(
     client: &Octocrab,
     owner: &str,
@@ -138,8 +142,7 @@ pub async fn fetch_pull_requests(
         .per_page(50)
         .send()
         .await?;
-    let entries: Vec<octocrab::models::pulls::PullRequest> =
-        client.all_pages(first_page).await?;
+    let entries = first_page.items;
 
     let mut summaries: Vec<PullRequestSummary> = Vec::new();
     for pr in entries {

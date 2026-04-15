@@ -8,6 +8,21 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+thread_local! {
+    /// 同期 callback / 非同期 spawn 完了後の invoke_from_event_loop closure
+    /// から共通でアクセスする DiffAppState。Slint イベントループは UI スレッド
+    /// 上で動くため thread_local で十分。Rc<RefCell<>> を closure に capture
+    /// すると非 Send になり spawn できないので、thread_local 経由で
+    /// 取り出す形にして closure を Send に保つ。
+    static DIFF_APP_STATE: RefCell<Option<Rc<RefCell<DiffAppState>>>> = const {
+        RefCell::new(None)
+    };
+}
+
+fn with_app_state<R>(f: impl FnOnce(&Rc<RefCell<DiffAppState>>) -> R) -> Option<R> {
+    DIFF_APP_STATE.with(|cell| cell.borrow().as_ref().map(f))
+}
+
 use slint::{ComponentHandle, SharedString};
 
 slint::include_modules!();
@@ -19,8 +34,8 @@ mod terminal;
 mod ui_state;
 
 use github::issue_context::{
-    extract_linked_issue_numbers, GithubIssueContextProvider, IssueContextProvider,
-    IssueContextRecord, IssueState,
+    extract_linked_issue_numbers, fetch_issue_context_async, GithubIssueContextProvider,
+    IssueContextProvider, IssueContextRecord, IssueState,
 };
 use github::pull_request::{
     build_client, fetch_pr_snapshot, fetch_pull_requests, parse_pr_spec, PrListFilter,
@@ -195,6 +210,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         client: Some(client_arc.clone()),
         runtime: Some(runtime_handle.clone()),
     }));
+    DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state.clone()));
 
     // Terminal pane を立ち上げる。起動コマンドは LOCUS_AGENT_CMD 環境変数で
     // 上書きできる（既定は claude）。
@@ -437,6 +453,11 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // pr-clicked: 別 PR に切り替える（draft はクリア）
+    //
+    // UI スレッドをブロックしないように、network 部分は tokio に spawn し、
+    // 完了したら invoke_from_event_loop で UI スレッドに戻ってモデルを
+    // 更新する。state (Rc<RefCell<>>) は Send ではないので spawn 内では
+    // 触らず、完了後の closure 内でだけ触る。
     {
         let state = state.clone();
         let ui_weak = ui.as_weak();
@@ -455,33 +476,59 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             let (Some(client), Some(runtime)) = (client_opt, runtime_opt) else {
                 return;
             };
-            let client_for_fetch = client.clone();
-            let snapshot = match runtime.block_on(async move {
-                fetch_pr_snapshot(&client_for_fetch, &owner, &repo, new_number).await
-            }) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("warn: failed to fetch PR #{new_number}: {e}");
-                    return;
+            ui.set_pr_list_loading(true);
+            let weak_for_task = ui.as_weak();
+            runtime.spawn(async move {
+                let snapshot_res =
+                    fetch_pr_snapshot(&client, &owner, &repo, new_number).await;
+                let snapshot = match snapshot_res {
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("warn: failed to fetch PR #{new_number}: {e}");
+                        let _ = slint::invoke_from_event_loop(move || {
+                            if let Some(ui) = weak_for_task.upgrade() {
+                                ui.set_pr_list_loading(false);
+                            }
+                        });
+                        return;
+                    }
+                };
+                let body = snapshot.body.clone().unwrap_or_default();
+                let numbers = extract_linked_issue_numbers(&body);
+                let mut linked: Vec<LinkedIssueDisplay> = Vec::new();
+                for n in numbers {
+                    match fetch_issue_context_async(&client, &owner, &repo, n).await {
+                        Ok(Some(r)) => linked.push(LinkedIssueDisplay::Found(r)),
+                        Ok(None) => {}
+                        Err(e) => linked.push(LinkedIssueDisplay::Failed {
+                            number: n,
+                            message: e.to_string(),
+                        }),
+                    }
                 }
-            };
-            let linked_issues = fetch_linked_issue_records(client.as_ref(), &runtime, &snapshot);
-            apply_snapshot_to_ui(&ui, &snapshot, &linked_issues);
-            ui.set_current_pr_number(new_pr_number);
-            {
-                let mut st = state.borrow_mut();
-                st.snapshot = snapshot;
-                st.draft.clear();
-                st.current_anchor = None;
-                st.pending_range = false;
-            }
-            refresh_current_anchor_label(&ui, &state);
-            refresh_draft_panel(&ui, &state);
-            refresh_preview(&ui, &state);
+                let _ = slint::invoke_from_event_loop(move || {
+                    let Some(ui) = weak_for_task.upgrade() else { return };
+                    ui.set_pr_list_loading(false);
+                    apply_snapshot_to_ui(&ui, &snapshot, &linked);
+                    ui.set_current_pr_number(new_pr_number);
+                    with_app_state(|state| {
+                        {
+                            let mut st = state.borrow_mut();
+                            st.snapshot = snapshot;
+                            st.draft.clear();
+                            st.current_anchor = None;
+                            st.pending_range = false;
+                        }
+                        refresh_current_anchor_label(&ui, state);
+                        refresh_draft_panel(&ui, state);
+                        refresh_preview(&ui, state);
+                    });
+                });
+            });
         });
     }
 
-    // pr-filter-changed: 一覧を再取得
+    // pr-filter-changed: 一覧を再取得（UI ブロックなし）
     {
         let state = state.clone();
         let ui_weak = ui.as_weak();
@@ -505,11 +552,18 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 return;
             };
             ui.set_pr_list_loading(true);
-            let summaries = runtime
-                .block_on(async move { fetch_pull_requests(&client, &owner, &repo, filter).await })
-                .unwrap_or_default();
-            ui.set_pr_list_loading(false);
-            ui.set_pr_list(build_pr_list_model(&summaries));
+            let weak_for_task = ui.as_weak();
+            runtime.spawn(async move {
+                let summaries = fetch_pull_requests(&client, &owner, &repo, filter)
+                    .await
+                    .unwrap_or_default();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(ui) = weak_for_task.upgrade() {
+                        ui.set_pr_list_loading(false);
+                        ui.set_pr_list(build_pr_list_model(&summaries));
+                    }
+                });
+            });
         });
     }
 
