@@ -564,11 +564,18 @@ fn excerpt(body: &str, max_chars: usize) -> String {
     }
 }
 
+enum LinkedIssueDisplay {
+    Found(IssueContextRecord),
+    /// 取得失敗。404 と PR が返ったケースは静かに隠すため LinkedIssueDisplay
+    /// に乗せない。本バリアントは認証エラー / rate limit / 5xx 等の non-2xx。
+    Failed { number: u64, message: String },
+}
+
 fn fetch_linked_issue_records(
     client: &octocrab::Octocrab,
     runtime: &tokio::runtime::Handle,
     snapshot: &PullRequestSnapshot,
-) -> Vec<IssueContextRecord> {
+) -> Vec<LinkedIssueDisplay> {
     let body = snapshot.body.as_deref().unwrap_or("");
     let numbers = extract_linked_issue_numbers(body);
     if numbers.is_empty() {
@@ -581,32 +588,50 @@ fn fetch_linked_issue_records(
         _ => return Vec::new(),
     };
     let provider = GithubIssueContextProvider::new(client, runtime.clone());
-    let mut records: Vec<IssueContextRecord> = Vec::new();
+    let mut records: Vec<LinkedIssueDisplay> = Vec::new();
     for n in numbers {
         match provider.fetch(&owner, &repo, n) {
-            Ok(Some(r)) => records.push(r),
+            Ok(Some(r)) => records.push(LinkedIssueDisplay::Found(r)),
             Ok(None) => {} // 404 / 参照元が PR だった場合は静かに隠す
-            Err(e) => eprintln!("warn: failed to fetch issue #{n}: {e}"),
+            Err(e) => records.push(LinkedIssueDisplay::Failed {
+                number: n,
+                message: e.to_string(),
+            }),
         }
     }
     records
 }
 
 fn build_issue_context_model(
-    records: &[IssueContextRecord],
+    records: &[LinkedIssueDisplay],
 ) -> slint::ModelRc<IssueContextView> {
     let model = slint::VecModel::<IssueContextView>::default();
-    for r in records {
-        let state = match r.state {
-            IssueState::Open => "open",
-            IssueState::Closed => "closed",
-        };
-        model.push(IssueContextView {
-            number: SharedString::from(format!("#{}", r.number)),
-            title: SharedString::from(r.title.as_str()),
-            state: SharedString::from(state),
-            body_excerpt: SharedString::from(excerpt(r.body.as_deref().unwrap_or(""), 140)),
-        });
+    for entry in records {
+        match entry {
+            LinkedIssueDisplay::Found(r) => {
+                let state = match r.state {
+                    IssueState::Open => "open",
+                    IssueState::Closed => "closed",
+                };
+                model.push(IssueContextView {
+                    number: SharedString::from(format!("#{}", r.number)),
+                    title: SharedString::from(r.title.as_str()),
+                    state: SharedString::from(state),
+                    body_excerpt: SharedString::from(excerpt(
+                        r.body.as_deref().unwrap_or(""),
+                        140,
+                    )),
+                });
+            }
+            LinkedIssueDisplay::Failed { number, message } => {
+                model.push(IssueContextView {
+                    number: SharedString::from(format!("#{number}")),
+                    title: SharedString::from("(failed to fetch)"),
+                    state: SharedString::from("error"),
+                    body_excerpt: SharedString::from(message.as_str()),
+                });
+            }
+        }
     }
     slint::ModelRc::from(
         std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = IssueContextView>>,
