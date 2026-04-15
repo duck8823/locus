@@ -23,7 +23,8 @@ use github::issue_context::{
     IssueContextRecord, IssueState,
 };
 use github::pull_request::{
-    build_client, fetch_pr_snapshot, parse_pr_spec, PullRequestFile, PullRequestSnapshot,
+    build_client, fetch_pr_snapshot, fetch_pull_requests, parse_pr_spec, PrListFilter,
+    PrListState, PullRequestFile, PullRequestSnapshot, PullRequestSummary,
 };
 use review::draft::{DraftEntry, PromptDraft, SendMode};
 use review::formatter::{format_prompt, FileSourceEntry};
@@ -67,12 +68,19 @@ struct HistoryEntry {
 }
 
 /// Diff viewer mode 用の状態。Slint の複数コールバックから共有する。
+///
+/// `client` / `runtime` は live モードでのみ使う。テストでは make_state が
+/// None を入れ、PR 切替や issue fetch を呼ばないテストだけが実行可能。
 struct DiffAppState {
+    owner: String,
+    repo: String,
     snapshot: PullRequestSnapshot,
     draft: PromptDraft,
     current_anchor: Option<SelectionAnchor>,
     pending_range: bool,
     history: Vec<HistoryEntry>,
+    client: Option<std::sync::Arc<octocrab::Octocrab>>,
+    runtime: Option<tokio::runtime::Handle>,
 }
 
 impl DiffAppState {
@@ -150,14 +158,20 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     let runtime_handle = runtime.handle().clone();
 
     // 非同期 fetch は runtime でまとめて行う
-    let (snapshot, client_arc) = runtime.block_on(async move {
-        let client = build_client()?;
-        let client_arc = client.clone();
-        let snapshot = fetch_pr_snapshot(&client, &owner, &repo, pr_number).await?;
-        Ok::<_, Box<dyn std::error::Error>>((snapshot, client_arc))
-    })?;
+    let (snapshot, client_arc, pr_list) = {
+        let owner = owner.clone();
+        let repo = repo.clone();
+        runtime.block_on(async move {
+            let client = build_client()?;
+            let client_arc = client.clone();
+            let snapshot = fetch_pr_snapshot(&client, &owner, &repo, pr_number).await?;
+            let pr_list = fetch_pull_requests(&client, &owner, &repo, PrListFilter::Open)
+                .await
+                .unwrap_or_default();
+            Ok::<_, Box<dyn std::error::Error>>((snapshot, client_arc, pr_list))
+        })?
+    };
 
-    // PR body から linked issue を抽出し、そのコンテキストを取得する
     let linked_issues = fetch_linked_issue_records(
         client_arc.as_ref(),
         &runtime_handle,
@@ -165,26 +179,21 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let ui = DiffViewerWindow::new()?;
-    ui.set_pr_title(SharedString::from(snapshot.title.as_str()));
-    ui.set_head_sha(SharedString::from(short_sha(&snapshot.head_sha)));
-    ui.set_base_sha(SharedString::from(short_sha(&snapshot.base_sha)));
-    ui.set_pr_body_excerpt(SharedString::from(excerpt(
-        snapshot.body.as_deref().unwrap_or(""),
-        180,
-    )));
-    ui.set_linked_issues(build_issue_context_model(&linked_issues));
-
-    let file_views = build_diff_file_views(&snapshot.files);
-    let model = std::rc::Rc::new(slint::VecModel::from(file_views));
-    ui.set_files(slint::ModelRc::from(model));
-    ui.set_selected_file_index(0);
+    apply_snapshot_to_ui(&ui, &snapshot, &linked_issues);
+    ui.set_current_pr_number(pr_number as i32);
+    ui.set_pr_list(build_pr_list_model(&pr_list));
+    ui.set_pr_list_filter(0);
 
     let state = Rc::new(RefCell::new(DiffAppState {
+        owner: owner.clone(),
+        repo: repo.clone(),
         snapshot,
         draft: PromptDraft::new(),
         current_anchor: None,
         pending_range: false,
         history: Vec::new(),
+        client: Some(client_arc.clone()),
+        runtime: Some(runtime_handle.clone()),
     }));
 
     // Terminal pane を立ち上げる。起動コマンドは LOCUS_AGENT_CMD 環境変数で
@@ -427,9 +436,130 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // pr-clicked: 別 PR に切り替える（draft はクリア）
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_pr_clicked(move |new_pr_number: i32| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let new_number = new_pr_number as u64;
+            let (owner, repo, client_opt, runtime_opt) = {
+                let st = state.borrow();
+                (
+                    st.owner.clone(),
+                    st.repo.clone(),
+                    st.client.clone(),
+                    st.runtime.clone(),
+                )
+            };
+            let (Some(client), Some(runtime)) = (client_opt, runtime_opt) else {
+                return;
+            };
+            let client_for_fetch = client.clone();
+            let snapshot = match runtime.block_on(async move {
+                fetch_pr_snapshot(&client_for_fetch, &owner, &repo, new_number).await
+            }) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("warn: failed to fetch PR #{new_number}: {e}");
+                    return;
+                }
+            };
+            let linked_issues = fetch_linked_issue_records(client.as_ref(), &runtime, &snapshot);
+            apply_snapshot_to_ui(&ui, &snapshot, &linked_issues);
+            ui.set_current_pr_number(new_pr_number);
+            {
+                let mut st = state.borrow_mut();
+                st.snapshot = snapshot;
+                st.draft.clear();
+                st.current_anchor = None;
+                st.pending_range = false;
+            }
+            refresh_current_anchor_label(&ui, &state);
+            refresh_draft_panel(&ui, &state);
+            refresh_preview(&ui, &state);
+        });
+    }
+
+    // pr-filter-changed: 一覧を再取得
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_pr_filter_changed(move |filter_int: i32| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let filter = match filter_int {
+                0 => PrListFilter::Open,
+                1 => PrListFilter::Closed,
+                _ => PrListFilter::All,
+            };
+            let (owner, repo, client_opt, runtime_opt) = {
+                let st = state.borrow();
+                (
+                    st.owner.clone(),
+                    st.repo.clone(),
+                    st.client.clone(),
+                    st.runtime.clone(),
+                )
+            };
+            let (Some(client), Some(runtime)) = (client_opt, runtime_opt) else {
+                return;
+            };
+            ui.set_pr_list_loading(true);
+            let summaries = runtime
+                .block_on(async move { fetch_pull_requests(&client, &owner, &repo, filter).await })
+                .unwrap_or_default();
+            ui.set_pr_list_loading(false);
+            ui.set_pr_list(build_pr_list_model(&summaries));
+        });
+    }
+
     ui.run()?;
     drop(terminal_pane);
     Ok(())
+}
+
+fn apply_snapshot_to_ui(
+    ui: &DiffViewerWindow,
+    snapshot: &PullRequestSnapshot,
+    linked_issues: &[LinkedIssueDisplay],
+) {
+    ui.set_pr_title(SharedString::from(snapshot.title.as_str()));
+    ui.set_head_sha(SharedString::from(short_sha(&snapshot.head_sha)));
+    ui.set_base_sha(SharedString::from(short_sha(&snapshot.base_sha)));
+    ui.set_pr_body_excerpt(SharedString::from(excerpt(
+        snapshot.body.as_deref().unwrap_or(""),
+        180,
+    )));
+    ui.set_linked_issues(build_issue_context_model(linked_issues));
+
+    let file_views = build_diff_file_views(&snapshot.files);
+    let model = std::rc::Rc::new(slint::VecModel::from(file_views));
+    ui.set_files(slint::ModelRc::from(model));
+    ui.set_selected_file_index(0);
+}
+
+fn build_pr_list_model(
+    summaries: &[PullRequestSummary],
+) -> slint::ModelRc<PullRequestListItemView> {
+    let model = slint::VecModel::<PullRequestListItemView>::default();
+    for s in summaries {
+        let state_label = match s.state {
+            PrListState::Open => "open",
+            PrListState::Closed => "closed",
+        };
+        model.push(PullRequestListItemView {
+            number: s.number as i32,
+            number_label: SharedString::from(format!("#{}", s.number)),
+            title: SharedString::from(s.title.as_str()),
+            author: SharedString::from(s.author.as_str()),
+            updated_excerpt: SharedString::from(s.updated_at.as_str()),
+            state: SharedString::from(state_label),
+        });
+    }
+    slint::ModelRc::from(
+        std::rc::Rc::new(model)
+            as std::rc::Rc<dyn slint::Model<Data = PullRequestListItemView>>,
+    )
 }
 
 fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
@@ -668,11 +798,15 @@ mod tests {
             }],
         };
         DiffAppState {
+            owner: "o".into(),
+            repo: "r".into(),
             snapshot,
             draft: PromptDraft::new(),
             current_anchor: None,
             pending_range: false,
             history: Vec::new(),
+            client: None,
+            runtime: None,
         }
     }
 

@@ -93,6 +93,81 @@ pub struct PullRequestSnapshot {
     pub files: Vec<PullRequestFile>,
 }
 
+/// PR 一覧サイドバー向けの軽量メタデータ。
+#[derive(Debug, Clone)]
+pub struct PullRequestSummary {
+    pub number: u64,
+    pub title: String,
+    pub author: String,
+    pub state: PrListState,
+    pub updated_at: String, // ISO8601 文字列のままで OK
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrListState {
+    Open,
+    Closed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrListFilter {
+    Open,
+    Closed,
+    All,
+}
+
+/// 指定リポジトリの PR 一覧を取得する。
+pub async fn fetch_pull_requests(
+    client: &Octocrab,
+    owner: &str,
+    repo: &str,
+    filter: PrListFilter,
+) -> Result<Vec<PullRequestSummary>, GithubError> {
+    use octocrab::params::State;
+
+    let state = match filter {
+        PrListFilter::Open => State::Open,
+        PrListFilter::Closed => State::Closed,
+        PrListFilter::All => State::All,
+    };
+
+    let pulls = client.pulls(owner, repo);
+    let first_page = pulls
+        .list()
+        .state(state)
+        .per_page(50)
+        .send()
+        .await?;
+    let entries: Vec<octocrab::models::pulls::PullRequest> =
+        client.all_pages(first_page).await?;
+
+    let mut summaries: Vec<PullRequestSummary> = Vec::new();
+    for pr in entries {
+        let state_kind = match pr.state {
+            Some(octocrab::models::IssueState::Open) => PrListState::Open,
+            Some(octocrab::models::IssueState::Closed) => PrListState::Closed,
+            _ => PrListState::Open,
+        };
+        let author = pr
+            .user
+            .as_deref()
+            .map(|u| u.login.clone())
+            .unwrap_or_else(|| "?".into());
+        let updated_at = pr
+            .updated_at
+            .map(|t| t.to_rfc3339())
+            .unwrap_or_default();
+        summaries.push(PullRequestSummary {
+            number: pr.number,
+            title: pr.title.unwrap_or_default(),
+            author,
+            state: state_kind,
+            updated_at,
+        });
+    }
+    Ok(summaries)
+}
+
 /// `owner/repo#pr_number` 形式をパースする。
 pub fn parse_pr_spec(spec: &str) -> Option<(String, String, u64)> {
     let (repo_part, pr_part) = spec.split_once('#')?;

@@ -109,6 +109,15 @@ export struct IssueContextView {
     body_excerpt: string,
 }
 
+export struct PullRequestListItemView {
+    number: int,
+    number_label: string,
+    title: string,
+    author: string,
+    updated_excerpt: string,
+    state: string,
+}
+
 export struct DiffFileView {
     file-path: string,
     status-label: string,
@@ -143,6 +152,11 @@ export component DiffViewerWindow inherits Window {
     in property <bool> terminal-available: false;
     in property <string> terminal-status: "not started";
 
+    in property <[PullRequestListItemView]> pr-list;
+    in-out property <int> pr-list-filter: 0; // 0=open, 1=closed, 2=all
+    in property <bool> pr-list-loading: false;
+    in property <int> current-pr-number: 0;
+
     callback select-line(int, int, string, string);
     callback select-hunk(int, int);
     callback select-whole-file();
@@ -158,8 +172,11 @@ export component DiffViewerWindow inherits Window {
     callback send-copy-to-clipboard(string);
     callback terminal-key-pressed(string);
 
+    callback pr-clicked(int);
+    callback pr-filter-changed(int);
+
     title: "locus — diff viewer";
-    preferred-width: 1500px;
+    preferred-width: 1700px;
     preferred-height: 960px;
     background: #101014;
 
@@ -260,9 +277,125 @@ export component DiffViewerWindow inherits Window {
             spacing: 0px;
             padding: 0px;
 
+            // PR list sidebar (leftmost)
+            Rectangle {
+                width: 240px;
+                background: #14141a;
+                border-width: 1px;
+                border-color: #1a1a22;
+
+                VerticalBox {
+                    spacing: 0px;
+                    padding: 0px;
+
+                    Rectangle {
+                        height: 32px;
+                        background: #1a1a22;
+                        HorizontalBox {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            alignment: start;
+                            Text {
+                                text: root.pr-list-loading
+                                    ? "PRs (loading…)"
+                                    : "PRs (" + root.pr-list.length + ")";
+                                color: #ffffff;
+                                font-size: 12px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 30px;
+                        background: #14141a;
+                        HorizontalBox {
+                            padding-left: 6px;
+                            padding-right: 6px;
+                            spacing: 4px;
+                            Button {
+                                text: "Open";
+                                checkable: true;
+                                checked: root.pr-list-filter == 0;
+                                clicked => {
+                                    root.pr-list-filter = 0;
+                                    root.pr-filter-changed(0);
+                                }
+                            }
+                            Button {
+                                text: "Closed";
+                                checkable: true;
+                                checked: root.pr-list-filter == 1;
+                                clicked => {
+                                    root.pr-list-filter = 1;
+                                    root.pr-filter-changed(1);
+                                }
+                            }
+                            Button {
+                                text: "All";
+                                checkable: true;
+                                checked: root.pr-list-filter == 2;
+                                clicked => {
+                                    root.pr-list-filter = 2;
+                                    root.pr-filter-changed(2);
+                                }
+                            }
+                        }
+                    }
+
+                    ListView {
+                        vertical-stretch: 1;
+                        for pr in root.pr-list: Rectangle {
+                            height: 50px;
+                            background: pr.number == root.current-pr-number
+                                ? #2a2a38
+                                : (pr-touch.has-hover ? #1e1e28 : #14141a);
+                            border-width: 1px;
+                            border-color: #1a1a22;
+
+                            pr-touch := TouchArea {
+                                clicked => {
+                                    root.pr-clicked(pr.number);
+                                }
+                            }
+
+                            VerticalBox {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                padding-top: 4px;
+                                padding-bottom: 4px;
+                                spacing: 2px;
+                                HorizontalBox {
+                                    spacing: 4px;
+                                    Text {
+                                        text: pr.number_label;
+                                        color: pr.state == "closed" ? #c07ac0 : #7ac07a;
+                                        font-size: 10px;
+                                        font-family: "Menlo, Consolas, monospace";
+                                        font-weight: 600;
+                                    }
+                                    Text {
+                                        text: pr.author;
+                                        color: #8a8a95;
+                                        font-size: 10px;
+                                    }
+                                }
+                                Text {
+                                    text: pr.title;
+                                    color: #d0d0d5;
+                                    font-size: 11px;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // File list sidebar
             Rectangle {
-                width: 260px;
+                width: 240px;
                 background: #14141a;
 
                 ListView {
