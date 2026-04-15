@@ -99,10 +99,12 @@ struct DiffAppState {
     history: Vec<HistoryEntry>,
     client: Option<std::sync::Arc<octocrab::Octocrab>>,
     runtime: Option<tokio::runtime::Handle>,
-    /// 非同期 fetch の世代カウンタ。PR 切替・filter 変更のたびに +1。
-    /// spawn された task は capture 時の世代を持ち、UI 更新時に
-    /// 現在の世代と一致しなければ破棄される (stale response の上書き防止)。
-    fetch_generation: u64,
+    /// PR snapshot 切替の世代カウンタ。PR 切替と起動 hydrate で +1。
+    /// PR list filter とは独立して進める (filter 変更で snapshot 結果を
+    /// 破棄しないため)。
+    snapshot_generation: u64,
+    /// PR list filter の世代カウンタ。
+    list_generation: u64,
 }
 
 impl DiffAppState {
@@ -169,15 +171,23 @@ impl DiffAppState {
         self.pending_range = false;
     }
 
-    /// 新しい世代を発行して現在値を返す。spawn 側はこれを capture し、
-    /// UI 更新時に `is_stale_generation` で照合する。
-    fn next_generation(&mut self) -> u64 {
-        self.fetch_generation = self.fetch_generation.wrapping_add(1);
-        self.fetch_generation
+    /// snapshot 切替の世代を進めて返す。
+    fn next_snapshot_generation(&mut self) -> u64 {
+        self.snapshot_generation = self.snapshot_generation.wrapping_add(1);
+        self.snapshot_generation
     }
 
-    fn is_stale_generation(&self, captured: u64) -> bool {
-        captured != self.fetch_generation
+    fn is_stale_snapshot(&self, captured: u64) -> bool {
+        captured != self.snapshot_generation
+    }
+
+    fn next_list_generation(&mut self) -> u64 {
+        self.list_generation = self.list_generation.wrapping_add(1);
+        self.list_generation
+    }
+
+    fn is_stale_list(&self, captured: u64) -> bool {
+        captured != self.list_generation
     }
 }
 
@@ -225,7 +235,8 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         history: Vec::new(),
         client: Some(client_arc.clone()),
         runtime: Some(runtime_handle.clone()),
-        fetch_generation: 0,
+        snapshot_generation: 0,
+        list_generation: 0,
     }));
     DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state.clone()));
 
@@ -489,20 +500,19 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         ui.on_pr_clicked(move |new_pr_number: i32| {
             let Some(ui) = ui_weak.upgrade() else { return };
             let new_number = new_pr_number as u64;
-            let (owner, repo, client_opt, runtime_opt, fetch_gen) = {
+            let (owner, repo, client_opt, runtime_opt, snap_gen) = {
                 let mut st = state.borrow_mut();
                 (
                     st.owner.clone(),
                     st.repo.clone(),
                     st.client.clone(),
                     st.runtime.clone(),
-                    st.next_generation(),
+                    st.next_snapshot_generation(),
                 )
             };
             let (Some(client), Some(runtime)) = (client_opt, runtime_opt) else {
                 return;
             };
-            ui.set_pr_list_loading(true);
             let weak_for_task = ui.as_weak();
             runtime.spawn(async move {
                 let snapshot_res =
@@ -511,46 +521,25 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     Ok(s) => s,
                     Err(e) => {
                         eprintln!("warn: failed to fetch PR #{new_number}: {e}");
-                        let _ = slint::invoke_from_event_loop(move || {
-                            let stale = with_app_state(|state| {
-                                state.borrow().is_stale_generation(fetch_gen)
-                            })
-                            .unwrap_or(true);
-                            if stale {
-                                return;
-                            }
-                            if let Some(ui) = weak_for_task.upgrade() {
-                                ui.set_pr_list_loading(false);
-                            }
-                        });
                         return;
                     }
                 };
+                // linked issues は join_all で並列 fetch
                 let body = snapshot.body.clone().unwrap_or_default();
                 let numbers = extract_linked_issue_numbers(&body);
-                let mut linked: Vec<LinkedIssueDisplay> = Vec::new();
-                for n in numbers {
-                    match fetch_issue_context_async(&client, &owner, &repo, n).await {
-                        Ok(Some(r)) => linked.push(LinkedIssueDisplay::Found(r)),
-                        Ok(None) => {}
-                        Err(e) => linked.push(LinkedIssueDisplay::Failed {
-                            number: n,
-                            message: e.to_string(),
-                        }),
-                    }
-                }
+                let linked = fetch_linked_issues_parallel(
+                    &client, &owner, &repo, &numbers,
+                )
+                .await;
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(ui) = weak_for_task.upgrade() else { return };
                     let stale = with_app_state(|state| {
-                        state.borrow().is_stale_generation(fetch_gen)
+                        state.borrow().is_stale_snapshot(snap_gen)
                     })
                     .unwrap_or(true);
                     if stale {
-                        // より新しい click が走っているので、この応答は捨てる。
-                        // pr-list-loading は最新 task が制御するので触らない。
                         return;
                     }
-                    ui.set_pr_list_loading(false);
                     apply_snapshot_to_ui(&ui, &snapshot, &linked);
                     ui.set_current_pr_number(new_pr_number);
                     with_app_state(|state| {
@@ -581,14 +570,14 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 1 => PrListFilter::Closed,
                 _ => PrListFilter::All,
             };
-            let (owner, repo, client_opt, runtime_opt, fetch_gen) = {
+            let (owner, repo, client_opt, runtime_opt, list_gen) = {
                 let mut st = state.borrow_mut();
                 (
                     st.owner.clone(),
                     st.repo.clone(),
                     st.client.clone(),
                     st.runtime.clone(),
-                    st.next_generation(),
+                    st.next_list_generation(),
                 )
             };
             let (Some(client), Some(runtime)) = (client_opt, runtime_opt) else {
@@ -602,7 +591,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap_or_default();
                 let _ = slint::invoke_from_event_loop(move || {
                     let stale = with_app_state(|state| {
-                        state.borrow().is_stale_generation(fetch_gen)
+                        state.borrow().is_stale_list(list_gen)
                     })
                     .unwrap_or(true);
                     if stale {
@@ -618,16 +607,20 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // 初期 hydrate: PR snapshot / PR list / linked issues を並列で取得し、
-    // 完了後に UI を埋める。世代カウンタは generation=1 を使う (起動時の
-    // 0 から進めて、その後の click も同様に next_generation で進む)。
+    // 完了後に UI を埋める。snapshot と list を別の世代で管理することで、
+    // 起動 hydrate 中に user が filter を切り替えても snapshot 結果が
+    // 破棄されない。
     {
-        let initial_gen = state.borrow_mut().next_generation();
+        let (snap_gen, list_gen) = {
+            let mut st = state.borrow_mut();
+            (st.next_snapshot_generation(), st.next_list_generation())
+        };
         let owner_clone = owner.clone();
         let repo_clone = repo.clone();
         let client_clone = client_arc.clone();
         let weak_for_task = ui.as_weak();
         runtime_handle.spawn(async move {
-            // PR snapshot と PR list を join で並列実行
+            // PR snapshot と PR list を join! で並列実行
             let snapshot_fut =
                 fetch_pr_snapshot(&client_clone, &owner_clone, &repo_clone, pr_number);
             let list_fut = fetch_pull_requests(
@@ -638,56 +631,54 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             );
             let (snapshot_res, list_res) = tokio::join!(snapshot_fut, list_fut);
 
+            // PR list は snapshot 完了を待たずに先に hydrate する
+            let pr_list = list_res.unwrap_or_default();
+            {
+                let weak = weak_for_task.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    let stale = with_app_state(|state| state.borrow().is_stale_list(list_gen))
+                        .unwrap_or(true);
+                    if stale {
+                        return;
+                    }
+                    if let Some(ui) = weak.upgrade() {
+                        ui.set_pr_list_loading(false);
+                        ui.set_pr_list(build_pr_list_model(&pr_list));
+                    }
+                });
+            }
+
             let snapshot = match snapshot_res {
-                Ok(s) => Some(s),
+                Ok(s) => s,
                 Err(e) => {
                     eprintln!("warn: initial hydrate snapshot failed: {e}");
-                    None
+                    return;
                 }
             };
-            let pr_list = list_res.unwrap_or_default();
-
-            // linked issues は snapshot がある場合のみ並列 fetch
-            let mut linked: Vec<LinkedIssueDisplay> = Vec::new();
-            if let Some(ref snap) = snapshot {
-                let body = snap.body.clone().unwrap_or_default();
-                let numbers = extract_linked_issue_numbers(&body);
-                for n in numbers {
-                    match fetch_issue_context_async(
-                        &client_clone,
-                        &owner_clone,
-                        &repo_clone,
-                        n,
-                    )
-                    .await
-                    {
-                        Ok(Some(r)) => linked.push(LinkedIssueDisplay::Found(r)),
-                        Ok(None) => {}
-                        Err(e) => linked.push(LinkedIssueDisplay::Failed {
-                            number: n,
-                            message: e.to_string(),
-                        }),
-                    }
-                }
-            }
+            // linked issues を並列 fetch
+            let body = snapshot.body.clone().unwrap_or_default();
+            let numbers = extract_linked_issue_numbers(&body);
+            let linked = fetch_linked_issues_parallel(
+                &client_clone,
+                &owner_clone,
+                &repo_clone,
+                &numbers,
+            )
+            .await;
 
             let _ = slint::invoke_from_event_loop(move || {
                 let stale = with_app_state(|state| {
-                    state.borrow().is_stale_generation(initial_gen)
+                    state.borrow().is_stale_snapshot(snap_gen)
                 })
                 .unwrap_or(true);
                 if stale {
                     return;
                 }
                 let Some(ui) = weak_for_task.upgrade() else { return };
-                ui.set_pr_list_loading(false);
-                ui.set_pr_list(build_pr_list_model(&pr_list));
-                if let Some(snap) = snapshot {
-                    apply_snapshot_to_ui(&ui, &snap, &linked);
-                    with_app_state(|state| {
-                        state.borrow_mut().snapshot = snap;
-                    });
-                }
+                apply_snapshot_to_ui(&ui, &snapshot, &linked);
+                with_app_state(|state| {
+                    state.borrow_mut().snapshot = snapshot;
+                });
             });
         });
     }
@@ -884,6 +875,50 @@ enum LinkedIssueDisplay {
     Failed { number: u64, message: String },
 }
 
+/// linked issue 番号一覧を受け取り、各 issue を tokio::spawn 系で並列 fetch
+/// する。`octocrab::Octocrab` は内部で reqwest クライアントを共有しているので
+/// 数件の concurrent 呼び出しは安全。
+async fn fetch_linked_issues_parallel(
+    client: &octocrab::Octocrab,
+    owner: &str,
+    repo: &str,
+    numbers: &[u64],
+) -> Vec<LinkedIssueDisplay> {
+    use futures::stream::{FuturesUnordered, StreamExt};
+
+    let mut futs: FuturesUnordered<_> = numbers
+        .iter()
+        .copied()
+        .map(|n| {
+            let client = client.clone();
+            let owner = owner.to_string();
+            let repo = repo.to_string();
+            async move {
+                let res = fetch_issue_context_async(&client, &owner, &repo, n).await;
+                (n, res)
+            }
+        })
+        .collect();
+
+    let mut out: Vec<LinkedIssueDisplay> = Vec::new();
+    while let Some((n, res)) = futs.next().await {
+        match res {
+            Ok(Some(r)) => out.push(LinkedIssueDisplay::Found(r)),
+            Ok(None) => {}
+            Err(e) => out.push(LinkedIssueDisplay::Failed {
+                number: n,
+                message: e.to_string(),
+            }),
+        }
+    }
+    // 並列実行の完了順は不定なので number でソートして決定論的にする
+    out.sort_by_key(|d| match d {
+        LinkedIssueDisplay::Found(r) => r.number,
+        LinkedIssueDisplay::Failed { number, .. } => *number,
+    });
+    out
+}
+
 fn build_issue_context_model(
     records: &[LinkedIssueDisplay],
 ) -> slint::ModelRc<IssueContextView> {
@@ -959,7 +994,8 @@ mod tests {
             history: Vec::new(),
             client: None,
             runtime: None,
-            fetch_generation: 0,
+            snapshot_generation: 0,
+        list_generation: 0,
         }
     }
 
@@ -1038,13 +1074,28 @@ mod tests {
     }
 
     #[test]
-    fn fetch_generation_increments_and_detects_stale() {
+    fn snapshot_generation_increments_and_detects_stale() {
         let mut st = make_state();
-        let g1 = st.next_generation();
-        let g2 = st.next_generation();
+        let g1 = st.next_snapshot_generation();
+        let g2 = st.next_snapshot_generation();
         assert_ne!(g1, g2);
-        assert!(st.is_stale_generation(g1));
-        assert!(!st.is_stale_generation(g2));
+        assert!(st.is_stale_snapshot(g1));
+        assert!(!st.is_stale_snapshot(g2));
+    }
+
+    #[test]
+    fn list_generation_independent_from_snapshot() {
+        let mut st = make_state();
+        let snap_gen = st.next_snapshot_generation();
+        let list_gen = st.next_list_generation();
+        // list を進めても snapshot 側の生世代は変わらない
+        assert!(!st.is_stale_snapshot(snap_gen));
+        assert!(!st.is_stale_list(list_gen));
+        // list を更に進めると古い list_gen は stale だが snapshot は無事
+        let list_gen2 = st.next_list_generation();
+        assert!(st.is_stale_list(list_gen));
+        assert!(!st.is_stale_list(list_gen2));
+        assert!(!st.is_stale_snapshot(snap_gen));
     }
 
     #[test]
