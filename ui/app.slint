@@ -1,4 +1,6 @@
-import { VerticalBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, ListView, ScrollView } from "std-widgets.slint";
+
+// ===== Terminal pane モード (既存) =====
 
 export struct TerminalCell {
     ch: string,
@@ -72,6 +74,196 @@ export component AppWindow inherits Window {
                 background: #ffffff40;
                 border-width: 1px;
                 border-color: #ffffff;
+            }
+        }
+    }
+}
+
+// ===== Diff viewer モード =====
+
+// DiffLineView.kind: 0=Context, 1=Added, 2=Removed
+export struct DiffLineView {
+    kind: int,
+    old-line-no: string,
+    new-line-no: string,
+    content: string,
+}
+
+export struct DiffFileView {
+    file-path: string,
+    status-label: string,
+    is-unsupported: bool,
+    unsupported-reason: string,
+    lines: [DiffLineView],
+}
+
+export component DiffViewerWindow inherits Window {
+    in property <string> pr-title;
+    in property <string> head-sha;
+    in property <string> base-sha;
+    in property <[DiffFileView]> files;
+    in-out property <int> selected-file-index: 0;
+
+    title: "locus — diff viewer";
+    preferred-width: 1200px;
+    preferred-height: 720px;
+    background: #101014;
+
+    VerticalBox {
+        spacing: 0px;
+        padding: 0px;
+
+        // Header
+        Rectangle {
+            height: 52px;
+            background: #1a1a22;
+            VerticalBox {
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 8px;
+                padding-bottom: 8px;
+                spacing: 2px;
+                Text {
+                    text: root.pr-title;
+                    color: #ffffff;
+                    font-size: 14px;
+                    font-weight: 600;
+                }
+                Text {
+                    text: "base " + root.base-sha + "  ←  head " + root.head-sha;
+                    color: #8a8a95;
+                    font-size: 11px;
+                    font-family: "Menlo, Consolas, monospace";
+                }
+            }
+        }
+
+        HorizontalBox {
+            spacing: 0px;
+            padding: 0px;
+
+            // File list sidebar
+            Rectangle {
+                width: 260px;
+                background: #14141a;
+
+                ListView {
+                    for file[idx] in root.files: Rectangle {
+                        height: 26px;
+                        background: idx == root.selected-file-index
+                            ? #2a2a38
+                            : (touch.has-hover ? #1e1e28 : #14141a);
+
+                        touch := TouchArea {
+                            clicked => {
+                                root.selected-file-index = idx;
+                            }
+                        }
+
+                        HorizontalBox {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            padding-top: 4px;
+                            padding-bottom: 4px;
+                            spacing: 6px;
+                            Text {
+                                text: file.status-label;
+                                color: #8a8a95;
+                                font-size: 10px;
+                                font-family: "Menlo, Consolas, monospace";
+                                width: 30px;
+                            }
+                            Text {
+                                text: file.file-path;
+                                color: #d0d0d5;
+                                font-size: 12px;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Diff content
+            Rectangle {
+                background: #0b0b0f;
+
+                // unsupported 表示
+                if root.files.length > 0
+                    && root.files[root.selected-file-index].is-unsupported:
+                Rectangle {
+                    background: #0b0b0f;
+                    VerticalBox {
+                        alignment: center;
+                        spacing: 8px;
+                        Text {
+                            text: "unsupported";
+                            color: #c07a4e;
+                            font-size: 14px;
+                            horizontal-alignment: center;
+                        }
+                        Text {
+                            text: root.files[root.selected-file-index].unsupported-reason;
+                            color: #8a8a95;
+                            font-size: 12px;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                // diff lines
+                if root.files.length > 0
+                    && !root.files[root.selected-file-index].is-unsupported:
+                ListView {
+                    for line in root.files[root.selected-file-index].lines: Rectangle {
+                        height: 18px;
+                        background: line.kind == 1 ? #102a15
+                            : (line.kind == 2 ? #2a1010 : #0b0b0f);
+
+                        HorizontalBox {
+                            spacing: 0px;
+                            padding: 0px;
+
+                            // line numbers gutter
+                            Rectangle {
+                                width: 90px;
+                                background: #08080c;
+                                HorizontalBox {
+                                    padding-left: 6px;
+                                    padding-right: 6px;
+                                    spacing: 6px;
+                                    Text {
+                                        text: line.old-line-no;
+                                        color: #5a5a65;
+                                        font-family: "Menlo, Consolas, monospace";
+                                        font-size: 11px;
+                                        width: 36px;
+                                        horizontal-alignment: right;
+                                    }
+                                    Text {
+                                        text: line.new-line-no;
+                                        color: #5a5a65;
+                                        font-family: "Menlo, Consolas, monospace";
+                                        font-size: 11px;
+                                        width: 36px;
+                                        horizontal-alignment: right;
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: (line.kind == 1 ? "+ "
+                                    : (line.kind == 2 ? "- " : "  "))
+                                    + line.content;
+                                color: line.kind == 1 ? #8fd98f
+                                    : (line.kind == 2 ? #e58585 : #c8c8d0);
+                                font-family: "Menlo, Consolas, monospace";
+                                font-size: 12px;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
             }
         }
     }

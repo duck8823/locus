@@ -3,6 +3,8 @@
 //! 当面は Terminal ペインの `TerminalRow` / `TerminalCell` 構築だけを扱う。
 //! 将来 diff viewer が入る際もここに同種の builder を追加する想定。
 
+pub mod diff_view;
+
 use std::rc::Rc;
 
 use alacritty_terminal::event::EventListener;
