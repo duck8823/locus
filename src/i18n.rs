@@ -60,13 +60,11 @@ static LOCALE: OnceLock<Locale> = OnceLock::new();
 pub fn init_from_env() -> Locale {
     let locale = Locale::from_env();
     let _ = LOCALE.set(locale);
-    // Slint の bundled translations 側にも反映できるよう LANG を設定する。
-    // すでに LANG が指定されていれば上書きしない。
-    if std::env::var("LANG").is_err() {
-        unsafe {
-            std::env::set_var("LANG", format!("{}_JP.UTF-8", locale.as_lang_string()));
-        }
-    }
+    // Slint bundled translations と Rust helper の locale を 1 箇所に寄せる。
+    // 環境変数を mutating せず、Slint API を直接呼んで locale を選ぶことで、
+    // sys_locale の優先順位 (LANGUAGE > LC_ALL > LC_MESSAGES > LANG) と
+    // 干渉せず常に LOCUS_LOCALE を勝たせる。
+    let _ = slint::select_bundled_translation(locale.as_lang_string());
     locale
 }
 
