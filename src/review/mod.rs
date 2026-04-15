@@ -15,6 +15,7 @@
 pub mod diff;
 pub mod diff_builder;
 pub mod draft;
+pub mod formatter;
 pub mod selection;
 pub mod snapshot;
 pub mod target;
