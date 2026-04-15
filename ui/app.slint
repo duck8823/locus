@@ -102,6 +102,13 @@ export struct HistoryEntryView {
     label: string,
 }
 
+export struct IssueContextView {
+    number: string,
+    title: string,
+    state: string,
+    body_excerpt: string,
+}
+
 export struct DiffFileView {
     file-path: string,
     status-label: string,
@@ -114,6 +121,8 @@ export component DiffViewerWindow inherits Window {
     in property <string> pr-title;
     in property <string> head-sha;
     in property <string> base-sha;
+    in property <string> pr-body-excerpt;
+    in property <[IssueContextView]> linked-issues;
     in property <[DiffFileView]> files;
     in-out property <int> selected-file-index: 0;
 
@@ -158,27 +167,91 @@ export component DiffViewerWindow inherits Window {
         spacing: 0px;
         padding: 0px;
 
-        // Header
+        // Header with PR context card (title + base/head + body excerpt + linked issues)
         Rectangle {
-            height: 52px;
+            height: (root.pr-body-excerpt != "" || root.linked-issues.length > 0) ? 150px : 52px;
             background: #1a1a22;
             VerticalBox {
                 padding-left: 16px;
                 padding-right: 16px;
                 padding-top: 8px;
                 padding-bottom: 8px;
-                spacing: 2px;
+                spacing: 4px;
                 Text {
                     text: root.pr-title;
                     color: #ffffff;
                     font-size: 14px;
                     font-weight: 600;
+                    overflow: elide;
                 }
                 Text {
                     text: "base " + root.base-sha + "  ←  head " + root.head-sha;
                     color: #8a8a95;
                     font-size: 11px;
                     font-family: "Menlo, Consolas, monospace";
+                }
+                if root.pr-body-excerpt != "": Text {
+                    text: root.pr-body-excerpt;
+                    color: #b0b0b8;
+                    font-size: 11px;
+                    overflow: elide;
+                    wrap: word-wrap;
+                }
+                if root.linked-issues.length > 0: VerticalBox {
+                    spacing: 4px;
+                    HorizontalBox {
+                        spacing: 8px;
+                        alignment: start;
+                        Text {
+                            text: "linked:";
+                            color: #8a8a95;
+                            font-size: 10px;
+                            vertical-alignment: top;
+                        }
+                        for issue in root.linked-issues: Rectangle {
+                            background: issue.state == "error"
+                                ? #2a1010
+                                : (issue.state == "closed" ? #2a1a2a : #1a2a1a);
+                            border-radius: 4px;
+                            border-width: 1px;
+                            border-color: issue.state == "error"
+                                ? #c07a4e
+                                : (issue.state == "closed" ? #5a2a5a : #2a5a2a);
+                            VerticalBox {
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                padding-top: 2px;
+                                padding-bottom: 2px;
+                                spacing: 1px;
+                                HorizontalBox {
+                                    spacing: 4px;
+                                    alignment: start;
+                                    Text {
+                                        text: issue.number;
+                                        color: issue.state == "error"
+                                            ? #e58585
+                                            : (issue.state == "closed" ? #c07ac0 : #7ac07a);
+                                        font-size: 10px;
+                                        font-family: "Menlo, Consolas, monospace";
+                                        font-weight: 600;
+                                    }
+                                    Text {
+                                        text: issue.title;
+                                        color: #d0d0d5;
+                                        font-size: 10px;
+                                        overflow: elide;
+                                    }
+                                }
+                                if issue.body_excerpt != "": Text {
+                                    text: issue.body_excerpt;
+                                    color: #8a8a95;
+                                    font-size: 9px;
+                                    overflow: elide;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

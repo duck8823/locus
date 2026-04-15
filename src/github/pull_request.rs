@@ -87,6 +87,7 @@ impl FileStatus {
 pub struct PullRequestSnapshot {
     pub target: ReviewTarget,
     pub title: String,
+    pub body: Option<String>,
     pub head_sha: String,
     pub base_sha: String,
     pub files: Vec<PullRequestFile>,
@@ -140,6 +141,7 @@ pub async fn fetch_pr_snapshot(
     let pr: PullRequest = pulls.get(pr_number).await?;
 
     let title = pr.title.unwrap_or_default();
+    let body = pr.body.clone();
     let head_sha = pr.head.sha.clone();
     let base_sha = pr.base.sha.clone();
 
@@ -233,6 +235,7 @@ pub async fn fetch_pr_snapshot(
             pr_number,
         },
         title,
+        body,
         head_sha,
         base_sha,
         files,

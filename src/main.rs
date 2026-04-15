@@ -18,6 +18,10 @@ mod semantic;
 mod terminal;
 mod ui_state;
 
+use github::issue_context::{
+    extract_linked_issue_numbers, GithubIssueContextProvider, IssueContextProvider,
+    IssueContextRecord, IssueState,
+};
 use github::pull_request::{
     build_client, fetch_pr_snapshot, parse_pr_spec, PullRequestFile, PullRequestSnapshot,
 };
@@ -143,16 +147,32 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
+    let runtime_handle = runtime.handle().clone();
 
-    let snapshot = runtime.block_on(async move {
+    // 非同期 fetch は runtime でまとめて行う
+    let (snapshot, client_arc) = runtime.block_on(async move {
         let client = build_client()?;
-        fetch_pr_snapshot(&client, &owner, &repo, pr_number).await
+        let client_arc = client.clone();
+        let snapshot = fetch_pr_snapshot(&client, &owner, &repo, pr_number).await?;
+        Ok::<_, Box<dyn std::error::Error>>((snapshot, client_arc))
     })?;
+
+    // PR body から linked issue を抽出し、そのコンテキストを取得する
+    let linked_issues = fetch_linked_issue_records(
+        client_arc.as_ref(),
+        &runtime_handle,
+        &snapshot,
+    );
 
     let ui = DiffViewerWindow::new()?;
     ui.set_pr_title(SharedString::from(snapshot.title.as_str()));
     ui.set_head_sha(SharedString::from(short_sha(&snapshot.head_sha)));
     ui.set_base_sha(SharedString::from(short_sha(&snapshot.base_sha)));
+    ui.set_pr_body_excerpt(SharedString::from(excerpt(
+        snapshot.body.as_deref().unwrap_or(""),
+        180,
+    )));
+    ui.set_linked_issues(build_issue_context_model(&linked_issues));
 
     let file_views = build_diff_file_views(&snapshot.files);
     let model = std::rc::Rc::new(slint::VecModel::from(file_views));
@@ -524,6 +544,100 @@ fn short_sha(sha: &str) -> String {
     sha.chars().take(7).collect()
 }
 
+fn excerpt(body: &str, max_chars: usize) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    // 最初の空行までを1段落として扱い、さらに長さを切り詰める
+    let first_paragraph = trimmed
+        .split("\n\n")
+        .next()
+        .unwrap_or("")
+        .replace('\n', " ");
+    if first_paragraph.chars().count() <= max_chars {
+        first_paragraph
+    } else {
+        let mut out: String = first_paragraph.chars().take(max_chars).collect();
+        out.push('…');
+        out
+    }
+}
+
+enum LinkedIssueDisplay {
+    Found(IssueContextRecord),
+    /// 取得失敗。404 と PR が返ったケースは静かに隠すため LinkedIssueDisplay
+    /// に乗せない。本バリアントは認証エラー / rate limit / 5xx 等の non-2xx。
+    Failed { number: u64, message: String },
+}
+
+fn fetch_linked_issue_records(
+    client: &octocrab::Octocrab,
+    runtime: &tokio::runtime::Handle,
+    snapshot: &PullRequestSnapshot,
+) -> Vec<LinkedIssueDisplay> {
+    let body = snapshot.body.as_deref().unwrap_or("");
+    let numbers = extract_linked_issue_numbers(body);
+    if numbers.is_empty() {
+        return Vec::new();
+    }
+    let (owner, repo) = match &snapshot.target {
+        review::target::ReviewTarget::GitHubPr { owner, repo, .. } => {
+            (owner.clone(), repo.clone())
+        }
+        _ => return Vec::new(),
+    };
+    let provider = GithubIssueContextProvider::new(client, runtime.clone());
+    let mut records: Vec<LinkedIssueDisplay> = Vec::new();
+    for n in numbers {
+        match provider.fetch(&owner, &repo, n) {
+            Ok(Some(r)) => records.push(LinkedIssueDisplay::Found(r)),
+            Ok(None) => {} // 404 / 参照元が PR だった場合は静かに隠す
+            Err(e) => records.push(LinkedIssueDisplay::Failed {
+                number: n,
+                message: e.to_string(),
+            }),
+        }
+    }
+    records
+}
+
+fn build_issue_context_model(
+    records: &[LinkedIssueDisplay],
+) -> slint::ModelRc<IssueContextView> {
+    let model = slint::VecModel::<IssueContextView>::default();
+    for entry in records {
+        match entry {
+            LinkedIssueDisplay::Found(r) => {
+                let state = match r.state {
+                    IssueState::Open => "open",
+                    IssueState::Closed => "closed",
+                };
+                model.push(IssueContextView {
+                    number: SharedString::from(format!("#{}", r.number)),
+                    title: SharedString::from(r.title.as_str()),
+                    state: SharedString::from(state),
+                    body_excerpt: SharedString::from(excerpt(
+                        r.body.as_deref().unwrap_or(""),
+                        140,
+                    )),
+                });
+            }
+            LinkedIssueDisplay::Failed { number, message } => {
+                model.push(IssueContextView {
+                    number: SharedString::from(format!("#{number}")),
+                    title: SharedString::from("(failed to fetch)"),
+                    state: SharedString::from("error"),
+                    body_excerpt: SharedString::from(message.as_str()),
+                });
+            }
+        }
+    }
+    slint::ModelRc::from(
+        std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = IssueContextView>>,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,6 +653,7 @@ mod tests {
                 pr_number: 1,
             },
             title: "t".into(),
+            body: None,
             head_sha: "abcdefg".into(),
             base_sha: "0000000".into(),
             files: vec![PullRequestFile {
