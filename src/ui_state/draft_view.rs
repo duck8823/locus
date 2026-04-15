@@ -9,29 +9,35 @@ use crate::review::selection::{Granularity, SelectionAnchor, Side};
 use crate::DraftEntryView;
 
 pub fn anchor_label(anchor: &SelectionAnchor) -> String {
-    let path = &anchor.file_path;
+    let path = anchor.file_path.as_str();
     match &anchor.granularity {
-        Granularity::File => format!("{path} (file)"),
+        Granularity::File => crate::i18n::tr_args("{} (file)", &[path]),
         Granularity::Hunk { hunk_index } => {
-            format!("{path} (hunk #{hunk_index})")
+            let idx = hunk_index.to_string();
+            crate::i18n::tr_args("{} (hunk #{})", &[path, idx.as_str()])
         }
         Granularity::Range {
             start_line,
             end_line,
             side,
         } => {
-            format!(
-                "{path}:{start_line}-{end_line} ({})",
-                side_label(*side)
+            let from = start_line.to_string();
+            let to = end_line.to_string();
+            let side = crate::i18n::tr(side_key(*side));
+            crate::i18n::tr_args(
+                "{}:{}-{} ({})",
+                &[path, from.as_str(), to.as_str(), side.as_str()],
             )
         }
         Granularity::Line { line, side } => {
-            format!("{path}:{line} ({})", side_label(*side))
+            let line_str = line.to_string();
+            let side = crate::i18n::tr(side_key(*side));
+            crate::i18n::tr_args("{}:{} ({})", &[path, line_str.as_str(), side.as_str()])
         }
     }
 }
 
-fn side_label(side: Side) -> &'static str {
+fn side_key(side: Side) -> &'static str {
     match side {
         Side::Before => "before",
         Side::After => "after",
@@ -77,35 +83,43 @@ mod tests {
         }
     }
 
+    // 翻訳結果は locale 依存なので、構造的にキー要素 (path / 数字) が含まれることだけを検査する。
     #[test]
-    fn label_for_line_granularity() {
+    fn label_for_line_granularity_contains_path_and_line() {
         let a = anchor(Granularity::Line {
             line: 10,
             side: Side::After,
         });
-        assert_eq!(anchor_label(&a), "a.rs:10 (after)");
+        let label = anchor_label(&a);
+        assert!(label.contains("a.rs"));
+        assert!(label.contains("10"));
     }
 
     #[test]
-    fn label_for_range_granularity() {
+    fn label_for_range_granularity_contains_span() {
         let a = anchor(Granularity::Range {
             start_line: 3,
             end_line: 7,
             side: Side::Before,
         });
-        assert_eq!(anchor_label(&a), "a.rs:3-7 (before)");
+        let label = anchor_label(&a);
+        assert!(label.contains("3"));
+        assert!(label.contains("7"));
     }
 
     #[test]
-    fn label_for_hunk_granularity() {
+    fn label_for_hunk_granularity_contains_index() {
         let a = anchor(Granularity::Hunk { hunk_index: 2 });
-        assert_eq!(anchor_label(&a), "a.rs (hunk #2)");
+        let label = anchor_label(&a);
+        assert!(label.contains("a.rs"));
+        assert!(label.contains("2"));
     }
 
     #[test]
-    fn label_for_file_granularity() {
+    fn label_for_file_granularity_contains_path() {
         let a = anchor(Granularity::File);
-        assert_eq!(anchor_label(&a), "a.rs (file)");
+        let label = anchor_label(&a);
+        assert!(label.contains("a.rs"));
     }
 
     #[test]

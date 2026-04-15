@@ -24,7 +24,7 @@ export component AppWindow inherits Window {
     callback key-pressed(string);
     callback resized(length, length);
 
-    title: "locus PoC — Terminal Pane";
+    title: @tr("locus — Terminal pane");
     preferred-width: 900px;
     preferred-height: 540px;
     background: #0b0b0b;
@@ -135,7 +135,7 @@ export component DiffViewerWindow inherits Window {
     in property <[DiffFileView]> files;
     in-out property <int> selected-file-index: 0;
 
-    in property <string> current-anchor-label: "(no selection)";
+    in property <string> current-anchor-label: @tr("(no selection)");
     in property <[DraftEntryView]> draft-entries;
     in-out property <string> note-input-text;
 
@@ -150,7 +150,7 @@ export component DiffViewerWindow inherits Window {
     in property <int> terminal-cursor-col: 0;
     in property <int> terminal-cursor-row: 0;
     in property <bool> terminal-available: false;
-    in property <string> terminal-status: "not started";
+    in property <string> terminal-status: @tr("not started");
 
     in property <[PullRequestListItemView]> pr-list;
     in-out property <int> pr-list-filter: 0; // 0=open, 1=closed, 2=all
@@ -175,7 +175,7 @@ export component DiffViewerWindow inherits Window {
     callback pr-clicked(int);
     callback pr-filter-changed(int);
 
-    title: "locus — diff viewer";
+    title: @tr("locus — diff viewer");
     preferred-width: 1700px;
     preferred-height: 960px;
     background: #101014;
@@ -202,7 +202,7 @@ export component DiffViewerWindow inherits Window {
                     overflow: elide;
                 }
                 Text {
-                    text: "base " + root.base-sha + "  ←  head " + root.head-sha;
+                    text: @tr("base") + " " + root.base-sha + "  ←  " + @tr("head") + " " + root.head-sha;
                     color: #8a8a95;
                     font-size: 11px;
                     font-family: "Menlo, Consolas, monospace";
@@ -220,7 +220,7 @@ export component DiffViewerWindow inherits Window {
                         spacing: 8px;
                         alignment: start;
                         Text {
-                            text: "linked:";
+                            text: @tr("linked:");
                             color: #8a8a95;
                             font-size: 10px;
                             vertical-alignment: top;
@@ -297,8 +297,8 @@ export component DiffViewerWindow inherits Window {
                             alignment: start;
                             Text {
                                 text: root.pr-list-loading
-                                    ? "PRs (loading…)"
-                                    : "PRs (" + root.pr-list.length + ")";
+                                    ? @tr("PRs (loading…)")
+                                    : @tr("PRs") + " (" + root.pr-list.length + ")";
                                 color: #ffffff;
                                 font-size: 12px;
                                 font-weight: 600;
@@ -315,7 +315,7 @@ export component DiffViewerWindow inherits Window {
                             padding-right: 6px;
                             spacing: 4px;
                             Button {
-                                text: "Open";
+                                text: @tr("Open");
                                 checkable: true;
                                 checked: root.pr-list-filter == 0;
                                 clicked => {
@@ -324,7 +324,7 @@ export component DiffViewerWindow inherits Window {
                                 }
                             }
                             Button {
-                                text: "Closed";
+                                text: @tr("Closed");
                                 checkable: true;
                                 checked: root.pr-list-filter == 1;
                                 clicked => {
@@ -333,7 +333,7 @@ export component DiffViewerWindow inherits Window {
                                 }
                             }
                             Button {
-                                text: "All";
+                                text: @tr("All");
                                 checkable: true;
                                 checked: root.pr-list-filter == 2;
                                 clicked => {
@@ -454,7 +454,7 @@ export component DiffViewerWindow inherits Window {
                             alignment: center;
                             spacing: 8px;
                             Text {
-                                text: "unsupported";
+                                text: @tr("unsupported");
                                 color: #c07a4e;
                                 font-size: 14px;
                                 horizontal-alignment: center;
@@ -554,7 +554,7 @@ export component DiffViewerWindow inherits Window {
                                 spacing: 10px;
                                 alignment: start;
                                 Text {
-                                    text: "Selection:";
+                                    text: @tr("Selection:");
                                     color: #8a8a95;
                                     font-size: 11px;
                                     vertical-alignment: center;
@@ -568,15 +568,15 @@ export component DiffViewerWindow inherits Window {
                                 }
                                 Rectangle { horizontal-stretch: 1; }
                                 Button {
-                                    text: "File";
+                                    text: @tr("File");
                                     clicked => { root.select-whole-file(); }
                                 }
                                 Button {
-                                    text: "Range";
+                                    text: @tr("Range");
                                     clicked => { root.extend-to-range(); }
                                 }
                                 Button {
-                                    text: "Clear";
+                                    text: @tr("Clear");
                                     clicked => { root.clear-current-selection(); }
                                 }
                             }
@@ -584,12 +584,12 @@ export component DiffViewerWindow inherits Window {
                             HorizontalBox {
                                 spacing: 6px;
                                 note-input := LineEdit {
-                                    placeholder-text: "note (optional)";
+                                    placeholder-text: @tr("note (optional)");
                                     text <=> root.note-input-text;
                                     horizontal-stretch: 1;
                                 }
                                 Button {
-                                    text: "Add to draft";
+                                    text: @tr("Add to draft");
                                     clicked => {
                                         root.add-to-draft(note-input.text);
                                         root.note-input-text = "";
@@ -614,28 +614,28 @@ export component DiffViewerWindow inherits Window {
                                 spacing: 10px;
                                 alignment: start;
                                 Text {
-                                    text: "Preview:";
+                                    text: @tr("Preview:");
                                     color: #8a8a95;
                                     font-size: 11px;
                                     vertical-alignment: center;
                                 }
                                 Rectangle { horizontal-stretch: 1; }
                                 Button {
-                                    text: "Refresh";
+                                    text: @tr("Refresh");
                                     clicked => { root.refresh-preview(); }
                                 }
                                 Button {
-                                    text: "Insert";
+                                    text: @tr("Insert");
                                     enabled: root.terminal-available;
                                     clicked => { root.send-insert-only(root.preview-text); }
                                 }
                                 Button {
-                                    text: "Insert+Send";
+                                    text: @tr("Insert+Send");
                                     enabled: root.terminal-available;
                                     clicked => { root.send-insert-and-send(root.preview-text); }
                                 }
                                 Button {
-                                    text: "Copy";
+                                    text: @tr("Copy");
                                     clicked => { root.send-copy-to-clipboard(root.preview-text); }
                                 }
                             }
@@ -671,7 +671,7 @@ export component DiffViewerWindow inherits Window {
                             alignment: start;
                             spacing: 6px;
                             Text {
-                                text: "agent:";
+                                text: @tr("agent:");
                                 color: #8a8a95;
                                 font-size: 10px;
                                 vertical-alignment: center;
@@ -763,7 +763,7 @@ export component DiffViewerWindow inherits Window {
                             padding-right: 10px;
                             alignment: start;
                             Text {
-                                text: "Draft (" + root.draft-entries.length + ")";
+                                text: @tr("Draft") + " (" + root.draft-entries.length + ")";
                                 color: #ffffff;
                                 font-size: 12px;
                                 font-weight: 600;
@@ -836,7 +836,7 @@ export component DiffViewerWindow inherits Window {
                             padding-right: 10px;
                             alignment: start;
                             Text {
-                                text: "History (" + root.history-entries.length + ")";
+                                text: @tr("History") + " (" + root.history-entries.length + ")";
                                 color: #ffffff;
                                 font-size: 12px;
                                 font-weight: 600;
