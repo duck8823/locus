@@ -46,9 +46,11 @@ pub fn build_diff_file_view(file: &PullRequestFile) -> DiffFileView {
 
 fn flatten_diff_lines(diff: &FileDiff) -> ModelRc<DiffLineView> {
     let model = VecModel::<DiffLineView>::default();
-    for hunk in &diff.hunks {
+    for (hunk_idx, hunk) in diff.hunks.iter().enumerate() {
         model.push(DiffLineView {
-            kind: 0,
+            kind: -1,
+            is_hunk_header: true,
+            hunk_index: hunk_idx as i32,
             old_line_no: SharedString::default(),
             new_line_no: SharedString::default(),
             content: SharedString::from(hunk.header()),
@@ -56,6 +58,8 @@ fn flatten_diff_lines(diff: &FileDiff) -> ModelRc<DiffLineView> {
         for line in &hunk.lines {
             model.push(DiffLineView {
                 kind: linekind_to_int(line.kind),
+                is_hunk_header: false,
+                hunk_index: hunk_idx as i32,
                 old_line_no: line
                     .old_line_no
                     .map(|n| SharedString::from(n.to_string()))

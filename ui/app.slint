@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, ListView, ScrollView } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, ListView, ScrollView, LineEdit, Button } from "std-widgets.slint";
 
 // ===== Terminal pane モード (既存) =====
 
@@ -81,12 +81,19 @@ export component AppWindow inherits Window {
 
 // ===== Diff viewer モード =====
 
-// DiffLineView.kind: 0=Context, 1=Added, 2=Removed
+// DiffLineView.kind: 0=Context, 1=Added, 2=Removed, -1=HunkHeader
 export struct DiffLineView {
     kind: int,
+    is-hunk-header: bool,
+    hunk-index: int,
     old-line-no: string,
     new-line-no: string,
     content: string,
+}
+
+export struct DraftEntryView {
+    label: string,
+    note: string,
 }
 
 export struct DiffFileView {
@@ -104,9 +111,21 @@ export component DiffViewerWindow inherits Window {
     in property <[DiffFileView]> files;
     in-out property <int> selected-file-index: 0;
 
+    in property <string> current-anchor-label: "(no selection)";
+    in property <[DraftEntryView]> draft-entries;
+    in-out property <string> note-input-text;
+
+    callback select-line(int, int, string, string);
+    callback select-hunk(int, int);
+    callback select-whole-file();
+    callback extend-to-range();
+    callback add-to-draft(string);
+    callback remove-draft-entry(int);
+    callback clear-current-selection();
+
     title: "locus — diff viewer";
-    preferred-width: 1200px;
-    preferred-height: 720px;
+    preferred-width: 1400px;
+    preferred-height: 780px;
     background: #101014;
 
     VerticalBox {
@@ -184,82 +203,247 @@ export component DiffViewerWindow inherits Window {
                 }
             }
 
-            // Diff content
+            // Center: diff content + selection controls
             Rectangle {
                 background: #0b0b0f;
 
-                // unsupported 表示
-                if root.files.length > 0
-                    && root.files[root.selected-file-index].is-unsupported:
-                Rectangle {
-                    background: #0b0b0f;
-                    VerticalBox {
-                        alignment: center;
-                        spacing: 8px;
-                        Text {
-                            text: "unsupported";
-                            color: #c07a4e;
-                            font-size: 14px;
-                            horizontal-alignment: center;
+                VerticalBox {
+                    spacing: 0px;
+                    padding: 0px;
+
+                    // Diff content
+                    Rectangle {
+                        background: #0b0b0f;
+
+                        if root.files.length > 0
+                            && root.files[root.selected-file-index].is-unsupported:
+                        VerticalBox {
+                            alignment: center;
+                            spacing: 8px;
+                            Text {
+                                text: "unsupported";
+                                color: #c07a4e;
+                                font-size: 14px;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: root.files[root.selected-file-index].unsupported-reason;
+                                color: #8a8a95;
+                                font-size: 12px;
+                                horizontal-alignment: center;
+                            }
                         }
-                        Text {
-                            text: root.files[root.selected-file-index].unsupported-reason;
-                            color: #8a8a95;
-                            font-size: 12px;
-                            horizontal-alignment: center;
-                        }
-                    }
-                }
 
-                // diff lines
-                if root.files.length > 0
-                    && !root.files[root.selected-file-index].is-unsupported:
-                ListView {
-                    for line in root.files[root.selected-file-index].lines: Rectangle {
-                        height: 18px;
-                        background: line.kind == 1 ? #102a15
-                            : (line.kind == 2 ? #2a1010 : #0b0b0f);
+                        if root.files.length > 0
+                            && !root.files[root.selected-file-index].is-unsupported:
+                        ListView {
+                            for line in root.files[root.selected-file-index].lines: Rectangle {
+                                height: 18px;
+                                background: line.is-hunk-header ? #1a1a28
+                                    : (line.kind == 1 ? #102a15
+                                    : (line.kind == 2 ? #2a1010 : #0b0b0f));
 
-                        HorizontalBox {
-                            spacing: 0px;
-                            padding: 0px;
-
-                            // line numbers gutter
-                            Rectangle {
-                                width: 90px;
-                                background: #08080c;
-                                HorizontalBox {
-                                    padding-left: 6px;
-                                    padding-right: 6px;
-                                    spacing: 6px;
-                                    Text {
-                                        text: line.old-line-no;
-                                        color: #5a5a65;
-                                        font-family: "Menlo, Consolas, monospace";
-                                        font-size: 11px;
-                                        width: 36px;
-                                        horizontal-alignment: right;
+                                line-touch := TouchArea {
+                                    clicked => {
+                                        if (line.is-hunk-header) {
+                                            root.select-hunk(root.selected-file-index, line.hunk-index);
+                                        } else {
+                                            root.select-line(
+                                                root.selected-file-index,
+                                                line.kind,
+                                                line.old-line-no,
+                                                line.new-line-no
+                                            );
+                                        }
                                     }
+                                }
+
+                                HorizontalBox {
+                                    spacing: 0px;
+                                    padding: 0px;
+
+                                    Rectangle {
+                                        width: 90px;
+                                        background: line.is-hunk-header ? #1a1a28 : #08080c;
+                                        HorizontalBox {
+                                            padding-left: 6px;
+                                            padding-right: 6px;
+                                            spacing: 6px;
+                                            Text {
+                                                text: line.old-line-no;
+                                                color: #5a5a65;
+                                                font-family: "Menlo, Consolas, monospace";
+                                                font-size: 11px;
+                                                width: 36px;
+                                                horizontal-alignment: right;
+                                            }
+                                            Text {
+                                                text: line.new-line-no;
+                                                color: #5a5a65;
+                                                font-family: "Menlo, Consolas, monospace";
+                                                font-size: 11px;
+                                                width: 36px;
+                                                horizontal-alignment: right;
+                                            }
+                                        }
+                                    }
+
                                     Text {
-                                        text: line.new-line-no;
-                                        color: #5a5a65;
+                                        text: line.is-hunk-header
+                                            ? line.content
+                                            : ((line.kind == 1 ? "+ "
+                                                : (line.kind == 2 ? "- " : "  "))
+                                                + line.content);
+                                        color: line.is-hunk-header ? #7a7ac0
+                                            : (line.kind == 1 ? #8fd98f
+                                            : (line.kind == 2 ? #e58585 : #c8c8d0));
                                         font-family: "Menlo, Consolas, monospace";
-                                        font-size: 11px;
-                                        width: 36px;
-                                        horizontal-alignment: right;
+                                        font-size: 12px;
+                                        overflow: elide;
                                     }
                                 }
                             }
+                        }
+                    }
 
+                    // Selection controls strip
+                    Rectangle {
+                        height: 90px;
+                        background: #14141a;
+                        border-width: 1px;
+                        border-color: #24242c;
+
+                        VerticalBox {
+                            padding: 10px;
+                            spacing: 6px;
+
+                            HorizontalBox {
+                                spacing: 10px;
+                                alignment: start;
+                                Text {
+                                    text: "Selection:";
+                                    color: #8a8a95;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: root.current-anchor-label;
+                                    color: #d0d0d5;
+                                    font-size: 12px;
+                                    font-family: "Menlo, Consolas, monospace";
+                                    vertical-alignment: center;
+                                }
+                                Rectangle { horizontal-stretch: 1; }
+                                Button {
+                                    text: "File";
+                                    clicked => { root.select-whole-file(); }
+                                }
+                                Button {
+                                    text: "Range";
+                                    clicked => { root.extend-to-range(); }
+                                }
+                                Button {
+                                    text: "Clear";
+                                    clicked => { root.clear-current-selection(); }
+                                }
+                            }
+
+                            HorizontalBox {
+                                spacing: 6px;
+                                note-input := LineEdit {
+                                    placeholder-text: "note (optional)";
+                                    text <=> root.note-input-text;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: "Add to draft";
+                                    clicked => {
+                                        root.add-to-draft(note-input.text);
+                                        root.note-input-text = "";
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Right: draft panel
+            Rectangle {
+                width: 300px;
+                background: #14141a;
+
+                VerticalBox {
+                    spacing: 0px;
+                    padding: 0px;
+
+                    Rectangle {
+                        height: 32px;
+                        background: #1a1a22;
+                        HorizontalBox {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            alignment: start;
                             Text {
-                                text: (line.kind == 1 ? "+ "
-                                    : (line.kind == 2 ? "- " : "  "))
-                                    + line.content;
-                                color: line.kind == 1 ? #8fd98f
-                                    : (line.kind == 2 ? #e58585 : #c8c8d0);
-                                font-family: "Menlo, Consolas, monospace";
+                                text: "Draft (" + root.draft-entries.length + ")";
+                                color: #ffffff;
                                 font-size: 12px;
-                                overflow: elide;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    ListView {
+                        for entry[idx] in root.draft-entries: Rectangle {
+                            height: 44px;
+                            background: #14141a;
+                            border-width: 1px;
+                            border-color: #1c1c24;
+
+                            HorizontalBox {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                padding-top: 4px;
+                                padding-bottom: 4px;
+                                spacing: 6px;
+
+                                VerticalBox {
+                                    horizontal-stretch: 1;
+                                    spacing: 2px;
+                                    Text {
+                                        text: entry.label;
+                                        color: #d0d0d5;
+                                        font-size: 11px;
+                                        font-family: "Menlo, Consolas, monospace";
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: entry.note;
+                                        color: #8a8a95;
+                                        font-size: 11px;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                delete-btn := TouchArea {
+                                    width: 24px;
+                                    height: 24px;
+                                    clicked => {
+                                        root.remove-draft-entry(idx);
+                                    }
+                                    Rectangle {
+                                        background: delete-btn.has-hover ? #3a1a1a : transparent;
+                                        border-radius: 4px;
+                                        Text {
+                                            text: "×";
+                                            color: #e58585;
+                                            font-size: 16px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
