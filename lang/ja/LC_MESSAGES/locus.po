@@ -116,3 +116,12 @@ msgstr "PR 一覧の取得に失敗しました"
 
 msgid "Failed to fetch {} linked issue(s)"
 msgstr "{} 件の関連 issue の取得に失敗しました"
+
+msgid "{}: not found in PATH"
+msgstr "{}: PATH に見つかりません"
+
+msgid "Agent command not found"
+msgstr "エージェントコマンドが見つかりません"
+
+msgid "{}: not found in PATH (set LOCUS_AGENT_CMD)"
+msgstr "{}: PATH に見つかりません (LOCUS_AGENT_CMD を設定してください)"
