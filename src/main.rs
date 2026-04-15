@@ -100,6 +100,10 @@ struct DiffAppState {
     history: Vec<HistoryEntry>,
     client: Option<std::sync::Arc<octocrab::Octocrab>>,
     runtime: Option<tokio::runtime::Handle>,
+    /// 非同期 fetch の世代カウンタ。PR 切替・filter 変更のたびに +1。
+    /// spawn された task は capture 時の世代を持ち、UI 更新時に
+    /// 現在の世代と一致しなければ破棄される (stale response の上書き防止)。
+    fetch_generation: u64,
 }
 
 impl DiffAppState {
@@ -165,6 +169,17 @@ impl DiffAppState {
     fn cancel_range_on_file_switch(&mut self) {
         self.pending_range = false;
     }
+
+    /// 新しい世代を発行して現在値を返す。spawn 側はこれを capture し、
+    /// UI 更新時に `is_stale_generation` で照合する。
+    fn next_generation(&mut self) -> u64 {
+        self.fetch_generation = self.fetch_generation.wrapping_add(1);
+        self.fetch_generation
+    }
+
+    fn is_stale_generation(&self, captured: u64) -> bool {
+        captured != self.fetch_generation
+    }
 }
 
 fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -213,6 +228,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         history: Vec::new(),
         client: Some(client_arc.clone()),
         runtime: Some(runtime_handle.clone()),
+        fetch_generation: 0,
     }));
     DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state.clone()));
 
@@ -467,19 +483,23 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     // 完了したら invoke_from_event_loop で UI スレッドに戻ってモデルを
     // 更新する。state (Rc<RefCell<>>) は Send ではないので spawn 内では
     // 触らず、完了後の closure 内でだけ触る。
+    //
+    // 高速に PR を切り替えた場合に古い応答が新しい応答を上書きしないよう、
+    // task 開始時の世代を capture し、UI 更新前に現在の世代と照合する。
     {
         let state = state.clone();
         let ui_weak = ui.as_weak();
         ui.on_pr_clicked(move |new_pr_number: i32| {
             let Some(ui) = ui_weak.upgrade() else { return };
             let new_number = new_pr_number as u64;
-            let (owner, repo, client_opt, runtime_opt) = {
-                let st = state.borrow();
+            let (owner, repo, client_opt, runtime_opt, fetch_gen) = {
+                let mut st = state.borrow_mut();
                 (
                     st.owner.clone(),
                     st.repo.clone(),
                     st.client.clone(),
                     st.runtime.clone(),
+                    st.next_generation(),
                 )
             };
             let (Some(client), Some(runtime)) = (client_opt, runtime_opt) else {
@@ -495,6 +515,13 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     Err(e) => {
                         eprintln!("warn: failed to fetch PR #{new_number}: {e}");
                         let _ = slint::invoke_from_event_loop(move || {
+                            let stale = with_app_state(|state| {
+                                state.borrow().is_stale_generation(fetch_gen)
+                            })
+                            .unwrap_or(true);
+                            if stale {
+                                return;
+                            }
                             if let Some(ui) = weak_for_task.upgrade() {
                                 ui.set_pr_list_loading(false);
                             }
@@ -517,6 +544,15 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(ui) = weak_for_task.upgrade() else { return };
+                    let stale = with_app_state(|state| {
+                        state.borrow().is_stale_generation(fetch_gen)
+                    })
+                    .unwrap_or(true);
+                    if stale {
+                        // より新しい click が走っているので、この応答は捨てる。
+                        // pr-list-loading は最新 task が制御するので触らない。
+                        return;
+                    }
                     ui.set_pr_list_loading(false);
                     apply_snapshot_to_ui(&ui, &snapshot, &linked);
                     ui.set_current_pr_number(new_pr_number);
@@ -548,13 +584,14 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 1 => PrListFilter::Closed,
                 _ => PrListFilter::All,
             };
-            let (owner, repo, client_opt, runtime_opt) = {
-                let st = state.borrow();
+            let (owner, repo, client_opt, runtime_opt, fetch_gen) = {
+                let mut st = state.borrow_mut();
                 (
                     st.owner.clone(),
                     st.repo.clone(),
                     st.client.clone(),
                     st.runtime.clone(),
+                    st.next_generation(),
                 )
             };
             let (Some(client), Some(runtime)) = (client_opt, runtime_opt) else {
@@ -567,6 +604,13 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     .await
                     .unwrap_or_default();
                 let _ = slint::invoke_from_event_loop(move || {
+                    let stale = with_app_state(|state| {
+                        state.borrow().is_stale_generation(fetch_gen)
+                    })
+                    .unwrap_or(true);
+                    if stale {
+                        return;
+                    }
                     if let Some(ui) = weak_for_task.upgrade() {
                         ui.set_pr_list_loading(false);
                         ui.set_pr_list(build_pr_list_model(&summaries));
@@ -874,6 +918,7 @@ mod tests {
             history: Vec::new(),
             client: None,
             runtime: None,
+            fetch_generation: 0,
         }
     }
 
@@ -949,6 +994,16 @@ mod tests {
             }
             _ => panic!("expected Range"),
         }
+    }
+
+    #[test]
+    fn fetch_generation_increments_and_detects_stale() {
+        let mut st = make_state();
+        let g1 = st.next_generation();
+        let g2 = st.next_generation();
+        assert_ne!(g1, g2);
+        assert!(st.is_stale_generation(g1));
+        assert!(!st.is_stale_generation(g2));
     }
 
     #[test]
