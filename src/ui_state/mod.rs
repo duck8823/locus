@@ -4,6 +4,7 @@
 //! 将来 diff viewer が入る際もここに同種の builder を追加する想定。
 
 pub mod diff_view;
+pub mod draft_view;
 
 use std::rc::Rc;
 
