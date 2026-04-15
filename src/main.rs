@@ -35,8 +35,7 @@ mod terminal;
 mod ui_state;
 
 use github::issue_context::{
-    extract_linked_issue_numbers, fetch_issue_context_async, GithubIssueContextProvider,
-    IssueContextProvider, IssueContextRecord, IssueState,
+    extract_linked_issue_numbers, fetch_issue_context_async, IssueContextRecord, IssueState,
 };
 use github::pull_request::{
     build_client, fetch_pr_snapshot, fetch_pull_requests, parse_pr_spec, PrListFilter,
@@ -191,37 +190,35 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
     let runtime_handle = runtime.handle().clone();
 
-    // 非同期 fetch は runtime でまとめて行う
-    let (snapshot, client_arc, pr_list) = {
-        let owner = owner.clone();
-        let repo = repo.clone();
-        runtime.block_on(async move {
-            let client = build_client()?;
-            let client_arc = client.clone();
-            let snapshot = fetch_pr_snapshot(&client, &owner, &repo, pr_number).await?;
-            let pr_list = fetch_pull_requests(&client, &owner, &repo, PrListFilter::Open)
-                .await
-                .unwrap_or_default();
-            Ok::<_, Box<dyn std::error::Error>>((snapshot, client_arc, pr_list))
-        })?
+    // 起動を「ネットワーク待ち」にしないため、最初に空の DiffViewerWindow を
+    // 作って表示し、PR snapshot / PR list / linked issues は非同期 hydrate
+    // する。GitHub クライアントの初期化失敗のみ即時エラーで abort。
+    let client_arc = build_client()?;
+
+    let placeholder_snapshot = PullRequestSnapshot {
+        target: review::target::ReviewTarget::GitHubPr {
+            owner: owner.clone(),
+            repo: repo.clone(),
+            pr_number,
+        },
+        title: i18n::tr("(loading…)"),
+        body: None,
+        head_sha: String::new(),
+        base_sha: String::new(),
+        files: Vec::new(),
     };
 
-    let linked_issues = fetch_linked_issue_records(
-        client_arc.as_ref(),
-        &runtime_handle,
-        &snapshot,
-    );
-
     let ui = DiffViewerWindow::new()?;
-    apply_snapshot_to_ui(&ui, &snapshot, &linked_issues);
+    apply_snapshot_to_ui(&ui, &placeholder_snapshot, &[]);
     ui.set_current_pr_number(pr_number as i32);
-    ui.set_pr_list(build_pr_list_model(&pr_list));
+    ui.set_pr_list(build_pr_list_model(&[]));
     ui.set_pr_list_filter(0);
+    ui.set_pr_list_loading(true);
 
     let state = Rc::new(RefCell::new(DiffAppState {
         owner: owner.clone(),
         repo: repo.clone(),
-        snapshot,
+        snapshot: placeholder_snapshot,
         draft: PromptDraft::new(),
         current_anchor: None,
         pending_range: false,
@@ -620,6 +617,81 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // 初期 hydrate: PR snapshot / PR list / linked issues を並列で取得し、
+    // 完了後に UI を埋める。世代カウンタは generation=1 を使う (起動時の
+    // 0 から進めて、その後の click も同様に next_generation で進む)。
+    {
+        let initial_gen = state.borrow_mut().next_generation();
+        let owner_clone = owner.clone();
+        let repo_clone = repo.clone();
+        let client_clone = client_arc.clone();
+        let weak_for_task = ui.as_weak();
+        runtime_handle.spawn(async move {
+            // PR snapshot と PR list を join で並列実行
+            let snapshot_fut =
+                fetch_pr_snapshot(&client_clone, &owner_clone, &repo_clone, pr_number);
+            let list_fut = fetch_pull_requests(
+                &client_clone,
+                &owner_clone,
+                &repo_clone,
+                PrListFilter::Open,
+            );
+            let (snapshot_res, list_res) = tokio::join!(snapshot_fut, list_fut);
+
+            let snapshot = match snapshot_res {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    eprintln!("warn: initial hydrate snapshot failed: {e}");
+                    None
+                }
+            };
+            let pr_list = list_res.unwrap_or_default();
+
+            // linked issues は snapshot がある場合のみ並列 fetch
+            let mut linked: Vec<LinkedIssueDisplay> = Vec::new();
+            if let Some(ref snap) = snapshot {
+                let body = snap.body.clone().unwrap_or_default();
+                let numbers = extract_linked_issue_numbers(&body);
+                for n in numbers {
+                    match fetch_issue_context_async(
+                        &client_clone,
+                        &owner_clone,
+                        &repo_clone,
+                        n,
+                    )
+                    .await
+                    {
+                        Ok(Some(r)) => linked.push(LinkedIssueDisplay::Found(r)),
+                        Ok(None) => {}
+                        Err(e) => linked.push(LinkedIssueDisplay::Failed {
+                            number: n,
+                            message: e.to_string(),
+                        }),
+                    }
+                }
+            }
+
+            let _ = slint::invoke_from_event_loop(move || {
+                let stale = with_app_state(|state| {
+                    state.borrow().is_stale_generation(initial_gen)
+                })
+                .unwrap_or(true);
+                if stale {
+                    return;
+                }
+                let Some(ui) = weak_for_task.upgrade() else { return };
+                ui.set_pr_list_loading(false);
+                ui.set_pr_list(build_pr_list_model(&pr_list));
+                if let Some(snap) = snapshot {
+                    apply_snapshot_to_ui(&ui, &snap, &linked);
+                    with_app_state(|state| {
+                        state.borrow_mut().snapshot = snap;
+                    });
+                }
+            });
+        });
+    }
+
     ui.run()?;
     drop(terminal_pane);
     Ok(())
@@ -810,37 +882,6 @@ enum LinkedIssueDisplay {
     /// 取得失敗。404 と PR が返ったケースは静かに隠すため LinkedIssueDisplay
     /// に乗せない。本バリアントは認証エラー / rate limit / 5xx 等の non-2xx。
     Failed { number: u64, message: String },
-}
-
-fn fetch_linked_issue_records(
-    client: &octocrab::Octocrab,
-    runtime: &tokio::runtime::Handle,
-    snapshot: &PullRequestSnapshot,
-) -> Vec<LinkedIssueDisplay> {
-    let body = snapshot.body.as_deref().unwrap_or("");
-    let numbers = extract_linked_issue_numbers(body);
-    if numbers.is_empty() {
-        return Vec::new();
-    }
-    let (owner, repo) = match &snapshot.target {
-        review::target::ReviewTarget::GitHubPr { owner, repo, .. } => {
-            (owner.clone(), repo.clone())
-        }
-        _ => return Vec::new(),
-    };
-    let provider = GithubIssueContextProvider::new(client, runtime.clone());
-    let mut records: Vec<LinkedIssueDisplay> = Vec::new();
-    for n in numbers {
-        match provider.fetch(&owner, &repo, n) {
-            Ok(Some(r)) => records.push(LinkedIssueDisplay::Found(r)),
-            Ok(None) => {} // 404 / 参照元が PR だった場合は静かに隠す
-            Err(e) => records.push(LinkedIssueDisplay::Failed {
-                number: n,
-                message: e.to_string(),
-            }),
-        }
-    }
-    records
 }
 
 fn build_issue_context_model(
