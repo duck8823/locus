@@ -172,11 +172,19 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     let agent_cmd =
         std::env::var("LOCUS_AGENT_CMD").unwrap_or_else(|_| "claude".to_string());
     let terminal_pane = match terminal::launch_for_diff_viewer(&ui, &agent_cmd) {
-        Ok(p) => Some(Rc::new(p)),
+        Ok(p) => {
+            ui.set_terminal_available(true);
+            ui.set_terminal_status(SharedString::from(format!("{agent_cmd} (running)")));
+            Some(Rc::new(p))
+        }
         Err(e) => {
             eprintln!(
                 "warn: failed to launch terminal pane with '{agent_cmd}': {e} (continuing without terminal)"
             );
+            ui.set_terminal_available(false);
+            ui.set_terminal_status(SharedString::from(format!(
+                "{agent_cmd}: failed to start ({e})"
+            )));
             None
         }
     };
@@ -358,9 +366,12 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         let pane = terminal_pane.clone();
         ui.on_send_insert_only(move |text: SharedString| {
             let Some(ui) = ui_weak.upgrade() else { return };
-            if let Some(p) = pane.as_ref() {
-                p.insert(text.as_str());
-            }
+            // terminal pane が無い場合は何もしない（UI 側で button も無効化
+            // されているが保険として弾く）。
+            let Some(p) = pane.as_ref() else {
+                return;
+            };
+            p.insert(text.as_str());
             append_history(&state, SendMode::InsertOnly, text.as_str());
             refresh_history_panel(&ui, &state);
         });
@@ -373,9 +384,10 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         let pane = terminal_pane.clone();
         ui.on_send_insert_and_send(move |text: SharedString| {
             let Some(ui) = ui_weak.upgrade() else { return };
-            if let Some(p) = pane.as_ref() {
-                p.insert_and_send(text.as_str());
-            }
+            let Some(p) = pane.as_ref() else {
+                return;
+            };
+            p.insert_and_send(text.as_str());
             append_history(&state, SendMode::InsertAndSend, text.as_str());
             refresh_history_panel(&ui, &state);
         });
