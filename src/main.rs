@@ -105,6 +105,35 @@ struct DiffAppState {
     snapshot_generation: u64,
     /// PR list filter の世代カウンタ。
     list_generation: u64,
+    /// 表示中のトースト。new -> bottom 順 (UI 側 index で逆順表示)。
+    toasts: Vec<ToastEntry>,
+    next_toast_id: i32,
+}
+
+#[derive(Debug, Clone)]
+struct ToastEntry {
+    id: i32,
+    kind: ToastKind,
+    title: String,
+    message: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
+enum ToastKind {
+    Error,
+    Warn,
+    Info,
+}
+
+impl ToastKind {
+    fn to_int(self) -> i32 {
+        match self {
+            ToastKind::Error => 0,
+            ToastKind::Warn => 1,
+            ToastKind::Info => 2,
+        }
+    }
 }
 
 impl DiffAppState {
@@ -189,6 +218,26 @@ impl DiffAppState {
     fn is_stale_list(&self, captured: u64) -> bool {
         captured != self.list_generation
     }
+
+    fn push_toast(&mut self, kind: ToastKind, title: String, message: String) -> i32 {
+        let id = self.next_toast_id;
+        self.next_toast_id = self.next_toast_id.wrapping_add(1);
+        self.toasts.push(ToastEntry {
+            id,
+            kind,
+            title,
+            message,
+        });
+        // 多すぎたら古い方から落とす
+        if self.toasts.len() > 5 {
+            self.toasts.remove(0);
+        }
+        id
+    }
+
+    fn dismiss_toast(&mut self, id: i32) {
+        self.toasts.retain(|t| t.id != id);
+    }
 }
 
 fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -237,8 +286,22 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         runtime: Some(runtime_handle.clone()),
         snapshot_generation: 0,
         list_generation: 0,
+        toasts: Vec::new(),
+        next_toast_id: 0,
     }));
     DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state.clone()));
+    ACTIVE_DIFF_WINDOW.with(|cell| *cell.borrow_mut() = Some(ui.as_weak()));
+
+    // dismiss-toast コールバック
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_dismiss_toast(move |id: i32| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            state.borrow_mut().dismiss_toast(id);
+            refresh_toasts(&ui, &state);
+        });
+    }
 
     // Terminal pane を立ち上げる。起動コマンドは LOCUS_AGENT_CMD 環境変数で
     // 上書きできる（既定は claude）。
@@ -263,6 +326,17 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 "{}: failed to start ({})",
                 &[agent_cmd.as_str(), err.as_str()],
             )));
+            // toast でユーザーに通知
+            let toast_id = state.borrow_mut().push_toast(
+                ToastKind::Error,
+                i18n::tr("Terminal pane failed to start"),
+                i18n::tr_args(
+                    "{}: {}",
+                    &[agent_cmd.as_str(), err.as_str()],
+                ),
+            );
+            refresh_toasts(&ui, &state);
+            schedule_toast_auto_dismiss(toast_id);
             None
         }
     };
@@ -521,6 +595,23 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     Ok(s) => s,
                     Err(e) => {
                         eprintln!("warn: failed to fetch PR #{new_number}: {e}");
+                        let err_str = e.to_string();
+                        let weak = weak_for_task.clone();
+                        let _ = slint::invoke_from_event_loop(move || {
+                            let Some(ui) = weak.upgrade() else { return };
+                            with_app_state(|state| {
+                                let id = state.borrow_mut().push_toast(
+                                    ToastKind::Error,
+                                    i18n::tr_args(
+                                        "Failed to fetch PR #{}",
+                                        &[new_number.to_string().as_str()],
+                                    ),
+                                    err_str.clone(),
+                                );
+                                refresh_toasts(&ui, state);
+                                schedule_toast_auto_dismiss(id);
+                            });
+                        });
                         return;
                     }
                 };
@@ -586,9 +677,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             ui.set_pr_list_loading(true);
             let weak_for_task = ui.as_weak();
             runtime.spawn(async move {
-                let summaries = fetch_pull_requests(&client, &owner, &repo, filter)
-                    .await
-                    .unwrap_or_default();
+                let result = fetch_pull_requests(&client, &owner, &repo, filter).await;
                 let _ = slint::invoke_from_event_loop(move || {
                     let stale = with_app_state(|state| {
                         state.borrow().is_stale_list(list_gen)
@@ -597,9 +686,19 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     if stale {
                         return;
                     }
-                    if let Some(ui) = weak_for_task.upgrade() {
-                        ui.set_pr_list_loading(false);
-                        ui.set_pr_list(build_pr_list_model(&summaries));
+                    let Some(ui) = weak_for_task.upgrade() else { return };
+                    ui.set_pr_list_loading(false);
+                    match result {
+                        Ok(summaries) => {
+                            ui.set_pr_list(build_pr_list_model(&summaries));
+                        }
+                        Err(e) => {
+                            show_toast(
+                                ToastKind::Error,
+                                i18n::tr("Failed to load PR list"),
+                                e.to_string(),
+                            );
+                        }
                     }
                 });
             });
@@ -632,7 +731,6 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             let (snapshot_res, list_res) = tokio::join!(snapshot_fut, list_fut);
 
             // PR list は snapshot 完了を待たずに先に hydrate する
-            let pr_list = list_res.unwrap_or_default();
             {
                 let weak = weak_for_task.clone();
                 let _ = slint::invoke_from_event_loop(move || {
@@ -641,9 +739,19 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     if stale {
                         return;
                     }
-                    if let Some(ui) = weak.upgrade() {
-                        ui.set_pr_list_loading(false);
-                        ui.set_pr_list(build_pr_list_model(&pr_list));
+                    let Some(ui) = weak.upgrade() else { return };
+                    ui.set_pr_list_loading(false);
+                    match list_res {
+                        Ok(summaries) => {
+                            ui.set_pr_list(build_pr_list_model(&summaries));
+                        }
+                        Err(e) => {
+                            show_toast(
+                                ToastKind::Error,
+                                i18n::tr("Failed to load PR list"),
+                                e.to_string(),
+                            );
+                        }
                     }
                 });
             }
@@ -652,6 +760,24 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 Ok(s) => s,
                 Err(e) => {
                     eprintln!("warn: initial hydrate snapshot failed: {e}");
+                    let err_str = e.to_string();
+                    let weak = weak_for_task.clone();
+                    let pr_str = pr_number.to_string();
+                    let _ = slint::invoke_from_event_loop(move || {
+                        let Some(ui) = weak.upgrade() else { return };
+                        with_app_state(|state| {
+                            let id = state.borrow_mut().push_toast(
+                                ToastKind::Error,
+                                i18n::tr_args(
+                                    "Failed to load PR #{}",
+                                    &[pr_str.as_str()],
+                                ),
+                                err_str.clone(),
+                            );
+                            refresh_toasts(&ui, state);
+                            schedule_toast_auto_dismiss(id);
+                        });
+                    });
                     return;
                 }
             };
@@ -751,6 +877,61 @@ fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAp
 fn refresh_draft_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
     let st = state.borrow();
     ui.set_draft_entries(build_draft_entry_views(&st.draft));
+}
+
+fn refresh_toasts(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
+    let st = state.borrow();
+    let model = slint::VecModel::<ToastView>::default();
+    for t in &st.toasts {
+        model.push(ToastView {
+            id: t.id,
+            kind: t.kind.to_int(),
+            title: SharedString::from(t.title.as_str()),
+            message: SharedString::from(t.message.as_str()),
+        });
+    }
+    ui.set_toasts(slint::ModelRc::from(
+        std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = ToastView>>,
+    ));
+}
+
+/// 5 秒後に該当 toast を自動で dismiss する。
+///
+/// `slint::Timer::single_shot` は内部で self-manage されるため、Timer 自体を
+/// 持ち回ったり leak したりする必要がない。
+fn schedule_toast_auto_dismiss(toast_id: i32) {
+    use std::time::Duration;
+    slint::Timer::single_shot(Duration::from_secs(5), move || {
+        with_app_state(|state| {
+            state.borrow_mut().dismiss_toast(toast_id);
+            if let Some(ui) =
+                ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade()))
+            {
+                refresh_toasts(&ui, state);
+            }
+        });
+    });
+}
+
+/// UI イベントループ上で toast を push し、auto-dismiss スケジュールを行う。
+/// 各エラー経路のヘルパとして使う。
+fn show_toast(kind: ToastKind, title: String, message: String) {
+    with_app_state(|state| {
+        let id = state.borrow_mut().push_toast(kind, title, message);
+        if let Some(ui) =
+            ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade()))
+        {
+            refresh_toasts(&ui, state);
+        }
+        schedule_toast_auto_dismiss(id);
+    });
+}
+
+thread_local! {
+    /// auto-dismiss timer から UI を取り出すための弱参照。run_diff_viewer 起動時に登録。
+    static ACTIVE_DIFF_WINDOW: RefCell<Option<slint::Weak<DiffViewerWindow>>> = const {
+        RefCell::new(None)
+    };
 }
 
 fn refresh_history_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
@@ -901,14 +1082,23 @@ async fn fetch_linked_issues_parallel(
         .collect();
 
     let mut out: Vec<LinkedIssueDisplay> = Vec::new();
+    let mut error_summary: Option<String> = None;
+    let mut error_count: usize = 0;
     while let Some((n, res)) = futs.next().await {
         match res {
             Ok(Some(r)) => out.push(LinkedIssueDisplay::Found(r)),
             Ok(None) => {}
-            Err(e) => out.push(LinkedIssueDisplay::Failed {
-                number: n,
-                message: e.to_string(),
-            }),
+            Err(e) => {
+                let message = e.to_string();
+                if error_summary.is_none() {
+                    error_summary = Some(format!("#{n}: {message}"));
+                }
+                error_count += 1;
+                out.push(LinkedIssueDisplay::Failed {
+                    number: n,
+                    message,
+                });
+            }
         }
     }
     // 並列実行の完了順は不定なので number でソートして決定論的にする
@@ -916,6 +1106,22 @@ async fn fetch_linked_issues_parallel(
         LinkedIssueDisplay::Found(r) => r.number,
         LinkedIssueDisplay::Failed { number, .. } => *number,
     });
+
+    // 1 件以上失敗していたら要約 toast を 1 つだけ出す。
+    // (各 issue chip は別途 error 表示されるため、toast は重複させない)
+    if let Some(first) = error_summary {
+        let count_str = error_count.to_string();
+        let _ = slint::invoke_from_event_loop(move || {
+            show_toast(
+                ToastKind::Warn,
+                i18n::tr_args(
+                    "Failed to fetch {} linked issue(s)",
+                    &[count_str.as_str()],
+                ),
+                first,
+            );
+        });
+    }
     out
 }
 
@@ -996,6 +1202,8 @@ mod tests {
             runtime: None,
             snapshot_generation: 0,
         list_generation: 0,
+        toasts: Vec::new(),
+        next_toast_id: 0,
         }
     }
 

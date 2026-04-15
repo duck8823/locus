@@ -121,6 +121,14 @@ export struct PullRequestListItemView {
     state: string,
 }
 
+// kind: 0=error, 1=warn, 2=info
+export struct ToastView {
+    id: int,
+    kind: int,
+    title: string,
+    message: string,
+}
+
 export struct DiffFileView {
     file-path: string,
     status-label: string,
@@ -160,6 +168,9 @@ export component DiffViewerWindow inherits Window {
     in property <bool> pr-list-loading: false;
     in property <int> current-pr-number: 0;
 
+    in property <[ToastView]> toasts;
+    callback dismiss-toast(int);
+
     callback select-line(int, int, string, string);
     callback select-hunk(int, int);
     callback select-whole-file();
@@ -182,6 +193,73 @@ export component DiffViewerWindow inherits Window {
     preferred-width: 1700px;
     preferred-height: 960px;
     background: #101014;
+
+    // Toast overlay: 右下に積み上げ表示
+    toast-overlay := Rectangle {
+        x: parent.width - 360px;
+        y: parent.height - 16px - root.toasts.length * 70px;
+        width: 340px;
+        height: root.toasts.length * 70px;
+        z: 100;
+
+        for toast[idx] in root.toasts: Rectangle {
+            y: idx * 70px;
+            width: 340px;
+            height: 64px;
+            background: toast.kind == 0 ? #2a1010
+                : (toast.kind == 1 ? #2a2010 : #102a2a);
+            border-width: 1px;
+            border-color: toast.kind == 0 ? #c04040
+                : (toast.kind == 1 ? #c0a040 : #40a0c0);
+            border-radius: 6px;
+
+            HorizontalBox {
+                padding-left: 12px;
+                padding-right: 8px;
+                padding-top: 6px;
+                padding-bottom: 6px;
+                spacing: 8px;
+
+                VerticalBox {
+                    horizontal-stretch: 1;
+                    spacing: 2px;
+                    Text {
+                        text: toast.title;
+                        color: #ffffff;
+                        font-size: 12px;
+                        font-weight: 600;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: toast.message;
+                        color: #c8c8d0;
+                        font-size: 10px;
+                        wrap: word-wrap;
+                        overflow: elide;
+                    }
+                }
+
+                dismiss-area := TouchArea {
+                    width: 24px;
+                    height: 24px;
+                    clicked => {
+                        root.dismiss-toast(toast.id);
+                    }
+                    Rectangle {
+                        background: dismiss-area.has-hover ? #00000060 : transparent;
+                        border-radius: 4px;
+                        Text {
+                            text: "×";
+                            color: #ffffff;
+                            font-size: 14px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     VerticalBox {
         spacing: 0px;
