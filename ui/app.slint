@@ -122,6 +122,7 @@ export component DiffViewerWindow inherits Window {
     callback add-to-draft(string);
     callback remove-draft-entry(int);
     callback clear-current-selection();
+    callback file-switched(int);
 
     title: "locus — diff viewer";
     preferred-width: 1400px;
@@ -176,6 +177,7 @@ export component DiffViewerWindow inherits Window {
                         touch := TouchArea {
                             clicked => {
                                 root.selected-file-index = idx;
+                                root.file-switched(idx);
                             }
                         }
 

@@ -74,11 +74,20 @@ impl DiffAppState {
     }
 
     /// 現在の anchor と引数の line を使って Range 選択を作る。
-    fn complete_range(&mut self, line: u32, side: Side) {
+    ///
+    /// file_id を受け取り、現在の anchor と同じ file の場合にのみ Range 昇格する。
+    /// 別 file の行がクリックされた場合や、side が異なる場合、pending は解除して
+    /// anchor は変更しない。
+    fn complete_range(&mut self, file_id: &FileId, line: u32, side: Side) {
         let Some(current) = self.current_anchor.clone() else {
             self.pending_range = false;
             return;
         };
+        if current.file_id != *file_id {
+            // 別 file をクリックした場合は pending を解除してその行の Line 選択にする。
+            self.pending_range = false;
+            return;
+        }
         let Granularity::Line {
             line: start_line,
             side: start_side,
@@ -88,7 +97,6 @@ impl DiffAppState {
             return;
         };
         if start_side != side {
-            // 違う side 間の range は意味が薄いので pending を解除して単純 Line 選択に置き換える。
             self.pending_range = false;
             return;
         }
@@ -106,6 +114,11 @@ impl DiffAppState {
                 side,
             },
         });
+        self.pending_range = false;
+    }
+
+    /// 選択中のファイルが変わったとき、進行中の range 作成を解除する。
+    fn cancel_range_on_file_switch(&mut self) {
         self.pending_range = false;
     }
 }
@@ -155,11 +168,28 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             let Some(file) = st.file(file_index as usize).cloned() else {
                 return;
             };
+            let file_id = FileId::new(file.file_path.clone());
             if st.pending_range {
-                st.complete_range(line, side);
+                // 現在の anchor と同じ file か 判定
+                let same_file = st
+                    .current_anchor
+                    .as_ref()
+                    .map(|a| a.file_id == file_id)
+                    .unwrap_or(false);
+                if same_file {
+                    st.complete_range(&file_id, line, side);
+                } else {
+                    // 別 file をクリックしたので pending を解除して Line 選択に切り替える
+                    st.pending_range = false;
+                    st.set_anchor(SelectionAnchor {
+                        file_id,
+                        file_path: file.file_path,
+                        granularity: Granularity::Line { line, side },
+                    });
+                }
             } else {
                 st.set_anchor(SelectionAnchor {
-                    file_id: FileId::new(file.file_path.clone()),
+                    file_id,
                     file_path: file.file_path,
                     granularity: Granularity::Line { line, side },
                 });
@@ -266,6 +296,17 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             st.current_anchor = None;
             st.pending_range = false;
             drop(st);
+            refresh_current_anchor_label(&ui, &state);
+        });
+    }
+
+    // file-switched: pending_range を解除する
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_file_switched(move |_| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            state.borrow_mut().cancel_range_on_file_switch();
             refresh_current_anchor_label(&ui, &state);
         });
     }
@@ -379,7 +420,7 @@ mod tests {
             },
         });
         st.start_range_mode();
-        st.complete_range(7, Side::After);
+        st.complete_range(&FileId::new("a.rs"), 7, Side::After);
         match &st.current_anchor.as_ref().unwrap().granularity {
             Granularity::Range {
                 start_line,
@@ -407,7 +448,7 @@ mod tests {
             },
         });
         st.start_range_mode();
-        st.complete_range(3, Side::Before);
+        st.complete_range(&FileId::new("a.rs"), 3, Side::Before);
         match &st.current_anchor.as_ref().unwrap().granularity {
             Granularity::Range {
                 start_line,
@@ -418,6 +459,28 @@ mod tests {
                 assert_eq!(*end_line, 7);
             }
             _ => panic!("expected Range"),
+        }
+    }
+
+    #[test]
+    fn complete_range_aborts_when_file_differs() {
+        let mut st = make_state();
+        st.set_anchor(SelectionAnchor {
+            file_id: FileId::new("a.rs"),
+            file_path: "a.rs".into(),
+            granularity: Granularity::Line {
+                line: 3,
+                side: Side::After,
+            },
+        });
+        st.start_range_mode();
+        // 別 file 由来のクリック
+        st.complete_range(&FileId::new("b.rs"), 7, Side::After);
+        // file 不一致なので pending は解除、anchor は元のまま
+        assert!(!st.pending_range);
+        match &st.current_anchor.as_ref().unwrap().granularity {
+            Granularity::Line { line: 3, .. } => {}
+            _ => panic!("expected Line(3) unchanged"),
         }
     }
 
@@ -433,7 +496,7 @@ mod tests {
             },
         });
         st.start_range_mode();
-        st.complete_range(7, Side::Before);
+        st.complete_range(&FileId::new("a.rs"), 7, Side::Before);
         // side が違うので Range 昇格はされず、現在の anchor は維持される
         match &st.current_anchor.as_ref().unwrap().granularity {
             Granularity::Line { line: 3, .. } => {}
