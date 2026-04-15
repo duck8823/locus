@@ -593,7 +593,7 @@ export component DiffViewerWindow inherits Window {
                                                 text: line.old-line-no;
                                                 color: #5a5a65;
                                                 font-family: root.font-family;
-                                                font-size: 11px;
+                                                font-size: root.diff-font-size;
                                                 width: 36px;
                                                 horizontal-alignment: right;
                                             }
@@ -601,7 +601,7 @@ export component DiffViewerWindow inherits Window {
                                                 text: line.new-line-no;
                                                 color: #5a5a65;
                                                 font-family: root.font-family;
-                                                font-size: 11px;
+                                                font-size: root.diff-font-size;
                                                 width: 36px;
                                                 horizontal-alignment: right;
                                             }
@@ -618,7 +618,7 @@ export component DiffViewerWindow inherits Window {
                                             : (line.kind == 1 ? #8fd98f
                                             : (line.kind == 2 ? #e58585 : #c8c8d0));
                                         font-family: root.font-family;
-                                        font-size: 12px;
+                                        font-size: root.diff-font-size;
                                         overflow: elide;
                                     }
                                 }

@@ -22,7 +22,7 @@ impl UiConfig {
             .ok()
             .and_then(|s| s.parse::<f32>().ok())
             .or(general)
-            .unwrap_or(11.0);
+            .unwrap_or(13.0);
         let diff_font_size = std::env::var("LOCUS_DIFF_FONT_SIZE")
             .ok()
             .and_then(|s| s.parse::<f32>().ok())
