@@ -5,12 +5,12 @@
 
 use std::rc::Rc;
 
+use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::term::{cell::Cell, Term};
 use slint::{Color, Model, ModelRc, SharedString, VecModel};
 
-use crate::terminal::EventProxy;
 use crate::{TerminalCell, TerminalRow};
 
 const FG: Color = Color::from_rgb_u8(0xee, 0xee, 0xee);
@@ -30,7 +30,7 @@ pub fn empty_row(cols: usize) -> TerminalRow {
     }
 }
 
-pub fn build_row(term: &Term<EventProxy>, row: usize, cols: usize) -> TerminalRow {
+pub fn build_row<T: EventListener>(term: &Term<T>, row: usize, cols: usize) -> TerminalRow {
     let cells = VecModel::<TerminalCell>::default();
     let grid = term.grid();
     let line = Line(row as i32);
@@ -56,6 +56,6 @@ fn make_cell(cell: &Cell) -> TerminalCell {
 
 /// Term の現在の row 数を取得するヘルパ。
 #[allow(dead_code)]
-pub fn term_screen_lines(term: &Term<EventProxy>) -> usize {
+pub fn term_screen_lines<T: EventListener>(term: &Term<T>) -> usize {
     term.grid().screen_lines()
 }
