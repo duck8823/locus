@@ -109,6 +109,48 @@ impl<'a> IssueContextProvider for GithubIssueContextProvider<'a> {
     }
 }
 
+/// 非同期で 1 issue の context を取得する low-level ヘルパ。
+///
+/// `IssueContextProvider` trait と違い block_on を内部で呼ばないため、
+/// tokio runtime 上で他の async 処理と並行して spawn できる。
+pub async fn fetch_issue_context_async(
+    client: &Octocrab,
+    owner: &str,
+    repo: &str,
+    number: u64,
+) -> Result<Option<IssueContextRecord>, GithubError> {
+    let issues = client.issues(owner, repo);
+    match issues.get(number).await {
+        Ok(issue) => {
+            if issue.pull_request.is_some() {
+                return Ok(None);
+            }
+            let state = match issue.state {
+                octocrab::models::IssueState::Open => IssueState::Open,
+                octocrab::models::IssueState::Closed => IssueState::Closed,
+                _ => IssueState::Open,
+            };
+            let labels = issue.labels.into_iter().map(|l| l.name).collect::<Vec<_>>();
+            Ok(Some(IssueContextRecord {
+                owner: owner.to_string(),
+                repo: repo.to_string(),
+                number,
+                title: issue.title,
+                body: issue.body,
+                state,
+                labels,
+                html_url: issue.html_url.to_string(),
+            }))
+        }
+        Err(octocrab::Error::GitHub { source, .. })
+            if source.status_code == http::StatusCode::NOT_FOUND =>
+        {
+            Ok(None)
+        }
+        Err(e) => Err(GithubError::Api(e.to_string())),
+    }
+}
+
 /// テスト用 / fallback 用の決定論的 provider。
 pub struct StubIssueContextProvider;
 
