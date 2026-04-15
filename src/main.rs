@@ -14,6 +14,7 @@ slint::include_modules!();
 
 mod github;
 mod review;
+mod semantic;
 mod terminal;
 mod ui_state;
 
