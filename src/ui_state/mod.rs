@@ -3,6 +3,7 @@
 //! 当面は Terminal ペインの `TerminalRow` / `TerminalCell` 構築だけを扱う。
 //! 将来 diff viewer が入る際もここに同種の builder を追加する想定。
 
+pub mod color;
 pub mod diff_view;
 pub mod draft_view;
 
@@ -94,12 +95,7 @@ pub fn build_row<T: EventListener>(term: &Term<T>, row: usize, cols: usize) -> T
             next_col += next_base as usize;
         }
 
-        cells.push(TerminalCell {
-            ch: SharedString::from(s.as_str()),
-            fg: FG,
-            bg: BG,
-            span: total_span,
-        });
+        cells.push(cell_to_terminal_cell(cell, total_span, s.as_str()));
         // メインの 1 セル目の右側を spacer で埋めてグリッド整列を保つ
         for _ in 1..total_span {
             cells.push(spacer_cell());
@@ -118,6 +114,15 @@ fn spacer_cell() -> TerminalCell {
         fg: FG,
         bg: BG,
         span: 0,
+    }
+}
+
+fn cell_to_terminal_cell(cell: &Cell, span: i32, ch: &str) -> TerminalCell {
+    TerminalCell {
+        ch: SharedString::from(ch),
+        fg: color::cell_fg(cell),
+        bg: color::cell_bg(cell),
+        span,
     }
 }
 
