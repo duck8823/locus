@@ -3179,6 +3179,7 @@ dependencies = [
  "alacritty_terminal",
  "arboard",
  "chrono",
+ "futures",
  "http",
  "octocrab",
  "portable-pty",
