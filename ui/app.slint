@@ -22,6 +22,8 @@ export component AppWindow inherits Window {
     in property <length> cell-h: 18px;
     in property <int> cursor-col: 0;
     in property <int> cursor-row: 0;
+    in property <string> font-family: "Menlo, Consolas, monospace";
+    in property <length> font-size: 13px;
 
     callback key-pressed(string);
     callback resized(length, length);
@@ -60,8 +62,8 @@ export component AppWindow inherits Window {
                     Text {
                         text: cell.ch;
                         color: cell.fg;
-                        font-family: "Menlo, Consolas, monospace";
-                        font-size: 13px;
+                        font-family: root.font-family;
+                        font-size: root.font-size;
                         horizontal-alignment: left;
                         vertical-alignment: center;
                     }
@@ -162,6 +164,10 @@ export component DiffViewerWindow inherits Window {
     in property <int> terminal-cursor-row: 0;
     in property <bool> terminal-available: false;
     in property <string> terminal-status: @tr("not started");
+
+    in property <string> font-family: "Menlo, Consolas, monospace";
+    in property <length> terminal-font-size: 11px;
+    in property <length> diff-font-size: 12px;
 
     in property <[PullRequestListItemView]> pr-list;
     in-out property <int> pr-list-filter: 0; // 0=open, 1=closed, 2=all
@@ -286,7 +292,7 @@ export component DiffViewerWindow inherits Window {
                     text: @tr("base") + " " + root.base-sha + "  ←  " + @tr("head") + " " + root.head-sha;
                     color: #8a8a95;
                     font-size: 11px;
-                    font-family: "Menlo, Consolas, monospace";
+                    font-family: root.font-family;
                 }
                 if root.pr-body-excerpt != "": Text {
                     text: root.pr-body-excerpt;
@@ -330,7 +336,7 @@ export component DiffViewerWindow inherits Window {
                                             ? #e58585
                                             : (issue.state == "closed" ? #c07ac0 : #7ac07a);
                                         font-size: 10px;
-                                        font-family: "Menlo, Consolas, monospace";
+                                        font-family: root.font-family;
                                         font-weight: 600;
                                     }
                                     Text {
@@ -453,7 +459,7 @@ export component DiffViewerWindow inherits Window {
                                         text: pr.number_label;
                                         color: pr.state == "closed" ? #c07ac0 : #7ac07a;
                                         font-size: 10px;
-                                        font-family: "Menlo, Consolas, monospace";
+                                        font-family: root.font-family;
                                         font-weight: 600;
                                     }
                                     Text {
@@ -503,7 +509,7 @@ export component DiffViewerWindow inherits Window {
                                 text: file.status-label;
                                 color: #8a8a95;
                                 font-size: 10px;
-                                font-family: "Menlo, Consolas, monospace";
+                                font-family: root.font-family;
                                 width: 30px;
                             }
                             Text {
@@ -586,7 +592,7 @@ export component DiffViewerWindow inherits Window {
                                             Text {
                                                 text: line.old-line-no;
                                                 color: #5a5a65;
-                                                font-family: "Menlo, Consolas, monospace";
+                                                font-family: root.font-family;
                                                 font-size: 11px;
                                                 width: 36px;
                                                 horizontal-alignment: right;
@@ -594,7 +600,7 @@ export component DiffViewerWindow inherits Window {
                                             Text {
                                                 text: line.new-line-no;
                                                 color: #5a5a65;
-                                                font-family: "Menlo, Consolas, monospace";
+                                                font-family: root.font-family;
                                                 font-size: 11px;
                                                 width: 36px;
                                                 horizontal-alignment: right;
@@ -611,7 +617,7 @@ export component DiffViewerWindow inherits Window {
                                         color: line.is-hunk-header ? #7a7ac0
                                             : (line.kind == 1 ? #8fd98f
                                             : (line.kind == 2 ? #e58585 : #c8c8d0));
-                                        font-family: "Menlo, Consolas, monospace";
+                                        font-family: root.font-family;
                                         font-size: 12px;
                                         overflow: elide;
                                     }
@@ -644,7 +650,7 @@ export component DiffViewerWindow inherits Window {
                                     text: root.current-anchor-label;
                                     color: #d0d0d5;
                                     font-size: 12px;
-                                    font-family: "Menlo, Consolas, monospace";
+                                    font-family: root.font-family;
                                     vertical-alignment: center;
                                 }
                                 Rectangle { horizontal-stretch: 1; }
@@ -733,7 +739,7 @@ export component DiffViewerWindow inherits Window {
                                     y: 2px;
                                     text <=> root.preview-text;
                                     color: #d0d0d5;
-                                    font-family: "Menlo, Consolas, monospace";
+                                    font-family: root.font-family;
                                     font-size: 11px;
                                     wrap: word-wrap;
                                     single-line: false;
@@ -761,7 +767,7 @@ export component DiffViewerWindow inherits Window {
                                 text: root.terminal-status;
                                 color: root.terminal-available ? #8fd98f : #e58585;
                                 font-size: 10px;
-                                font-family: "Menlo, Consolas, monospace";
+                                font-family: root.font-family;
                                 vertical-alignment: center;
                             }
                         }
@@ -799,8 +805,8 @@ export component DiffViewerWindow inherits Window {
                                     Text {
                                         text: cell.ch;
                                         color: cell.fg;
-                                        font-family: "Menlo, Consolas, monospace";
-                                        font-size: 11px;
+                                        font-family: root.font-family;
+                                        font-size: root.terminal-font-size;
                                         horizontal-alignment: left;
                                         vertical-alignment: center;
                                     }
@@ -876,7 +882,7 @@ export component DiffViewerWindow inherits Window {
                                         text: entry.label;
                                         color: #d0d0d5;
                                         font-size: 11px;
-                                        font-family: "Menlo, Consolas, monospace";
+                                        font-family: root.font-family;
                                         overflow: elide;
                                     }
                                     Text {
@@ -950,7 +956,7 @@ export component DiffViewerWindow inherits Window {
                                             text: h.timestamp;
                                             color: #8a8a95;
                                             font-size: 10px;
-                                            font-family: "Menlo, Consolas, monospace";
+                                            font-family: root.font-family;
                                         }
                                         Text {
                                             text: h.mode;
