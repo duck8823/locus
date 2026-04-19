@@ -129,6 +129,11 @@ fn translate_ja(key: &str) -> Option<&'static str> {
         // terminal status
         "{} (running)" => "{} (起動中)",
         "{}: failed to start ({})" => "{}: 起動失敗 ({})",
+        "{}: not found in PATH" => "{}: PATH に見つかりません",
+        "Agent command not found" => "エージェントコマンドが見つかりません",
+        "{}: not found in PATH (set LOCUS_AGENT_CMD)" => {
+            "{}: PATH に見つかりません (LOCUS_AGENT_CMD を設定してください)"
+        }
         _ => return None,
     })
 }
@@ -150,6 +155,22 @@ mod tests {
     fn lang_string() {
         assert_eq!(Locale::Ja.as_lang_string(), "ja");
         assert_eq!(Locale::En.as_lang_string(), "en");
+    }
+
+    #[test]
+    fn translate_ja_covers_agent_not_found_keys() {
+        assert_eq!(
+            translate_ja("{}: not found in PATH"),
+            Some("{}: PATH に見つかりません")
+        );
+        assert_eq!(
+            translate_ja("Agent command not found"),
+            Some("エージェントコマンドが見つかりません")
+        );
+        assert_eq!(
+            translate_ja("{}: not found in PATH (set LOCUS_AGENT_CMD)"),
+            Some("{}: PATH に見つかりません (LOCUS_AGENT_CMD を設定してください)")
+        );
     }
 
     #[test]

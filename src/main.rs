@@ -316,41 +316,60 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Terminal pane を立ち上げる。起動コマンドは LOCUS_AGENT_CMD 環境変数で
-    // 上書きできる（既定は claude）。
+    // 上書きできる（既定は claude）。PATH に存在しなければ起動前に弾いて
+    // toast でユーザーに知らせ、launch 自体は skip する。
     let agent_cmd =
         std::env::var("LOCUS_AGENT_CMD").unwrap_or_else(|_| "claude".to_string());
-    let terminal_pane = match terminal::launch_for_diff_viewer(&ui, &agent_cmd) {
-        Ok(p) => {
-            ui.set_terminal_available(true);
+    let agent_resolution = which::which(&agent_cmd);
+    let terminal_pane: Option<Rc<terminal::TerminalPane>> = match agent_resolution {
+        Err(e) => {
+            eprintln!("warn: agent command '{agent_cmd}' not found in PATH: {e}");
+            ui.set_terminal_available(false);
             ui.set_terminal_status(SharedString::from(i18n::tr_args(
-                "{} (running)",
+                "{}: not found in PATH",
                 &[agent_cmd.as_str()],
             )));
-            Some(Rc::new(p))
-        }
-        Err(e) => {
-            eprintln!(
-                "warn: failed to launch terminal pane with '{agent_cmd}': {e} (continuing without terminal)"
-            );
-            ui.set_terminal_available(false);
-            let err = e.to_string();
-            ui.set_terminal_status(SharedString::from(i18n::tr_args(
-                "{}: failed to start ({})",
-                &[agent_cmd.as_str(), err.as_str()],
-            )));
-            // toast でユーザーに通知
-            let toast_id = state.borrow_mut().push_toast(
+            let id = state.borrow_mut().push_toast(
                 ToastKind::Error,
-                i18n::tr("Terminal pane failed to start"),
+                i18n::tr("Agent command not found"),
                 i18n::tr_args(
-                    "{}: {}",
-                    &[agent_cmd.as_str(), err.as_str()],
+                    "{}: not found in PATH (set LOCUS_AGENT_CMD)",
+                    &[agent_cmd.as_str()],
                 ),
             );
             refresh_toasts(&ui, &state);
-            schedule_toast_auto_dismiss(toast_id);
+            schedule_toast_auto_dismiss(id);
             None
         }
+        Ok(_) => match terminal::launch_for_diff_viewer(&ui, &agent_cmd) {
+            Ok(p) => {
+                ui.set_terminal_available(true);
+                ui.set_terminal_status(SharedString::from(i18n::tr_args(
+                    "{} (running)",
+                    &[agent_cmd.as_str()],
+                )));
+                Some(Rc::new(p))
+            }
+            Err(e) => {
+                eprintln!(
+                    "warn: failed to launch terminal pane with '{agent_cmd}': {e} (continuing without terminal)"
+                );
+                ui.set_terminal_available(false);
+                let err = e.to_string();
+                ui.set_terminal_status(SharedString::from(i18n::tr_args(
+                    "{}: failed to start ({})",
+                    &[agent_cmd.as_str(), err.as_str()],
+                )));
+                let toast_id = state.borrow_mut().push_toast(
+                    ToastKind::Error,
+                    i18n::tr("Terminal pane failed to start"),
+                    i18n::tr_args("{}: {}", &[agent_cmd.as_str(), err.as_str()]),
+                );
+                refresh_toasts(&ui, &state);
+                schedule_toast_auto_dismiss(toast_id);
+                None
+            }
+        },
     };
 
     refresh_current_anchor_label(&ui, &state);
