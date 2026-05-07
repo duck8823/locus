@@ -145,5 +145,5 @@ msgstr "ヒント: 差分の行 / ハンクヘッダ / ファイル全体ボタ�
 msgid "Send buttons are disabled. Set LOCUS_AGENT_CMD or install the agent CLI on PATH, then restart locus."
 msgstr "送信ボタンは無効化されています。LOCUS_AGENT_CMD を設定するか PATH 上にエージェント CLI を配置して locus を再起動してください。"
 
-msgid "Click: select line  •  Range button: extend to range  •  File button: whole file  •  Clear button: clear selection"
-msgstr "クリック: 行を選択  •  Range ボタン: 範囲に拡張  •  File ボタン: ファイル全選択  •  Clear ボタン: 選択解除"
+msgid "Click: select line  •  Range button: extend to range  •  File button: whole file  •  Esc: clear selection  •  ⌘↵: Insert+Send  •  ⌘C: Copy"
+msgstr "クリック: 行を選択  •  Range ボタン: 範囲に拡張  •  File ボタン: ファイル全選択  •  Esc: 選択解除  •  ⌘↵: 挿入+送信  •  ⌘C: コピー"
