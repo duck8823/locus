@@ -6,54 +6,99 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![license-ja](https://img.shields.io/badge/license-ja-lightgrey.svg)](LICENSE.ja.md)
-[![Status](https://img.shields.io/badge/status-rewriting-orange.svg)]()
+[![Status](https://img.shields.io/badge/status-beta_v0.0.x-yellow.svg)]()
 [![en](https://img.shields.io/badge/lang-en-blue.svg)](README.md)
 
 </div>
 
 ---
 
-## ステータス: Rust + Slint へゼロから作り直し中
+## ステータス: beta (v0.0.x patch sprint)
 
-Locus は macOS 向けの **ローカルネイティブアプリ** として Rust + Slint で作り直しています。旧 Next.js 版は [`legacy/nextjs`](https://github.com/duck8823/locus/tree/legacy/nextjs) ブランチに保全されています（force push / 削除保護済み）。
+Locus は macOS 向け **ローカルネイティブ** PR review ツールです (Rust + Slint)。GitHub PR の diff viewer に、AI agent CLI (Claude Code / Codex / Gemini) を動かす terminal pane を同居させた構成で動きます。現在は v0.0.x の patch sprint で、`v0.1: core review loop` マイルストーンに向けて安定化中です。
 
-進行中: [`v1.0: Rust/Slint rewrite` マイルストーン](https://github.com/duck8823/locus/milestone/10)
+旧 Next.js 版は [`legacy/nextjs`](https://github.com/duck8823/locus/tree/legacy/nextjs) ブランチに保全されています。
 
-## なぜ作り直すのか
+## クイックスタート
 
-元の prototype は Web SaaS としての形態を目指しており、その形態のために重装備（LLM provider adapter + guardrail、OAuth トークン暗号化、耐久ジョブキュー、plugin capability policy 等）を抱えていました。実際の使い方は「AI agent CLI（Claude Code / Codex / Gemini）と同居する個人用ローカル Viewer」に収束したため、SaaS 向けの装備はすべて不要になりました。
+要件: Rust 1.85+ (`edition = "2024"`), macOS。
 
-ネイティブ版でも Locus の**芯**は引き継ぎます:
+```sh
+# clone & build
+git clone https://github.com/duck8823/locus.git
+cd locus
+cargo build --release
 
-- **アーキテクチャマップ** — この変更はシステムのどこにあるのか
-- **セマンティック Diff** — 関数・メソッド単位の変更を parser adapter + 共通 IR で
-- **ビジネスロジックコンテキスト** — 変更を要件まで遡って繋ぐ
-- **「確認」ではなく「理解」** — *なぜ* を中心に据える
+# Terminal pane のみ (既定 agent: claude)
+cargo run --release
 
-そして Web SaaS 形態のためだけに存在していたものはすべて捨てます。
+# 別 CLI で terminal pane を起動
+cargo run --release -- bash
+LOCUS_AGENT_CMD=codex cargo run --release
 
-## 設計上の最大の転換: LLM を内蔵しない
+# GitHub PR の diff viewer
+cargo run --release -- github duck8823/locus#236
+```
 
-新しい Locus は **LLM を自前で呼びません**。代わりに `alacritty_terminal` + `portable-pty` で Terminal ペインを内蔵し、その中で Claude Code / Codex / Gemini を子プロセスとして動かします。Viewer は PR・diff・コメント選択から整形済みプロンプトを組み立て、**Terminal ペインに流し込む**だけに徹します。認証・プロバイダ選択・コスト管理・会話履歴はすべて選んだ Agent CLI 側に委ねます。
+`LOCUS_AGENT_CMD` が PATH に存在しない実行ファイルを指している場合、locus はクラッシュせず赤バナーを表示し送信ボタンを無効化します。
 
-## 主なスタック
+GitHub アクセス用 token は次の優先順位で解決されます:
+
+1. `GITHUB_TOKEN`
+2. `GH_TOKEN`
+3. `gh auth token --hostname github.com` (`LOCUS_NO_GH_AUTH=1` で無効化)
+4. unauthenticated (rate limit が厳しい)
+
+## 環境変数
+
+| 変数 | 既定 | 用途 |
+|---|---|---|
+| `LOCUS_LOCALE` | system | `ja` / `en`。未設定時は `ja` にフォールバック。 |
+| `LOCUS_AGENT_CMD` | `claude` | 内蔵 terminal pane で起動するコマンド。 |
+| `LOCUS_FONT_FAMILY` | `Menlo, Consolas, monospace` | terminal + diff のフォントファミリ。 |
+| `LOCUS_FONT_SIZE` | (未設定) | terminal/diff 両方のフォントサイズを一括指定。 |
+| `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | terminal pane のフォントサイズ (logical px)。 |
+| `LOCUS_DIFF_FONT_SIZE` | `12.0` | diff pane のフォントサイズ (logical px)。 |
+| `LOCUS_BRACKETED_PASTE` | `true` | `false`/`0`/`off`/`no` で paste 境界 sequence (`\x1b[200~ ... \x1b[201~`) を使わずに raw 送信。 |
+| `LOCUS_PROMPT_MAX_CHARS` | `32000` | preview 文字数上限。超過時は警告 + override チェックボックス。 |
+| `GITHUB_TOKEN` / `GH_TOKEN` | (未設定) | GitHub PAT。 |
+| `LOCUS_NO_GH_AUTH` | `false` | `gh auth token` フォールバックを無効化。 |
+| `GH_AUTH_TIMEOUT` | `3` | `gh auth token` サブプロセスの timeout 秒数。 |
+| `LOCUS_LOG` | `warn` | tracing フィルタ (`error` / `warn` / `info` / `debug` / `trace`)。 |
+
+## キーバインド
+
+v0.0.2 で実装済み (フル設計は v0.1.0):
+
+| キー | 動作 |
+|---|---|
+| Esc | 現在の選択を解除 |
+| Cmd/Ctrl + Enter | preview を terminal に Insert + Send |
+| Cmd/Ctrl + C | preview を clipboard にコピー |
+
+送信系ショートカットは preview-size 制限を尊重し、`LOCUS_PROMPT_MAX_CHARS` を超えると override チェックを入れない限り無効化されます。
+
+## 設計上の重要シフト: アプリ内に LLM を持たない
+
+Locus は **LLM を直接呼びません**。Terminal pane (`alacritty_terminal` + `portable-pty` 製) を抱えて、その中で Claude Code / Codex / Gemini を子プロセスとして動かします。Viewer は PR / diff / comment の選択から構造化された prompt を組み立て、**Terminal pane に送り込みます**。認証・プロバイダ選択・コスト管理・レビュー履歴は使う agent CLI 側に任せ、Locus 側には持ち込みません。
+
+## 主要スタック
 
 - **Rust + Slint** — ネイティブ UI
-- **`alacritty_terminal` + `portable-pty`** — Agent CLI を同居させる Terminal ペイン
-- **`tree-sitter-go`**（最初の対象言語）— セマンティック Diff
-- **`octocrab`** — GitHub PR スナップショット
+- **`alacritty_terminal` + `portable-pty`** — agent CLI 用 terminal pane
+- **`tree-sitter-go`** (最初の対象言語) — セマンティック diff
+- **`octocrab`** — GitHub PR snapshot
 
-`cargo run -- bash` で現在のビルドを起動し、Slint ウィンドウ内の Terminal ペインで対話シェルが動くことを確認できます。`claude` / `codex` / `gemini` に置き換えれば各 Agent CLI を同居させられます。
+## このリポジトリの中身
 
-## 現在このリポジトリに残っているもの
+- `Cargo.toml` / `src/` / `ui/` / `build.rs` — Rust + Slint バイナリ
+- `docs/adr/` — ADR (rewrite 経緯 0005、`thread_local DIFF_APP_STATE` 0006 等)
+- `docs/architecture/` — parser adapter + IR pipeline
+- `docs/mvp.*` — 旧 MVP スコープ (歴史的経緯のため残置)
+- `lang/ja/LC_MESSAGES/locus.po` — 日本語 bundled translations
 
-- `Cargo.toml` / `src/` / `ui/` / `build.rs` — Rust + Slint 本体（Terminal ペイン動作確認済み）
-- `docs/adr/0001`, `docs/adr/0004` — 方法論と semantic-change-IR の思想（継承）
-- `docs/architecture/semantic-analysis-pipeline.*` — parser adapter + IR の設計
-- `docs/mvp.*` — 参照用の過去 MVP スコープ
-
-それ以外の Next.js 時代のファイルは [`legacy/nextjs`](https://github.com/duck8823/locus/tree/legacy/nextjs) にあります。
+旧 Next.js 系は [`legacy/nextjs`](https://github.com/duck8823/locus/tree/legacy/nextjs) ブランチに残っています。
 
 ## ライセンス
 
-MIT License — 正本は [LICENSE](LICENSE) を参照してください。日本語参考訳は [LICENSE.ja.md](LICENSE.ja.md) です。
+MIT — [LICENSE](LICENSE) 参照。日本語参考訳: [LICENSE.ja.md](LICENSE.ja.md)
