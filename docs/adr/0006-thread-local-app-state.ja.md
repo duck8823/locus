@@ -48,8 +48,8 @@ fn with_app_state<R>(f: impl FnOnce(&Rc<RefCell<DiffAppState>>) -> R) -> Option<
 ```
 
 - `run_diff_viewer` が `ui.run()` の前に UI スレッド上で 1 度だけ slot に値を入れる。
-- `tokio::spawn` のクロージャは `Rc` を **キャプチャしない**。async 仕事を済ませて `slint::invoke_from_event_loop(...)` を呼び、その内側 (UI スレッド上で実行される) クロージャから `with_app_state(...)` 経由で state を取る。
-- `with_app_state` は UI スレッドのコールバックからしか呼ばれないため `thread_local!` のアクセスは常に安全で、spawn された future 自体は `Send` を保つ。
+- `tokio::spawn` の future は `Rc` を **キャプチャせず**、`DIFF_APP_STATE` も **直接は読まない**。async 仕事 (例: HTTP fetch) を終えてから `slint::invoke_from_event_loop(|| { ... })` を呼ぶ。そこに渡したクロージャは UI スレッド上で動き、*そのクロージャの中で* `with_app_state(...)` を呼んで結果を適用する。
+- `with_app_state` は UI スレッドのコールバック (Slint callback と `invoke_from_event_loop` のクロージャ) からしか呼ばれないため、`thread_local!` のアクセスは常に初期化と同じスレッド上であり、spawn された future 自体は `Send` のまま保てる。
 
 これにより diff viewer 全体で使っている `Rc<RefCell<DiffAppState>>` の使い勝手を維持しつつ、tokio の `Send` 要求を spawn 境界で満たせる。
 
@@ -57,7 +57,7 @@ fn with_app_state<R>(f: impl FnOnce(&Rc<RefCell<DiffAppState>>) -> R) -> Option<
 
 ### 正の影響
 
-- 影響範囲が小さい: `thread_local!` slot は 1 つだけ、`with_app_state(...)` 経由でしかアクセスしない。
+- `DiffAppState` の影響範囲が小さい: `thread_local!` slot は `DIFF_APP_STATE` 1 つだけ、`with_app_state(...)` 経由でしかアクセスしない。(コードベースにはもう 1 つ、無関係な `thread_local!` `ACTIVE_DIFF_WINDOW` があり、こちらは toast 自動 dismiss `slint::Timer` が live window を `Weak` で取り出すためだけに使う小さな handle であり、本 ADR のスコープ外である。)
 - 既存の `Rc<RefCell<>>` 流儀がそのまま (`state.borrow_mut().push_toast(...)` 等)。
 - spawn された future を `Send` のままに保てる。全コールバックを mutex / actor に書き換える必要がない。
 
@@ -71,4 +71,4 @@ fn with_app_state<R>(f: impl FnOnce(&Rc<RefCell<DiffAppState>>) -> R) -> Option<
 
 ### 境界
 
-`thread_local!` パターンは **`DIFF_APP_STATE` のみ** で使う。他の共有状態 (terminal の `Term`、PTY master、alacritty processor) は非 UI スレッド (PTY 読み取りスレッド、Timer 駆動の tick) からもアクセスされるため、`Arc<Mutex<...>>` が引き続き適切。lock コストはこれら境界では妥当。
+`thread_local!` パターンは **`DiffAppState` 用には `DIFF_APP_STATE` のみ** に限定する。コードベース上にはもう 1 つ `ACTIVE_DIFF_WINDOW` (`Weak<DiffViewerWindow>`) があり、これは toast 自動 dismiss timer 用の単機能 UI スレッド handle であり、toast システムの実装詳細として扱う。他の共有状態 (terminal の `Term`、PTY master、alacritty processor) は非 UI スレッド (PTY 読み取りスレッド、Timer 駆動の tick) からもアクセスされるため、`Arc<Mutex<...>>` が引き続き適切。lock コストはこれら境界では妥当。

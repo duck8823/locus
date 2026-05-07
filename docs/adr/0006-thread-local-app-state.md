@@ -48,8 +48,8 @@ fn with_app_state<R>(f: impl FnOnce(&Rc<RefCell<DiffAppState>>) -> R) -> Option<
 ```
 
 - `run_diff_viewer` populates the slot once, on the UI thread, before `ui.run()`.
-- `tokio::spawn` closures **do not** capture the `Rc`. They do their async work, then call `slint::invoke_from_event_loop(...)`, and inside that closure (which runs on the UI thread) they fetch the state via `with_app_state(...)`.
-- Because `with_app_state` is only invoked from UI-thread callbacks, the `thread_local!` access is always safe, and the spawned future itself is `Send`.
+- `tokio::spawn` futures **do not** capture the `Rc` and do not read `DIFF_APP_STATE` themselves. They do their async work (e.g. an HTTP fetch), then call `slint::invoke_from_event_loop(|| { ... })`. The closure handed to `invoke_from_event_loop` runs on the UI thread, and *that* closure is what calls `with_app_state(...)` to apply the result.
+- Because `with_app_state` is only invoked from UI-thread callbacks (Slint callbacks and `invoke_from_event_loop` closures), the `thread_local!` access is always on the same thread that initialized it, and the spawned future itself stays `Send`.
 
 This preserves the ergonomic `Rc<RefCell<DiffAppState>>` model used throughout the diff viewer while satisfying tokio's `Send` requirement at the spawn boundary.
 
@@ -57,7 +57,7 @@ This preserves the ergonomic `Rc<RefCell<DiffAppState>>` model used throughout t
 
 ### Positive
 
-- No global blast radius: only one `thread_local!` slot, accessed through `with_app_state(...)`.
+- No global blast radius for `DiffAppState`: it lives in exactly one `thread_local!` slot (`DIFF_APP_STATE`), accessed only through `with_app_state(...)`. (A second, unrelated `thread_local!` — `ACTIVE_DIFF_WINDOW` — exists for the toast auto-dismiss `slint::Timer` to look up the live window via a `Weak`; that one is a small, single-purpose handle and not in scope of this ADR.)
 - Existing `Rc<RefCell<>>` ergonomics remain (`state.borrow_mut().push_toast(...)`, etc.).
 - Spawned futures stay `Send` without restructuring every callback to lock a mutex or marshal messages.
 
@@ -71,4 +71,4 @@ This preserves the ergonomic `Rc<RefCell<DiffAppState>>` model used throughout t
 
 ### Boundaries
 
-The `thread_local!` pattern is **only** used for `DIFF_APP_STATE`. Other shared state (terminal `Term`, PTY master, alacritty processor) lives behind `Arc<Mutex<...>>` because those are accessed from non-UI threads (PTY reader thread, timer ticks) and the cost of a lock is appropriate there.
+The `thread_local!` pattern is used here **specifically for `DiffAppState`**, via the `DIFF_APP_STATE` slot. The codebase has one other `thread_local!` (`ACTIVE_DIFF_WINDOW`) which holds a `Weak<DiffViewerWindow>` for the toast auto-dismiss timer; it is a single-purpose UI-thread handle and is treated as an implementation detail of the toast system. Other shared state (terminal `Term`, PTY master, alacritty processor) lives behind `Arc<Mutex<...>>` because those are accessed from non-UI threads (PTY reader thread, timer ticks) and the cost of a lock is appropriate there.
