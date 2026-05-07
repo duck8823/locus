@@ -156,8 +156,11 @@ msgid "Send anyway (override)"
 msgstr "上限を無視して送信"
 
 # Insert+Send confirmation (#238)
-msgid "Confirm to send (LOCUS_CONFIRM_SEND)"
-msgstr "送信前に確認 (LOCUS_CONFIRM_SEND)"
+msgid "Confirm to send"
+msgstr "送信前に確認"
+
+msgid "chars"
+msgstr "文字"
 
 msgid "Confirm"
 msgstr "確認"

@@ -193,6 +193,13 @@ export component DiffViewerWindow inherits Window {
     // LOCUS_CONFIRM_SEND=true で「Confirm to send」チェックボックスを必須化。
     in property <bool> require-send-confirm: false;
     in-out property <bool> send-confirmed: false;
+
+    // preview-text が動いたら confirm をリセットする。これにより、Confirm 済み
+    // 状態のまま preview を編集 / Refresh / selection 切替して別内容を送信する
+    // 事故を防ぐ (#238 MUST)。
+    changed preview-text => {
+        root.send-confirmed = false;
+    }
     // preview-text の文字数 (code-point ベース)。Slint 側で自動再計算するので
     // Rust から set する必要はなく、TextInput でユーザーが編集した場合も
     // 即時反映される。
@@ -887,7 +894,7 @@ export component DiffViewerWindow inherits Window {
                                     vertical-alignment: center;
                                 }
                                 Text {
-                                    text: @tr("Confirm to send (LOCUS_CONFIRM_SEND)");
+                                    text: @tr("Confirm to send") + ": " + root.preview-length + " " + @tr("chars");
                                     color: #b0b0c0;
                                     font-size: 11px;
                                     vertical-alignment: center;
