@@ -225,6 +225,11 @@ export component DiffViewerWindow inherits Window {
     in property <bool> pr-list-loading: false;
     in property <int> current-pr-number: 0;
 
+    // file list / PR list の TouchArea がホバー中に full text を書き込む。
+    // bottom hint バーが空でなければそれを優先表示することで、elide で
+    // 切れた path / title を確認できる「status-line tooltip」になる。
+    in-out property <string> hovered-tooltip-text;
+
     in property <[ToastView]> toasts;
     callback dismiss-toast(int);
 
@@ -578,6 +583,13 @@ export component DiffViewerWindow inherits Window {
                                 clicked => {
                                     root.pr-clicked(pr.number);
                                 }
+                                changed has-hover => {
+                                    if (self.has-hover) {
+                                        root.hovered-tooltip-text = pr.number_label + " " + pr.title;
+                                    } else if (root.hovered-tooltip-text == pr.number_label + " " + pr.title) {
+                                        root.hovered-tooltip-text = "";
+                                    }
+                                }
                             }
 
                             VerticalBox {
@@ -629,6 +641,13 @@ export component DiffViewerWindow inherits Window {
                             clicked => {
                                 root.selected-file-index = idx;
                                 root.file-switched(idx);
+                            }
+                            changed has-hover => {
+                                if (self.has-hover) {
+                                    root.hovered-tooltip-text = file.file-path;
+                                } else if (root.hovered-tooltip-text == file.file-path) {
+                                    root.hovered-tooltip-text = "";
+                                }
                             }
                         }
 
@@ -1256,9 +1275,14 @@ export component DiffViewerWindow inherits Window {
                 spacing: 14px;
                 alignment: start;
                 Text {
-                    text: @tr("Click: select line  •  Range button: extend to range  •  File button: whole file  •  Esc: clear selection  •  ⌘↵: Insert+Send  •  ⌘C: Copy");
-                    color: #6a6a75;
+                    // ホバー中はフルテキスト (file path / PR title) を優先。
+                    // ホバー解除でキー操作ヒントに戻る。
+                    text: root.hovered-tooltip-text != ""
+                        ? root.hovered-tooltip-text
+                        : @tr("Click: select line  •  Range button: extend to range  •  File button: whole file  •  Esc: clear selection  •  ⌘↵: Insert+Send  •  ⌘C: Copy");
+                    color: root.hovered-tooltip-text != "" ? #d0d0d5 : #6a6a75;
                     font-size: 10px;
+                    font-family: root.hovered-tooltip-text != "" ? root.font-family : "";
                     vertical-alignment: center;
                     overflow: elide;
                 }
