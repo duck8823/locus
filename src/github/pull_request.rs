@@ -316,47 +316,93 @@ pub async fn fetch_pr_snapshot(
     let first_page = pulls.list_files(pr_number).await?;
     let entries: Vec<octocrab::models::repos::DiffEntry> = client.all_pages(first_page).await?;
 
-    let mut files: Vec<PullRequestFile> = Vec::new();
+    // ファイルあたり最大 2 件 (before / after) の content fetch を発生させるため、
+    // 100 ファイル PR では sequential だと 200 リクエスト直列で起動が極端に遅い。
+    // FuturesUnordered + buffer_unordered で N 並列に実行し、入力順を保つために
+    // index を持ち回って後で並べ替える。並列度 8 は GitHub API の rate limit に
+    // 対する保守値で、API レイテンシ ~200ms なら 8 並列で 100 file が
+    // ~5 秒程度に収まる目安。
+    use futures::stream::{self, StreamExt};
+    const FETCH_CONCURRENCY: usize = 8;
 
-    for entry in entries {
-        let status = FileStatus::from_octocrab(entry.status);
-        let file_path = entry.filename.clone();
-        // renamed の場合は base 側のパスが変わる。
-        let base_path = entry
-            .previous_filename
-            .clone()
-            .unwrap_or_else(|| file_path.clone());
-        let file_id = FileId::new(file_path.clone());
-        let patch = entry.patch.clone();
+    struct FileContext {
+        file_id: FileId,
+        file_path: String,
+        base_path: String,
+        status: FileStatus,
+        patch: Option<String>,
+    }
 
-        let (before, after) = match status {
-            FileStatus::Added => (
-                FetchedContent::Missing("added file has no base content".into()),
-                fetch_content_typed(client, owner, repo, &file_path, &head_sha).await,
-            ),
-            FileStatus::Removed => (
-                fetch_content_typed(client, owner, repo, &base_path, &base_sha).await,
-                FetchedContent::Missing("removed file has no head content".into()),
-            ),
-            _ => (
-                fetch_content_typed(client, owner, repo, &base_path, &base_sha).await,
-                fetch_content_typed(client, owner, repo, &file_path, &head_sha).await,
-            ),
-        };
+    let contexts: Vec<FileContext> = entries
+        .into_iter()
+        .map(|entry| {
+            let status = FileStatus::from_octocrab(entry.status);
+            let file_path = entry.filename.clone();
+            let base_path = entry
+                .previous_filename
+                .clone()
+                .unwrap_or_else(|| file_path.clone());
+            let file_id = FileId::new(file_path.clone());
+            FileContext {
+                file_id,
+                file_path,
+                base_path,
+                status,
+                patch: entry.patch.clone(),
+            }
+        })
+        .collect();
 
+    let total = contexts.len();
+    let head_sha_for_stream = head_sha.clone();
+    let base_sha_for_stream = base_sha.clone();
+    let fetched_files: Vec<(usize, FileContext, FetchedContent, FetchedContent)> =
+        stream::iter(contexts.into_iter().enumerate())
+            .map(|(idx, ctx)| {
+                let head_sha = head_sha_for_stream.clone();
+                let base_sha = base_sha_for_stream.clone();
+                async move {
+                    let (before, after) = match ctx.status {
+                        FileStatus::Added => (
+                            FetchedContent::Missing("added file has no base content".into()),
+                            fetch_content_typed(client, owner, repo, &ctx.file_path, &head_sha)
+                                .await,
+                        ),
+                        FileStatus::Removed => (
+                            fetch_content_typed(client, owner, repo, &ctx.base_path, &base_sha)
+                                .await,
+                            FetchedContent::Missing("removed file has no head content".into()),
+                        ),
+                        _ => {
+                            let (b, a) = futures::join!(
+                                fetch_content_typed(client, owner, repo, &ctx.base_path, &base_sha),
+                                fetch_content_typed(client, owner, repo, &ctx.file_path, &head_sha),
+                            );
+                            (b, a)
+                        }
+                    };
+                    (idx, ctx, before, after)
+                }
+            })
+            .buffer_unordered(FETCH_CONCURRENCY)
+            .collect()
+            .await;
+
+    let mut indexed: Vec<Option<PullRequestFile>> = (0..total).map(|_| None).collect();
+    for (idx, ctx, before, after) in fetched_files {
         let is_binary = matches!(before, FetchedContent::Binary)
             || matches!(after, FetchedContent::Binary);
 
         let unsupported = if is_binary {
             Some(UnsupportedFile::Binary {
-                file_id: file_id.clone(),
-                file_path: file_path.clone(),
+                file_id: ctx.file_id.clone(),
+                file_path: ctx.file_path.clone(),
             })
         } else {
             let before_ok = matches!(before, FetchedContent::Ok(_));
             let after_ok = matches!(after, FetchedContent::Ok(_));
 
-            let unexpected_missing = match status {
+            let unexpected_missing = match ctx.status {
                 FileStatus::Added => !after_ok,
                 FileStatus::Removed => !before_ok,
                 _ => !before_ok || !after_ok,
@@ -365,8 +411,8 @@ pub async fn fetch_pr_snapshot(
             if unexpected_missing {
                 let reason = summarize_missing(&before, &after);
                 Some(UnsupportedFile::PatchMissing {
-                    file_id: file_id.clone(),
-                    file_path: file_path.clone(),
+                    file_id: ctx.file_id.clone(),
+                    file_path: ctx.file_path.clone(),
                     reason,
                 })
             } else {
@@ -377,23 +423,22 @@ pub async fn fetch_pr_snapshot(
         let (before_content, after_content) = if unsupported.is_some() {
             (None, None)
         } else {
-            (
-                into_text(before),
-                into_text(after),
-            )
+            (into_text(before), into_text(after))
         };
 
-        files.push(PullRequestFile {
-            file_id,
-            file_path,
-            status,
+        indexed[idx] = Some(PullRequestFile {
+            file_id: ctx.file_id,
+            file_path: ctx.file_path,
+            status: ctx.status,
             before_content,
             after_content,
-            patch,
+            patch: ctx.patch,
             is_binary,
             unsupported,
         });
     }
+
+    let files: Vec<PullRequestFile> = indexed.into_iter().flatten().collect();
 
     Ok(PullRequestSnapshot {
         target: ReviewTarget::GitHubPr {
