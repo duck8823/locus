@@ -32,6 +32,7 @@ mod github;
 mod i18n;
 mod review;
 mod semantic;
+mod session;
 mod terminal;
 mod ui_state;
 
@@ -344,6 +345,16 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.set_terminal_cell_h(ui_cfg.terminal_cell_h());
     ui.set_preview_max_chars(ui_cfg.prompt_max_chars.min(i32::MAX as usize) as i32);
     ui.set_require_send_confirm(ui_cfg.confirm_send);
+
+    // セッション復元 (#231): 前回保存した window size があれば適用する。
+    if let Some(saved) = session::load()
+        && let (Some(w), Some(h)) = (saved.window_width, saved.window_height)
+        && w > 0.0
+        && h > 0.0
+    {
+        ui.window()
+            .set_size(slint::WindowSize::Logical(slint::LogicalSize::new(w, h)));
+    }
     apply_snapshot_to_ui(&ui, &placeholder_snapshot, &[]);
     ui.set_current_pr_number(pr_number as i32);
     ui.set_pr_list(build_pr_list_model(&[]));
@@ -933,6 +944,24 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     st.scroll_positions.clear();
                 });
             });
+        });
+    }
+
+    // セッション保存 (#231): close 要求時に現在の window size を session.json に
+    // 書き出す。失敗しても close を阻害しない (CloseRequestResponse::HideWindow)。
+    {
+        let ui_weak = ui.as_weak();
+        ui.window().on_close_requested(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                let physical = ui.window().size();
+                let scale = ui.window().scale_factor().max(f32::EPSILON);
+                let state = session::SessionState {
+                    window_width: Some(physical.width as f32 / scale),
+                    window_height: Some(physical.height as f32 / scale),
+                };
+                session::save(&state);
+            }
+            slint::CloseRequestResponse::HideWindow
         });
     }
 
