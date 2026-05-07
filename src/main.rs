@@ -1590,4 +1590,169 @@ mod tests {
     fn short_sha_of_short_input_is_itself() {
         assert_eq!(short_sha("abc"), "abc");
     }
+
+    // ===== Integration / flow tests (#233) =====
+    //
+    // run_diff_viewer のコールバック chain を Slint なしで再現する。コール
+    // バック内では `state.borrow_mut().set_anchor(...)` などを呼んでいるだけで、
+    // UI 操作 (refresh_*) は別 helper に分離されているため、state 側のフローを
+    // ここで直接組み立てて end-to-end 動作を検証する。
+
+    use review::formatter::{format_prompt, FileSourceEntry};
+
+    fn fixture_files(state: &DiffAppState) -> Vec<FileSourceEntry<'_>> {
+        state
+            .snapshot
+            .files
+            .iter()
+            .map(|f| FileSourceEntry {
+                file_id: &f.file_id,
+                file_path: f.file_path.as_str(),
+                before_content: f.before_content.as_deref(),
+                after_content: f.after_content.as_deref(),
+            })
+            .collect()
+    }
+
+    fn click_line(state: &mut DiffAppState, file_index: usize, line: u32, side: Side) {
+        // run_diff_viewer の on_select_line 相当の業務ロジック。
+        let file = state.file(file_index).cloned().expect("file exists");
+        let file_id = FileId::new(file.file_path.clone());
+        if state.pending_range {
+            let same_file = state
+                .current_anchor
+                .as_ref()
+                .map(|a| a.file_id == file_id)
+                .unwrap_or(false);
+            if same_file {
+                state.complete_range(&file_id, line, side);
+                return;
+            }
+            state.pending_range = false;
+        }
+        state.set_anchor(SelectionAnchor {
+            file_id,
+            file_path: file.file_path,
+            granularity: Granularity::Line { line, side },
+        });
+    }
+
+    fn add_current_to_draft(state: &mut DiffAppState, note: Option<&str>) -> bool {
+        // run_diff_viewer の on_add_to_draft と同じ trim / empty→None 変換を踏襲する。
+        let Some(anchor) = state.current_anchor.clone() else {
+            return false;
+        };
+        let note_opt = note
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        state.draft.push(DraftEntry::new(anchor, note_opt));
+        true
+    }
+
+    #[test]
+    fn flow_click_line_add_to_draft_produces_one_entry() {
+        let mut st = make_state();
+        click_line(&mut st, 0, 1, Side::After);
+        assert!(add_current_to_draft(&mut st, Some("first note")));
+        assert_eq!(st.draft.len(), 1);
+        let entry = &st.draft.entries()[0];
+        assert!(matches!(entry.anchor.granularity, Granularity::Line { line: 1, side: Side::After }));
+        assert_eq!(entry.note.as_deref(), Some("first note"));
+    }
+
+    #[test]
+    fn flow_extend_range_across_two_clicks() {
+        let mut st = make_state();
+        click_line(&mut st, 0, 1, Side::After);
+        st.start_range_mode();
+        click_line(&mut st, 0, 2, Side::After);
+        match &st.current_anchor.as_ref().unwrap().granularity {
+            Granularity::Range {
+                start_line: 1,
+                end_line: 2,
+                side: Side::After,
+            } => {}
+            other => panic!("expected Range(1..=2, After), got {other:?}"),
+        }
+        assert!(!st.pending_range);
+    }
+
+    #[test]
+    fn flow_multiple_drafts_accumulate_in_order() {
+        let mut st = make_state();
+        click_line(&mut st, 0, 1, Side::After);
+        add_current_to_draft(&mut st, None);
+        click_line(&mut st, 0, 2, Side::After);
+        add_current_to_draft(&mut st, Some("second"));
+        assert_eq!(st.draft.len(), 2);
+        assert_eq!(st.draft.entries()[0].note, None);
+        assert_eq!(st.draft.entries()[1].note.as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn flow_cancel_range_on_file_switch_clears_pending() {
+        let mut st = make_state();
+        click_line(&mut st, 0, 1, Side::After);
+        st.start_range_mode();
+        assert!(st.pending_range);
+        st.cancel_range_on_file_switch();
+        assert!(!st.pending_range);
+        // anchor itself は維持される (file 切替後にユーザが再度 extend するため)
+        assert!(st.current_anchor.is_some());
+    }
+
+    #[test]
+    fn flow_format_prompt_includes_added_snippet() {
+        let mut st = make_state();
+        click_line(&mut st, 0, 2, Side::After);
+        // note に snippet 同名 token を入れない (assert を tautology にしないため)
+        assert!(add_current_to_draft(&mut st, Some("inspecting after side")));
+        let files = fixture_files(&st);
+        let preview = format_prompt(&st.draft, &files);
+        // anchor label と note が preview に含まれていること
+        assert!(preview.contains("a.rs"), "preview lacks file path: {preview}");
+        assert!(
+            preview.contains("inspecting after side"),
+            "preview lacks note: {preview}"
+        );
+        // After 側 line 2 (= "B") の本文が snippet に出ていること。
+        // note には "B" が無いので、コードフェンス内の "B" が assertion を保証する。
+        assert!(
+            preview.contains("\nB"),
+            "preview lacks after-line content: {preview}"
+        );
+        assert!(
+            !preview.contains("\na\n") || preview.contains("\nB"),
+            "preview should include after content (B), not only before (a/b): {preview}"
+        );
+    }
+
+    #[test]
+    fn flow_add_to_draft_trims_note_and_empty_becomes_none() {
+        let mut st = make_state();
+        click_line(&mut st, 0, 1, Side::After);
+        assert!(add_current_to_draft(&mut st, Some("   ")));
+        assert_eq!(st.draft.entries()[0].note, None);
+
+        click_line(&mut st, 0, 2, Side::After);
+        assert!(add_current_to_draft(&mut st, Some("  hello  ")));
+        assert_eq!(
+            st.draft.entries()[1].note.as_deref(),
+            Some("hello"),
+            "note should be trimmed of surrounding whitespace"
+        );
+    }
+
+    #[test]
+    fn flow_remove_draft_entry_decreases_length() {
+        let mut st = make_state();
+        click_line(&mut st, 0, 1, Side::After);
+        add_current_to_draft(&mut st, None);
+        click_line(&mut st, 0, 2, Side::After);
+        add_current_to_draft(&mut st, None);
+        assert_eq!(st.draft.len(), 2);
+        st.draft.remove(0);
+        assert_eq!(st.draft.len(), 1);
+    }
 }
