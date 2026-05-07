@@ -147,3 +147,10 @@ msgstr "送信ボタンは無効化されています。LOCUS_AGENT_CMD を設�
 
 msgid "Click: select line  •  Range button: extend to range  •  File button: whole file  •  Esc: clear selection  •  ⌘↵: Insert+Send  •  ⌘C: Copy"
 msgstr "クリック: 行を選択  •  Range ボタン: 範囲に拡張  •  File ボタン: ファイル全選択  •  Esc: 選択解除  •  ⌘↵: 挿入+送信  •  ⌘C: コピー"
+
+# Preview size warning (#226)
+msgid "Preview exceeds the limit. Send buttons are disabled."
+msgstr "プレビューが上限を超えています。送信ボタンは無効化されています。"
+
+msgid "Send anyway (override)"
+msgstr "上限を無視して送信"

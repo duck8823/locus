@@ -318,6 +318,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.set_diff_font_size(ui_cfg.diff_font_size);
     ui.set_terminal_cell_w(ui_cfg.terminal_cell_w());
     ui.set_terminal_cell_h(ui_cfg.terminal_cell_h());
+    ui.set_preview_max_chars(ui_cfg.prompt_max_chars.min(i32::MAX as usize) as i32);
     apply_snapshot_to_ui(&ui, &placeholder_snapshot, &[]);
     ui.set_current_pr_number(pr_number as i32);
     ui.set_pr_list(build_pr_list_model(&[]));
@@ -1089,6 +1090,8 @@ fn refresh_preview(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
         .collect();
     let text = format_prompt(&st.draft, &entries);
     ui.set_preview_text(SharedString::from(text));
+    // preview-length は Slint 側で root.preview-text.character-count から
+    // 自動計算されるので Rust から set する必要はない。
 }
 
 fn append_history(state: &Rc<RefCell<DiffAppState>>, mode: SendMode, body: &str) {

@@ -13,6 +13,10 @@ pub struct UiConfig {
     /// 非対応 shell / agent CLI では `\x1b[200~` 等が文字としてそのまま表示
     /// されるため、`LOCUS_BRACKETED_PASTE=false` で raw 送信に切り替えられる。
     pub bracketed_paste: bool,
+    /// preview text の上限文字数。`LOCUS_PROMPT_MAX_CHARS` で上書き可能。
+    /// 既定 32000 (Claude API context window の安全圏内目安)。超過すると
+    /// preview pane に warning が出るが、override checkbox で送信は可能。
+    pub prompt_max_chars: usize,
 }
 
 impl UiConfig {
@@ -34,11 +38,15 @@ impl UiConfig {
             .unwrap_or(12.0);
         let bracketed_paste =
             parse_bracketed_paste_env(std::env::var("LOCUS_BRACKETED_PASTE").ok().as_deref());
+        let prompt_max_chars = parse_prompt_max_chars_env(
+            std::env::var("LOCUS_PROMPT_MAX_CHARS").ok().as_deref(),
+        );
         Self {
             font_family,
             terminal_font_size,
             diff_font_size,
             bracketed_paste,
+            prompt_max_chars,
         }
     }
 
@@ -76,6 +84,17 @@ pub fn parse_bracketed_paste_env(value: Option<&str>) -> bool {
     }
 }
 
+/// `LOCUS_PROMPT_MAX_CHARS` を usize にパースする。
+///
+/// - 未設定 / 空 / 解釈不能な値 → 既定 32000
+/// - 0 や 1 などの極端値もそのまま受け入れる (warning が常に出るだけで害はない)
+pub fn parse_prompt_max_chars_env(value: Option<&str>) -> usize {
+    const DEFAULT: usize = 32_000;
+    value
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(DEFAULT)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,6 +106,7 @@ mod tests {
             terminal_font_size: 12.0,
             diff_font_size: 12.0,
             bracketed_paste: true,
+            prompt_max_chars: 32_000,
         };
         assert!(cfg.terminal_cell_w() >= 6.0);
         assert!(cfg.terminal_cell_h() >= 14.0);
@@ -99,12 +119,14 @@ mod tests {
             terminal_font_size: 10.0,
             diff_font_size: 10.0,
             bracketed_paste: true,
+            prompt_max_chars: 32_000,
         };
         let big = UiConfig {
             font_family: "x".into(),
             terminal_font_size: 20.0,
             diff_font_size: 20.0,
             bracketed_paste: true,
+            prompt_max_chars: 32_000,
         };
         assert!(big.terminal_cell_w() > small.terminal_cell_w());
         assert!(big.terminal_cell_h() > small.terminal_cell_h());
@@ -129,6 +151,20 @@ mod tests {
         for v in ["1", "true", "True", "on", "yes"] {
             assert!(parse_bracketed_paste_env(Some(v)));
         }
+    }
+
+    #[test]
+    fn prompt_max_chars_default() {
+        assert_eq!(parse_prompt_max_chars_env(None), 32_000);
+        assert_eq!(parse_prompt_max_chars_env(Some("")), 32_000);
+        assert_eq!(parse_prompt_max_chars_env(Some("garbage")), 32_000);
+    }
+
+    #[test]
+    fn prompt_max_chars_explicit() {
+        assert_eq!(parse_prompt_max_chars_env(Some("8000")), 8_000);
+        assert_eq!(parse_prompt_max_chars_env(Some("  4096  ")), 4_096);
+        assert_eq!(parse_prompt_max_chars_env(Some("0")), 0);
     }
 
     #[test]
