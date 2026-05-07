@@ -154,3 +154,13 @@ msgstr "プレビューが上限を超えています。送信ボタンは無効
 
 msgid "Send anyway (override)"
 msgstr "上限を無視して送信"
+
+# Insert+Send confirmation (#238)
+msgid "Confirm to send"
+msgstr "送信前に確認"
+
+msgid "chars"
+msgstr "文字"
+
+msgid "Confirm"
+msgstr "確認"

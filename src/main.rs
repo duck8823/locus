@@ -340,6 +340,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.set_terminal_cell_w(ui_cfg.terminal_cell_w());
     ui.set_terminal_cell_h(ui_cfg.terminal_cell_h());
     ui.set_preview_max_chars(ui_cfg.prompt_max_chars.min(i32::MAX as usize) as i32);
+    ui.set_require_send_confirm(ui_cfg.confirm_send);
     apply_snapshot_to_ui(&ui, &placeholder_snapshot, &[]);
     ui.set_current_pr_number(pr_number as i32);
     ui.set_pr_list(build_pr_list_model(&[]));
