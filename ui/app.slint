@@ -359,13 +359,21 @@ export component DiffViewerWindow inherits Window {
                 root.clear-current-selection();
                 return accept;
             }
+            // Send / Copy ショートカットも preview-limit / override の判定に
+                // 従う。ボタン側 enabled 条件と揃えてサイズ制限を bypass されない
+                // ようにする。
             if (event.text == Key.Return
-                && (event.modifiers.meta || event.modifiers.control)) {
+                && (event.modifiers.meta || event.modifiers.control)
+                && root.terminal-available
+                && (root.preview-length <= root.preview-max-chars
+                    || root.preview-override)) {
                 root.send-insert-and-send(root.preview-text);
                 return accept;
             }
             if (event.text == "c"
-                && (event.modifiers.meta || event.modifiers.control)) {
+                && (event.modifiers.meta || event.modifiers.control)
+                && (root.preview-length <= root.preview-max-chars
+                    || root.preview-override)) {
                 root.send-copy-to-clipboard(root.preview-text);
                 return accept;
             }
