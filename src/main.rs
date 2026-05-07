@@ -76,8 +76,41 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.set_font_size(ui_cfg.terminal_font_size);
     ui.set_cell_w(ui_cfg.terminal_cell_w());
     ui.set_cell_h(ui_cfg.terminal_cell_h());
-    let _pane = terminal::launch(&ui, command)?;
+    let pane = Rc::new(terminal::launch(&ui, command)?);
+    {
+        let pane = pane.clone();
+        let ui_weak = ui.as_weak();
+        let fallback_cell_w = ui_cfg.terminal_cell_w();
+        let fallback_cell_h = ui_cfg.terminal_cell_h();
+        ui.on_resized(move |w_logical: f32, h_logical: f32| {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            let mut cell_w = ui.get_measured_cell_w();
+            let mut cell_h = ui.get_measured_cell_h();
+            if cell_w <= 0.0 {
+                cell_w = fallback_cell_w;
+            }
+            if cell_h <= 0.0 {
+                cell_h = fallback_cell_h;
+            }
+            ui.set_cell_w(cell_w);
+            ui.set_cell_h(cell_h);
+            let (cols, rows) = terminal::compute_grid_size(w_logical, h_logical, cell_w, cell_h);
+            match pane.resize(cols, rows) {
+                Ok(()) => {
+                    let (cols_now, rows_now) = pane.current_size();
+                    ui.set_cols(cols_now as i32);
+                    ui.set_visible_rows(rows_now as i32);
+                }
+                Err(e) => {
+                    eprintln!("warn: terminal resize failed ({cols}x{rows}): {e}");
+                }
+            }
+        });
+    }
     ui.run()?;
+    drop(pane);
     Ok(())
 }
 
@@ -348,7 +381,9 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     "{} (running)",
                     &[agent_cmd.as_str()],
                 )));
-                Some(Rc::new(p))
+                let pane_rc = Rc::new(p);
+                wire_terminal_resize(&ui, pane_rc.clone(), &ui_cfg);
+                Some(pane_rc)
             }
             Err(e) => {
                 eprintln!(
@@ -843,6 +878,52 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.run()?;
     drop(terminal_pane);
     Ok(())
+}
+
+/// Slint の `terminal-resized` callback を `TerminalPane::resize` に橋渡しする。
+///
+/// Slint 側は terminal-pane Rectangle の `width` / `height` の changed callback
+/// から `terminal-resized(width, height)` を発火する。ここでは:
+///
+/// 1. UI から `measured-terminal-cell-w` / `measured-terminal-cell-h` を読み、
+///    cell-w / cell-h プロパティに反映する（render と PTY の grid を一致させる）。
+/// 2. (pane size / cell size) を floor して新しい cols / rows を算出する。
+/// 3. `TerminalPane::resize` で PTY + alacritty Term + row model を再構成する。
+fn wire_terminal_resize(
+    ui: &DiffViewerWindow,
+    pane: Rc<terminal::TerminalPane>,
+    fallback: &config::UiConfig,
+) {
+    let ui_weak = ui.as_weak();
+    let fallback_cell_w = fallback.terminal_cell_w();
+    let fallback_cell_h = fallback.terminal_cell_h();
+    ui.on_terminal_resized(move |w_logical: f32, h_logical: f32| {
+        let Some(ui) = ui_weak.upgrade() else {
+            return;
+        };
+        // 実 glyph metric が未測定 (= 0) の間は従来の比率近似を使う。
+        let mut cell_w = ui.get_measured_terminal_cell_w();
+        let mut cell_h = ui.get_measured_terminal_cell_h();
+        if cell_w <= 0.0 {
+            cell_w = fallback_cell_w;
+        }
+        if cell_h <= 0.0 {
+            cell_h = fallback_cell_h;
+        }
+        ui.set_terminal_cell_w(cell_w);
+        ui.set_terminal_cell_h(cell_h);
+        let (cols, rows) = terminal::compute_grid_size(w_logical, h_logical, cell_w, cell_h);
+        match pane.resize(cols, rows) {
+            Ok(()) => {
+                let (cols_now, rows_now) = pane.current_size();
+                ui.set_terminal_cols(cols_now as i32);
+                ui.set_terminal_rows_count(rows_now as i32);
+            }
+            Err(e) => {
+                eprintln!("warn: terminal resize failed ({cols}x{rows}): {e}");
+            }
+        }
+    });
 }
 
 fn apply_snapshot_to_ui(
