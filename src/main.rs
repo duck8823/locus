@@ -76,7 +76,7 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.set_font_size(ui_cfg.terminal_font_size);
     ui.set_cell_w(ui_cfg.terminal_cell_w());
     ui.set_cell_h(ui_cfg.terminal_cell_h());
-    let pane = Rc::new(terminal::launch(&ui, command)?);
+    let pane = Rc::new(terminal::launch(&ui, command, ui_cfg.bracketed_paste)?);
     {
         let pane = pane.clone();
         let ui_weak = ui.as_weak();
@@ -379,7 +379,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             schedule_toast_auto_dismiss(id);
             None
         }
-        Ok(_) => match terminal::launch_for_diff_viewer(&ui, &agent_cmd) {
+        Ok(_) => match terminal::launch_for_diff_viewer(&ui, &agent_cmd, ui_cfg.bracketed_paste) {
             Ok(p) => {
                 ui.set_terminal_available(true);
                 ui.set_terminal_status(SharedString::from(i18n::tr_args(

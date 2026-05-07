@@ -9,6 +9,10 @@ pub struct UiConfig {
     pub font_family: String,
     pub terminal_font_size: f32,
     pub diff_font_size: f32,
+    /// PromptDraft を PTY に流し込む際に bracketed paste mode で囲うかどうか。
+    /// 非対応 shell / agent CLI では `\x1b[200~` 等が文字としてそのまま表示
+    /// されるため、`LOCUS_BRACKETED_PASTE=false` で raw 送信に切り替えられる。
+    pub bracketed_paste: bool,
 }
 
 impl UiConfig {
@@ -28,10 +32,13 @@ impl UiConfig {
             .and_then(|s| s.parse::<f32>().ok())
             .or(general)
             .unwrap_or(12.0);
+        let bracketed_paste =
+            parse_bracketed_paste_env(std::env::var("LOCUS_BRACKETED_PASTE").ok().as_deref());
         Self {
             font_family,
             terminal_font_size,
             diff_font_size,
+            bracketed_paste,
         }
     }
 
@@ -51,6 +58,24 @@ impl UiConfig {
     }
 }
 
+/// `LOCUS_BRACKETED_PASTE` の値から bracketed paste mode の使用可否を決める。
+///
+/// - 未設定 / 空文字 → `true` (既定。spawn 時に `TERM=xterm-256color` を
+///   常時セットしているため、bash や殆どの agent CLI は paste 扱いになる)
+/// - `0` / `false` / `off` / `no` → `false` (raw 送信)
+/// - `1` / `true` / `on` / `yes` → `true`
+/// - それ以外の文字列 → `true` (fail-open: paste 機能を不用意に殺さない)
+///
+/// host 側の `$TERM` は参照しない。子プロセス側の TERM は spawn 時に
+/// `xterm-256color` で固定済みであり、実際に paste sequence を解釈するのは
+/// 子プロセスの parser (bash / agent CLI 自体) だからである。
+pub fn parse_bracketed_paste_env(value: Option<&str>) -> bool {
+    match value.map(str::trim) {
+        None | Some("") => true,
+        Some(v) => !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,6 +86,7 @@ mod tests {
             font_family: "test".into(),
             terminal_font_size: 12.0,
             diff_font_size: 12.0,
+            bracketed_paste: true,
         };
         assert!(cfg.terminal_cell_w() >= 6.0);
         assert!(cfg.terminal_cell_h() >= 14.0);
@@ -72,13 +98,43 @@ mod tests {
             font_family: "x".into(),
             terminal_font_size: 10.0,
             diff_font_size: 10.0,
+            bracketed_paste: true,
         };
         let big = UiConfig {
             font_family: "x".into(),
             terminal_font_size: 20.0,
             diff_font_size: 20.0,
+            bracketed_paste: true,
         };
         assert!(big.terminal_cell_w() > small.terminal_cell_w());
         assert!(big.terminal_cell_h() > small.terminal_cell_h());
+    }
+
+    #[test]
+    fn bracketed_paste_default_is_on() {
+        assert!(parse_bracketed_paste_env(None));
+        assert!(parse_bracketed_paste_env(Some("")));
+        assert!(parse_bracketed_paste_env(Some("   ")));
+    }
+
+    #[test]
+    fn bracketed_paste_explicit_off() {
+        for v in ["0", "false", "False", "OFF", "no"] {
+            assert!(!parse_bracketed_paste_env(Some(v)));
+        }
+    }
+
+    #[test]
+    fn bracketed_paste_explicit_on() {
+        for v in ["1", "true", "True", "on", "yes"] {
+            assert!(parse_bracketed_paste_env(Some(v)));
+        }
+    }
+
+    #[test]
+    fn bracketed_paste_unknown_value_fails_open() {
+        // fail-open: paste 機能を不用意に殺さないため未知値は true
+        assert!(parse_bracketed_paste_env(Some("garbage")));
+        assert!(parse_bracketed_paste_env(Some("auto"))); // 旧 auto モードも fail-open
     }
 }
