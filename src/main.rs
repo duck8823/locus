@@ -50,7 +50,10 @@ use ui_state::diff_view::build_diff_file_views;
 use ui_state::draft_view::{anchor_label, build_draft_entry_views, side_from_line_kind};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // i18n を最初に初期化する。LANG が未設定なら locus 既定の ja に揃える。
+    // tracing-subscriber を最初に初期化する。LOCUS_LOG=debug 等で詳細
+    // レベルを上げられる。設定なしでは warn 以上のみ stderr に出る。
+    init_logging();
+    // i18n を初期化する。LANG が未設定なら locus 既定の ja に揃える。
     let _ = i18n::init_from_env();
 
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -67,6 +70,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(2);
         }
     }
+}
+
+/// `LOCUS_LOG` 環境変数 (`error` / `warn` / `info` / `debug` / `trace`)
+/// を tracing-subscriber の EnvFilter に流し込む。未設定時は `warn`。
+fn init_logging() {
+    use tracing_subscriber::EnvFilter;
+    let filter = EnvFilter::try_from_env("LOCUS_LOG")
+        .unwrap_or_else(|_| EnvFilter::new("warn"));
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_writer(std::io::stderr)
+        .try_init();
 }
 
 fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -109,7 +124,7 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
                     ui.set_visible_rows(rows_now as i32);
                 }
                 Err(e) => {
-                    eprintln!("warn: terminal resize failed ({cols}x{rows}): {e}");
+                    tracing::warn!(%cols, %rows, error = %e, "terminal resize failed");
                 }
             }
         });
@@ -362,7 +377,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     let agent_resolution = which::which(&agent_cmd);
     let terminal_pane: Option<Rc<terminal::TerminalPane>> = match agent_resolution {
         Err(e) => {
-            eprintln!("warn: agent command '{agent_cmd}' not found in PATH: {e}");
+            tracing::warn!(agent_cmd, error = %e, "agent command not found in PATH");
             ui.set_terminal_available(false);
             ui.set_terminal_status(SharedString::from(i18n::tr_args(
                 "{}: not found in PATH",
@@ -392,9 +407,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 Some(pane_rc)
             }
             Err(e) => {
-                eprintln!(
-                    "warn: failed to launch terminal pane with '{agent_cmd}': {e} (continuing without terminal)"
-                );
+                tracing::warn!(agent_cmd, error = %e, "failed to launch terminal pane (continuing without terminal)");
                 ui.set_terminal_available(false);
                 let err = e.to_string();
                 ui.set_terminal_status(SharedString::from(i18n::tr_args(
@@ -666,7 +679,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 let snapshot = match snapshot_res {
                     Ok(s) => s,
                     Err(e) => {
-                        eprintln!("warn: failed to fetch PR #{new_number}: {e}");
+                        tracing::warn!(pr = new_number, error = %e, "failed to fetch PR");
                         let err_str = e.to_string();
                         let weak = weak_for_task.clone();
                         let _ = slint::invoke_from_event_loop(move || {
@@ -831,7 +844,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             let snapshot = match snapshot_res {
                 Ok(s) => s,
                 Err(e) => {
-                    eprintln!("warn: initial hydrate snapshot failed: {e}");
+                    tracing::warn!(error = %e, "initial hydrate snapshot failed");
                     let err_str = e.to_string();
                     let weak = weak_for_task.clone();
                     let pr_str = pr_number.to_string();
@@ -931,7 +944,7 @@ fn wire_terminal_resize(
                 ui.set_terminal_rows_count(rows_now as i32);
             }
             Err(e) => {
-                eprintln!("warn: terminal resize failed ({cols}x{rows}): {e}");
+                tracing::warn!(%cols, %rows, error = %e, "terminal resize failed");
             }
         }
     });
