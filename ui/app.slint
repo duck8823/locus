@@ -190,6 +190,9 @@ export component DiffViewerWindow inherits Window {
     in-out property <string> preview-text;
     in property <int> preview-max-chars: 32000;
     in-out property <bool> preview-override: false;
+    // LOCUS_CONFIRM_SEND=true で「Confirm to send」チェックボックスを必須化。
+    in property <bool> require-send-confirm: false;
+    in-out property <bool> send-confirmed: false;
     // preview-text の文字数 (code-point ベース)。Slint 側で自動再計算するので
     // Rust から set する必要はなく、TextInput でユーザーが編集した場合も
     // 即時反映される。
@@ -366,8 +369,10 @@ export component DiffViewerWindow inherits Window {
                 && (event.modifiers.meta || event.modifiers.control)
                 && root.terminal-available
                 && (root.preview-length <= root.preview-max-chars
-                    || root.preview-override)) {
+                    || root.preview-override)
+                && (!root.require-send-confirm || root.send-confirmed)) {
                 root.send-insert-and-send(root.preview-text);
+                root.send-confirmed = false;
                 return accept;
             }
             if (event.text == "c"
@@ -857,14 +862,40 @@ export component DiffViewerWindow inherits Window {
                                     text: @tr("Insert+Send");
                                     enabled: root.terminal-available
                                         && (root.preview-length <= root.preview-max-chars
-                                            || root.preview-override);
-                                    clicked => { root.send-insert-and-send(root.preview-text); }
+                                            || root.preview-override)
+                                        && (!root.require-send-confirm || root.send-confirmed);
+                                    clicked => {
+                                        root.send-insert-and-send(root.preview-text);
+                                        root.send-confirmed = false;
+                                    }
                                 }
                                 Button {
                                     text: @tr("Copy");
                                     enabled: root.preview-length <= root.preview-max-chars
                                         || root.preview-override;
                                     clicked => { root.send-copy-to-clipboard(root.preview-text); }
+                                }
+                            }
+
+                            // LOCUS_CONFIRM_SEND=true 時の confirm checkbox (#238)
+                            if root.require-send-confirm: HorizontalBox {
+                                spacing: 8px;
+                                alignment: start;
+                                Text {
+                                    text: "🔒";
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: @tr("Confirm to send (LOCUS_CONFIRM_SEND)");
+                                    color: #b0b0c0;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                                CheckBox {
+                                    text: @tr("Confirm");
+                                    checked <=> root.send-confirmed;
                                 }
                             }
 

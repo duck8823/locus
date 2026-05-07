@@ -17,6 +17,9 @@ pub struct UiConfig {
     /// 既定 32000 (Claude API context window の安全圏内目安)。超過すると
     /// preview pane に warning が出るが、override checkbox で送信は可能。
     pub prompt_max_chars: usize,
+    /// Insert+Send 押下前に「送信していい？」と確認 checkbox を要求するかどうか。
+    /// `LOCUS_CONFIRM_SEND=true` で有効化、既定 false (毎回の確認はうざいため)。
+    pub confirm_send: bool,
 }
 
 impl UiConfig {
@@ -41,12 +44,16 @@ impl UiConfig {
         let prompt_max_chars = parse_prompt_max_chars_env(
             std::env::var("LOCUS_PROMPT_MAX_CHARS").ok().as_deref(),
         );
+        let confirm_send = parse_confirm_send_env(
+            std::env::var("LOCUS_CONFIRM_SEND").ok().as_deref(),
+        );
         Self {
             font_family,
             terminal_font_size,
             diff_font_size,
             bracketed_paste,
             prompt_max_chars,
+            confirm_send,
         }
     }
 
@@ -84,6 +91,17 @@ pub fn parse_bracketed_paste_env(value: Option<&str>) -> bool {
     }
 }
 
+/// `LOCUS_CONFIRM_SEND` の値で Insert+Send 確認 checkbox を要求するかどうか。
+///
+/// - 未設定 / 空 / 不明値 / `0` / `false` / `off` / `no` → false (既定)
+/// - `1` / `true` / `on` / `yes` → true
+pub fn parse_confirm_send_env(value: Option<&str>) -> bool {
+    match value.map(|s| s.trim().to_ascii_lowercase()) {
+        Some(v) => matches!(v.as_str(), "1" | "true" | "on" | "yes"),
+        None => false,
+    }
+}
+
 /// `LOCUS_PROMPT_MAX_CHARS` を usize にパースする。
 ///
 /// - 未設定 / 空 / 解釈不能な値 → 既定 32000
@@ -107,6 +125,7 @@ mod tests {
             diff_font_size: 12.0,
             bracketed_paste: true,
             prompt_max_chars: 32_000,
+            confirm_send: false,
         };
         assert!(cfg.terminal_cell_w() >= 6.0);
         assert!(cfg.terminal_cell_h() >= 14.0);
@@ -120,6 +139,7 @@ mod tests {
             diff_font_size: 10.0,
             bracketed_paste: true,
             prompt_max_chars: 32_000,
+            confirm_send: false,
         };
         let big = UiConfig {
             font_family: "x".into(),
@@ -127,6 +147,7 @@ mod tests {
             diff_font_size: 20.0,
             bracketed_paste: true,
             prompt_max_chars: 32_000,
+            confirm_send: false,
         };
         assert!(big.terminal_cell_w() > small.terminal_cell_w());
         assert!(big.terminal_cell_h() > small.terminal_cell_h());
@@ -150,6 +171,27 @@ mod tests {
     fn bracketed_paste_explicit_on() {
         for v in ["1", "true", "True", "on", "yes"] {
             assert!(parse_bracketed_paste_env(Some(v)));
+        }
+    }
+
+    #[test]
+    fn confirm_send_default_off() {
+        assert!(!parse_confirm_send_env(None));
+        assert!(!parse_confirm_send_env(Some("")));
+        assert!(!parse_confirm_send_env(Some("garbage")));
+    }
+
+    #[test]
+    fn confirm_send_explicit_on() {
+        for v in ["1", "true", "True", "on", "yes", "ON"] {
+            assert!(parse_confirm_send_env(Some(v)));
+        }
+    }
+
+    #[test]
+    fn confirm_send_explicit_off() {
+        for v in ["0", "false", "off", "no"] {
+            assert!(!parse_confirm_send_env(Some(v)));
         }
     }
 
