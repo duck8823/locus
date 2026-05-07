@@ -53,7 +53,7 @@ GitHub アクセス用 token は次の優先順位で解決されます:
 
 | 変数 | 既定 | 用途 |
 |---|---|---|
-| `LOCUS_LOCALE` | system | `ja` / `en`。未設定時は `ja` にフォールバック。 |
+| `LOCUS_LOCALE` | system / `LANG` | `ja` / `en`。未設定時は `LANG` を見て、未対応値や未設定時は `ja` にフォールバック。 |
 | `LOCUS_AGENT_CMD` | `claude` | 内蔵 terminal pane で起動するコマンド。 |
 | `LOCUS_FONT_FAMILY` | `Menlo, Consolas, monospace` | terminal + diff のフォントファミリ。 |
 | `LOCUS_FONT_SIZE` | (未設定) | terminal/diff 両方のフォントサイズを一括指定。 |

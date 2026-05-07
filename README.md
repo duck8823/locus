@@ -53,7 +53,7 @@ For GitHub access, locus reads tokens in this order:
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LOCUS_LOCALE` | system | `ja` or `en`. Falls back to `ja` when unset. |
+| `LOCUS_LOCALE` | system / `LANG` | `ja` or `en`. Reads `LANG` when unset; falls back to `ja` for unsupported values. |
 | `LOCUS_AGENT_CMD` | `claude` | Command launched in the embedded terminal pane. |
 | `LOCUS_FONT_FAMILY` | `Menlo, Consolas, monospace` | Font family for terminal + diff. |
 | `LOCUS_FONT_SIZE` | (unset) | Single override for both terminal and diff font sizes. |

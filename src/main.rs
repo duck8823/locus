@@ -61,11 +61,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     match args.as_slice() {
         [mode, spec] if mode == "github" => run_diff_viewer(spec),
         [command] => run_terminal(command),
-        [] => run_terminal("claude"),
+        [] => {
+            // terminal-only モードでも LOCUS_AGENT_CMD を尊重する。diff viewer
+            // 側と挙動を揃えることで README に書ける起動形を一貫させる。
+            let cmd = std::env::var("LOCUS_AGENT_CMD")
+                .unwrap_or_else(|_| "claude".to_string());
+            run_terminal(&cmd)
+        }
         _ => {
             eprintln!("Usage:");
-            eprintln!("  locus                          # terminal pane (claude)");
-            eprintln!("  locus <command>                # terminal pane (custom cmd)");
+            eprintln!("  locus                          # terminal pane (LOCUS_AGENT_CMD or claude)");
+            eprintln!("  locus <command>                # terminal pane (custom cmd, overrides env)");
             eprintln!("  locus github <owner>/<repo>#<pr_number>");
             std::process::exit(2);
         }
