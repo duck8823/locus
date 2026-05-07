@@ -181,6 +181,10 @@ export component DiffViewerWindow inherits Window {
     in property <[IssueContextView]> linked-issues;
     in property <[DiffFileView]> files;
     in-out property <int> selected-file-index: 0;
+    // diff content ListView の scroll 位置 (logical px)。Rust 側が
+    // ファイル毎の HashMap として保存し、file-switch-requested の中で
+    // 切替前後に save / restore する。
+    in-out property <length> diff-scroll-y;
 
     in property <string> current-anchor-label: @tr("(no selection)");
     in property <bool> has-selection: false;
@@ -241,6 +245,9 @@ export component DiffViewerWindow inherits Window {
     callback remove-draft-entry(int);
     callback clear-current-selection();
     callback file-switched(int);
+    // file 切替を Rust 経由で実行する。Rust 側で diff-scroll-y を save → 切替 →
+    // restore の順に行うため、Slint だけで selected-file-index を書き換えない。
+    callback file-switch-requested(int);
 
     callback refresh-preview();
     callback send-insert-only(string);
@@ -639,8 +646,10 @@ export component DiffViewerWindow inherits Window {
 
                         touch := TouchArea {
                             clicked => {
-                                root.selected-file-index = idx;
-                                root.file-switched(idx);
+                                // Rust 側で scroll 位置の save / restore を伴って
+                                // 順次処理する。selected-file-index も file-switched
+                                // も Rust から発火する。
+                                root.file-switch-requested(idx);
                             }
                             changed has-hover => {
                                 if (self.has-hover) {
@@ -709,6 +718,9 @@ export component DiffViewerWindow inherits Window {
                         if root.files.length > 0
                             && !root.files[root.selected-file-index].is-unsupported:
                         ListView {
+                            // viewport-y を root のプロパティに紐付け、Rust 側で
+                            // ファイル毎に save / restore する (#230)。
+                            viewport-y <=> root.diff-scroll-y;
                             for line in root.files[root.selected-file-index].lines: Rectangle {
                                 height: 18px;
                                 background: line.is-hunk-header ? #1a1a28

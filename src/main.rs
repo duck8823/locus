@@ -173,6 +173,9 @@ struct DiffAppState {
     /// 表示中のトースト。new -> bottom 順 (UI 側 index で逆順表示)。
     toasts: Vec<ToastEntry>,
     next_toast_id: i32,
+    /// ファイル切替時に viewport-y を保存する HashMap (#230)。
+    /// key は selected-file-index、value は logical px。
+    scroll_positions: std::collections::HashMap<usize, f32>,
 }
 
 #[derive(Debug, Clone)]
@@ -361,6 +364,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         list_generation: 0,
         toasts: Vec::new(),
         next_toast_id: 0,
+        scroll_positions: std::collections::HashMap::new(),
     }));
     DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state.clone()));
     ACTIVE_DIFF_WINDOW.with(|cell| *cell.borrow_mut() = Some(ui.as_weak()));
@@ -593,6 +597,32 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // file-switch-requested (#230): file row click から呼ばれる。
+    // 現在の diff-scroll-y を 旧 file index で保存し、selected-file-index を
+    // 切り替えた後に新 index に対する保存値を復元する。
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_file_switch_requested(move |new_idx| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let old_idx = ui.get_selected_file_index() as usize;
+            let cur_scroll = ui.get_diff_scroll_y();
+            state.borrow_mut().scroll_positions.insert(old_idx, cur_scroll);
+
+            ui.set_selected_file_index(new_idx);
+
+            let restore = state
+                .borrow()
+                .scroll_positions
+                .get(&(new_idx as usize))
+                .copied()
+                .unwrap_or(0.0);
+            ui.set_diff_scroll_y(restore);
+
+            ui.invoke_file_switched(new_idx);
+        });
+    }
+
     // refresh-preview
     {
         let state = state.clone();
@@ -732,6 +762,8 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                             st.draft.clear();
                             st.current_anchor = None;
                             st.pending_range = false;
+                            // snapshot 切替で旧 PR の scroll cache を引きずらない (#230)
+                            st.scroll_positions.clear();
                         }
                         refresh_current_anchor_label(&ui, state);
                         refresh_draft_panel(&ui, state);
@@ -895,7 +927,10 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 let Some(ui) = weak_for_task.upgrade() else { return };
                 apply_snapshot_to_ui(&ui, &snapshot, &linked);
                 with_app_state(|state| {
-                    state.borrow_mut().snapshot = snapshot;
+                    let mut st = state.borrow_mut();
+                    st.snapshot = snapshot;
+                    // snapshot 切替で旧 file index の scroll cache を引きずらない
+                    st.scroll_positions.clear();
                 });
             });
         });
@@ -975,6 +1010,10 @@ fn apply_snapshot_to_ui(
     let model = std::rc::Rc::new(slint::VecModel::from(file_views));
     ui.set_files(slint::ModelRc::from(model));
     ui.set_selected_file_index(0);
+    // snapshot 切替で files が差し替わるため、index-keyed scroll cache を
+    // 引きずらないよう viewport-y をリセットする (#230)。HashMap 自体の
+    // クリアは状態へのアクセスが必要なので呼び出し側 (with_app_state) で行う。
+    ui.set_diff_scroll_y(0.0);
 }
 
 fn build_pr_list_model(
@@ -1351,6 +1390,7 @@ mod tests {
         list_generation: 0,
         toasts: Vec::new(),
         next_toast_id: 0,
+        scroll_positions: std::collections::HashMap::new(),
         }
     }
 
