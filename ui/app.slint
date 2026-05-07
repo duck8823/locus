@@ -28,7 +28,10 @@ export component AppWindow inherits Window {
     // 隠し Text。フォントの実 advance 幅 / 行高を Slint の text shaping
     // 経由で取得する。font-family / font-size を変えると preferred-* も
     // 追従するので reactive に measured-* が更新される。
-    out property <length> measured-cell-w: monospace-probe.preferred-width;
+    //
+    // 単一 "M" だと丸め誤差が advance 幅 1px ぶん振れることがあるので、10 文字
+    // 並べた preferred-width を 10 で割って advance あたりに均す。
+    out property <length> measured-cell-w: monospace-probe.preferred-width / 10;
     out property <length> measured-cell-h: monospace-probe.preferred-height;
 
     callback key-pressed(string);
@@ -42,7 +45,7 @@ export component AppWindow inherits Window {
     forward-focus: focus-area;
 
     monospace-probe := Text {
-        text: "M";
+        text: "MMMMMMMMMM";
         font-family: root.font-family;
         font-size: root.font-size;
         visible: false;
@@ -228,11 +231,12 @@ export component DiffViewerWindow inherits Window {
     callback pr-filter-changed(int);
 
     // 隠し Text。Slint の text shaping で実 advance 幅 / 行高を測定する。
-    out property <length> measured-terminal-cell-w: terminal-monospace-probe.preferred-width;
+    // 単一 "M" だと丸め誤差が出やすいので 10 文字並べて 10 で割る。
+    out property <length> measured-terminal-cell-w: terminal-monospace-probe.preferred-width / 10;
     out property <length> measured-terminal-cell-h: terminal-monospace-probe.preferred-height;
 
     terminal-monospace-probe := Text {
-        text: "M";
+        text: "MMMMMMMMMM";
         font-family: root.font-family;
         font-size: root.terminal-font-size;
         visible: false;

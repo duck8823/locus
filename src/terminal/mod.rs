@@ -34,10 +34,16 @@ pub const INITIAL_ROWS: u16 = 30;
 const MIN_COLS: u16 = 20;
 const MIN_ROWS: u16 = 5;
 
+/// `compute_grid_size` の上限。極小 cell metric や巨大 pane が来た際に
+/// alacritty Term / VecModel が現実離れしたサイズで構築されるのを防ぐ。
+/// 通常端末で 500 cols / 200 rows を超えるユースケースは想定しない。
+const MAX_COLS: u16 = 500;
+const MAX_ROWS: u16 = 200;
+
 /// 与えられた pane サイズと cell metric から (cols, rows) を算出する。
 ///
-/// floor で求めた値を `MIN_COLS` / `MIN_ROWS` 以上 / `u16::MAX` 以下に
-/// 丸める。cell サイズが 0 以下のときは `MIN_COLS` / `MIN_ROWS` を返す
+/// floor で求めた値を `MIN_COLS` / `MIN_ROWS` 以上、`MAX_COLS` / `MAX_ROWS`
+/// 以下に丸める。cell サイズが 0 以下のときは `MIN_COLS` / `MIN_ROWS` を返す
 /// （0 除算を避ける）。
 ///
 /// pane サイズが負や 0 の場合も同様に最小値を返す。
@@ -61,11 +67,9 @@ pub fn compute_grid_size(
         0
     };
     let cols = raw_cols
-        .max(MIN_COLS as i64)
-        .min(u16::MAX as i64) as u16;
+        .clamp(MIN_COLS as i64, MAX_COLS as i64) as u16;
     let rows = raw_rows
-        .max(MIN_ROWS as i64)
-        .min(u16::MAX as i64) as u16;
+        .clamp(MIN_ROWS as i64, MAX_ROWS as i64) as u16;
     (cols, rows)
 }
 
@@ -581,11 +585,11 @@ mod tests {
     }
 
     #[test]
-    fn compute_grid_size_caps_at_u16_max() {
-        // 巨大な pane / 極小 cell → u16::MAX で頭打ち
+    fn compute_grid_size_caps_at_max() {
+        // 巨大な pane / 極小 cell → MAX_COLS / MAX_ROWS で頭打ち
         let (cols, rows) = compute_grid_size(1.0e9, 1.0e9, 1.0, 1.0);
-        assert_eq!(cols, u16::MAX);
-        assert_eq!(rows, u16::MAX);
+        assert_eq!(cols, super::MAX_COLS);
+        assert_eq!(rows, super::MAX_ROWS);
     }
 
     #[test]

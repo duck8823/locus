@@ -86,6 +86,11 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
             };
+            // 初期 layout settling や hidden 中の transient 0x0 では PTY を縮めない。
+            // measured-* も layout 確定前は 0 になるので両条件で skip する。
+            if w_logical <= 0.0 || h_logical <= 0.0 {
+                return;
+            }
             let mut cell_w = ui.get_measured_cell_w();
             let mut cell_h = ui.get_measured_cell_h();
             if cell_w <= 0.0 {
@@ -901,6 +906,11 @@ fn wire_terminal_resize(
         let Some(ui) = ui_weak.upgrade() else {
             return;
         };
+        // 初期 layout settling や hidden 中の transient 0x0 では PTY を縮めない。
+        // measured-* も layout 確定前は 0 になるので両条件で skip する。
+        if w_logical <= 0.0 || h_logical <= 0.0 {
+            return;
+        }
         // 実 glyph metric が未測定 (= 0) の間は従来の比率近似を使う。
         let mut cell_w = ui.get_measured_terminal_cell_w();
         let mut cell_h = ui.get_measured_terminal_cell_h();
