@@ -182,11 +182,15 @@ pub fn parse_pr_spec(spec: &str) -> Option<(String, String, u64)> {
     Some((owner.to_string(), repo.to_string(), pr_number))
 }
 
-/// `GITHUB_TOKEN` / `GH_TOKEN` のどちらかがあれば、それを使って認証済み Octocrab を返す。
+/// 環境変数または `gh auth token` から取得した token を使って認証済み Octocrab を返す。
+///
+/// 優先順位:
+/// 1. `GITHUB_TOKEN`
+/// 2. `GH_TOKEN`
+/// 3. `gh auth token` 出力 (`LOCUS_NO_GH_AUTH=1` で無効化)
+/// 4. unauthenticated (rate limit が厳しい)
 pub fn build_client() -> Result<Arc<Octocrab>, GithubError> {
-    let token = std::env::var("GITHUB_TOKEN")
-        .ok()
-        .or_else(|| std::env::var("GH_TOKEN").ok());
+    let token = resolve_github_token();
     let builder = Octocrab::builder();
     let client = match token {
         Some(t) => builder
@@ -196,6 +200,57 @@ pub fn build_client() -> Result<Arc<Octocrab>, GithubError> {
         None => builder.build().map_err(|e| GithubError::Api(e.to_string()))?,
     };
     Ok(Arc::new(client))
+}
+
+fn resolve_github_token() -> Option<String> {
+    if let Ok(t) = std::env::var("GITHUB_TOKEN")
+        && !t.is_empty()
+    {
+        return Some(t);
+    }
+    if let Ok(t) = std::env::var("GH_TOKEN")
+        && !t.is_empty()
+    {
+        return Some(t);
+    }
+    if gh_auth_disabled() {
+        return None;
+    }
+    gh_auth_token()
+}
+
+/// `LOCUS_NO_GH_AUTH=1`/`true`/`yes` で `gh auth token` フォールバックを禁じる。
+fn gh_auth_disabled() -> bool {
+    parse_no_gh_auth_env(std::env::var("LOCUS_NO_GH_AUTH").ok().as_deref())
+}
+
+/// `LOCUS_NO_GH_AUTH` の値を解釈する。`Some("1"|"true"|"yes"|"on")` (case-insensitive)
+/// なら true。未設定 / 空 / その他は false (= gh auth fallback 有効)。
+fn parse_no_gh_auth_env(value: Option<&str>) -> bool {
+    match value.map(|s| s.trim().to_ascii_lowercase()) {
+        Some(v) => matches!(v.as_str(), "1" | "true" | "yes" | "on"),
+        None => false,
+    }
+}
+
+/// `gh auth token` を spawn してトークンを取得する。失敗時は `None`。
+///
+/// gh CLI が未インストール / 未ログイン / その他いずれの理由でも
+/// unauthenticated にフォールバックさせるため、エラーは握って `None` を返す。
+fn gh_auth_token() -> Option<String> {
+    let output = std::process::Command::new("gh")
+        .args(["auth", "token"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let token = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    if token.is_empty() {
+        None
+    } else {
+        Some(token)
+    }
 }
 
 /// content 取得結果を 3 値で表現する。
@@ -389,6 +444,25 @@ mod tests {
     #[test]
     fn parse_pr_spec_rejects_missing_owner() {
         assert!(parse_pr_spec("/locus#1").is_none());
+    }
+
+    #[test]
+    fn no_gh_auth_default_off() {
+        assert!(!parse_no_gh_auth_env(None));
+        assert!(!parse_no_gh_auth_env(Some("")));
+    }
+
+    #[test]
+    fn no_gh_auth_explicit_on() {
+        for v in ["1", "true", "True", "yes", "ON"] {
+            assert!(parse_no_gh_auth_env(Some(v)));
+        }
+    }
+
+    #[test]
+    fn no_gh_auth_unknown_off() {
+        assert!(!parse_no_gh_auth_env(Some("0")));
+        assert!(!parse_no_gh_auth_env(Some("garbage")));
     }
 
     #[test]
