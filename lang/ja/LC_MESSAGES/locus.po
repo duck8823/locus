@@ -125,3 +125,25 @@ msgstr "エージェントコマンドが見つかりません"
 
 msgid "{}: not found in PATH (set LOCUS_AGENT_CMD)"
 msgstr "{}: PATH に見つかりません (LOCUS_AGENT_CMD を設定してください)"
+
+# Empty state placeholders (#220)
+msgid "(empty draft)"
+msgstr "(下書きは空です)"
+
+msgid "Click a diff line and press \"Add to draft\" to collect anchors here."
+msgstr "差分の行をクリックし「下書きに追加」を押すと、ここに蓄積されます。"
+
+msgid "(no send history yet)"
+msgstr "(送信履歴はまだありません)"
+
+msgid "Each Insert / Insert+Send / Copy will be logged here."
+msgstr "挿入 / 挿入+送信 / コピー の操作はここに記録されます。"
+
+msgid "Tip: Click a diff line, hunk header, or the File button to start selecting."
+msgstr "ヒント: 差分の行 / ハンクヘッダ / ファイル全体ボタン から選択を始められます。"
+
+msgid "Send buttons are disabled. Set LOCUS_AGENT_CMD or install the agent CLI on PATH, then restart locus."
+msgstr "送信ボタンは無効化されています。LOCUS_AGENT_CMD を設定するか PATH 上にエージェント CLI を配置して locus を再起動してください。"
+
+msgid "Click: select line  •  Range button: extend to range  •  File button: whole file  •  Clear button: clear selection"
+msgstr "クリック: 行を選択  •  Range ボタン: 範囲に拡張  •  File ボタン: ファイル全選択  •  Clear ボタン: 選択解除"

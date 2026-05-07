@@ -982,6 +982,7 @@ fn build_pr_list_model(
 
 fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
     let st = state.borrow();
+    let has_selection = st.current_anchor.is_some();
     let label = match &st.current_anchor {
         Some(a) => {
             let base = anchor_label(a);
@@ -994,6 +995,7 @@ fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAp
         None => i18n::tr("(no selection)"),
     };
     ui.set_current_anchor_label(SharedString::from(label));
+    ui.set_has_selection(has_selection);
 }
 
 fn refresh_draft_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {

@@ -183,6 +183,7 @@ export component DiffViewerWindow inherits Window {
     in-out property <int> selected-file-index: 0;
 
     in property <string> current-anchor-label: @tr("(no selection)");
+    in property <bool> has-selection: false;
     in property <[DraftEntryView]> draft-entries;
     in-out property <string> note-input-text;
 
@@ -728,6 +729,13 @@ export component DiffViewerWindow inherits Window {
                                 }
                             }
 
+                            if !root.has-selection: Text {
+                                text: @tr("Tip: Click a diff line, hunk header, or the File button to start selecting.");
+                                color: #8a8a95;
+                                font-size: 10px;
+                                wrap: word-wrap;
+                            }
+
                             HorizontalBox {
                                 spacing: 6px;
                                 note-input := LineEdit {
@@ -808,27 +816,46 @@ export component DiffViewerWindow inherits Window {
                         }
                     }
 
-                    // Terminal status label
+                    // Terminal status — 通常時は薄い 1 行、起動失敗時は赤バナー化して
+                    // ユーザーに env / PATH 設定 (LOCUS_AGENT_CMD) を促す。
                     Rectangle {
-                        height: 22px;
-                        background: #1a1a22;
+                        height: root.terminal-available ? 22px : 48px;
+                        background: root.terminal-available ? #1a1a22 : #3a1010;
+                        border-width: root.terminal-available ? 0 : 1px;
+                        border-color: #c04040;
+
                         HorizontalBox {
                             padding-left: 10px;
                             padding-right: 10px;
+                            padding-top: 4px;
+                            padding-bottom: 4px;
                             alignment: start;
-                            spacing: 6px;
+                            spacing: 8px;
                             Text {
-                                text: @tr("agent:");
-                                color: #8a8a95;
-                                font-size: 10px;
+                                text: root.terminal-available ? @tr("agent:") : "⚠";
+                                color: root.terminal-available ? #8a8a95 : #ffb060;
+                                font-size: root.terminal-available ? 10px : 16px;
                                 vertical-alignment: center;
                             }
-                            Text {
-                                text: root.terminal-status;
-                                color: root.terminal-available ? #8fd98f : #e58585;
-                                font-size: 10px;
-                                font-family: root.font-family;
-                                vertical-alignment: center;
+                            VerticalBox {
+                                horizontal-stretch: 1;
+                                spacing: 0;
+                                padding: 0;
+                                Text {
+                                    text: root.terminal-status;
+                                    color: root.terminal-available ? #8fd98f : #ffd4d4;
+                                    font-size: root.terminal-available ? 10px : 12px;
+                                    font-weight: root.terminal-available ? 400 : 600;
+                                    font-family: root.font-family;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                if !root.terminal-available: Text {
+                                    text: @tr("Send buttons are disabled. Set LOCUS_AGENT_CMD or install the agent CLI on PATH, then restart locus.");
+                                    color: #e0a0a0;
+                                    font-size: 10px;
+                                    overflow: elide;
+                                }
                             }
                         }
                     }
@@ -927,54 +954,75 @@ export component DiffViewerWindow inherits Window {
                         }
                     }
 
-                    ListView {
+                    Rectangle {
                         vertical-stretch: 1;
-                        for entry[idx] in root.draft-entries: Rectangle {
-                            height: 44px;
-                            background: #14141a;
-                            border-width: 1px;
-                            border-color: #1c1c24;
+                        background: #101014;
 
-                            HorizontalBox {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                padding-top: 4px;
-                                padding-bottom: 4px;
-                                spacing: 6px;
+                        if root.draft-entries.length == 0: VerticalBox {
+                            alignment: center;
+                            Text {
+                                text: @tr("(empty draft)");
+                                color: #5a5a6a;
+                                font-size: 11px;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: @tr("Click a diff line and press \"Add to draft\" to collect anchors here.");
+                                color: #5a5a6a;
+                                font-size: 10px;
+                                horizontal-alignment: center;
+                                wrap: word-wrap;
+                            }
+                        }
 
-                                VerticalBox {
-                                    horizontal-stretch: 1;
-                                    spacing: 2px;
-                                    Text {
-                                        text: entry.label;
-                                        color: #d0d0d5;
-                                        font-size: 11px;
-                                        font-family: root.font-family;
-                                        overflow: elide;
-                                    }
-                                    Text {
-                                        text: entry.note;
-                                        color: #8a8a95;
-                                        font-size: 11px;
-                                        overflow: elide;
-                                    }
-                                }
+                        if root.draft-entries.length > 0: ListView {
+                            for entry[idx] in root.draft-entries: Rectangle {
+                                height: 44px;
+                                background: #14141a;
+                                border-width: 1px;
+                                border-color: #1c1c24;
 
-                                delete-btn := TouchArea {
-                                    width: 24px;
-                                    height: 24px;
-                                    clicked => {
-                                        root.remove-draft-entry(idx);
-                                    }
-                                    Rectangle {
-                                        background: delete-btn.has-hover ? #3a1a1a : transparent;
-                                        border-radius: 4px;
+                                HorizontalBox {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    padding-top: 4px;
+                                    padding-bottom: 4px;
+                                    spacing: 6px;
+
+                                    VerticalBox {
+                                        horizontal-stretch: 1;
+                                        spacing: 2px;
                                         Text {
-                                            text: "×";
-                                            color: #e58585;
-                                            font-size: 16px;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
+                                            text: entry.label;
+                                            color: #d0d0d5;
+                                            font-size: 11px;
+                                            font-family: root.font-family;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: entry.note;
+                                            color: #8a8a95;
+                                            font-size: 11px;
+                                            overflow: elide;
+                                        }
+                                    }
+
+                                    delete-btn := TouchArea {
+                                        width: 24px;
+                                        height: 24px;
+                                        clicked => {
+                                            root.remove-draft-entry(idx);
+                                        }
+                                        Rectangle {
+                                            background: delete-btn.has-hover ? #3a1a1a : transparent;
+                                            border-radius: 4px;
+                                            Text {
+                                                text: "×";
+                                                color: #e58585;
+                                                font-size: 16px;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
                                         }
                                     }
                                 }
@@ -1004,7 +1052,24 @@ export component DiffViewerWindow inherits Window {
                         height: 180px;
                         background: #14141a;
 
-                        ListView {
+                        if root.history-entries.length == 0: VerticalBox {
+                            alignment: center;
+                            Text {
+                                text: @tr("(no send history yet)");
+                                color: #5a5a6a;
+                                font-size: 11px;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: @tr("Each Insert / Insert+Send / Copy will be logged here.");
+                                color: #5a5a6a;
+                                font-size: 10px;
+                                horizontal-alignment: center;
+                                wrap: word-wrap;
+                            }
+                        }
+
+                        if root.history-entries.length > 0: ListView {
                             for h in root.history-entries: Rectangle {
                                 height: 44px;
                                 background: #14141a;
@@ -1041,6 +1106,27 @@ export component DiffViewerWindow inherits Window {
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Bottom key hint bar
+        Rectangle {
+            height: 22px;
+            background: #1a1a22;
+            border-width: 1px;
+            border-color: #24242c;
+            HorizontalBox {
+                padding-left: 10px;
+                padding-right: 10px;
+                spacing: 14px;
+                alignment: start;
+                Text {
+                    text: @tr("Click: select line  •  Range button: extend to range  •  File button: whole file  •  Clear button: clear selection");
+                    color: #6a6a75;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                    overflow: elide;
                 }
             }
         }
