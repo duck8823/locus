@@ -25,7 +25,7 @@ pub struct UiConfig {
 impl UiConfig {
     pub fn from_env() -> Self {
         let font_family = std::env::var("LOCUS_FONT_FAMILY")
-            .unwrap_or_else(|_| "Menlo, Consolas, monospace".to_string());
+            .unwrap_or_else(|_| default_font_family().to_string());
         let general = std::env::var("LOCUS_FONT_SIZE")
             .ok()
             .and_then(|s| s.parse::<f32>().ok());
@@ -70,6 +70,28 @@ impl UiConfig {
 
     pub fn terminal_cell_h(&self) -> f32 {
         (self.terminal_font_size * 1.45).round().max(8.0)
+    }
+}
+
+/// OS 別の monospace + CJK fallback font family list。Slint Text の
+/// `font-family` は CSS 風のカンマ区切り fallback を解決するため、
+/// 先頭の monospace に CJK glyph がなくても次の候補に倒れる。
+///
+/// terminal pane と diff viewer は `LOCUS_FONT_FAMILY` で同じリストを共有
+/// する (env 未設定時の既定)。LOCUS_FONT_FAMILY が明示指定されていれば
+/// 全面的に上書きする。
+const fn default_font_family() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "Menlo, Hiragino Sans, Consolas, monospace"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "Consolas, Yu Gothic, monospace"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        "DejaVu Sans Mono, Noto Sans CJK JP, monospace"
     }
 }
 

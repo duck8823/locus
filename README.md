@@ -55,7 +55,7 @@ For GitHub access, locus reads tokens in this order:
 |---|---|---|
 | `LOCUS_LOCALE` | system / `LANG` | `ja` or `en`. Reads `LANG` when unset; falls back to `ja` for unsupported values. |
 | `LOCUS_AGENT_CMD` | `claude` | Command launched in the embedded terminal pane. |
-| `LOCUS_FONT_FAMILY` | `Menlo, Consolas, monospace` | Font family for terminal + diff. |
+| `LOCUS_FONT_FAMILY` | OS-specific (macOS: `Menlo, Hiragino Sans, Consolas, monospace`) | Font family for terminal + diff. The default already includes a CJK fallback so Japanese / Chinese / Korean glyphs render. |
 | `LOCUS_FONT_SIZE` | (unset) | Single override for both terminal and diff font sizes. |
 | `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | Terminal pane font size in logical pixels. |
 | `LOCUS_DIFF_FONT_SIZE` | `12.0` | Diff pane font size in logical pixels. |
