@@ -25,6 +25,15 @@ export component AppWindow inherits Window {
     in property <string> font-family: "Menlo, Consolas, monospace";
     in property <length> font-size: 13px;
 
+    // 隠し Text。フォントの実 advance 幅 / 行高を Slint の text shaping
+    // 経由で取得する。font-family / font-size を変えると preferred-* も
+    // 追従するので reactive に measured-* が更新される。
+    //
+    // 単一 "M" だと丸め誤差が advance 幅 1px ぶん振れることがあるので、10 文字
+    // 並べた preferred-width を 10 で割って advance あたりに均す。
+    out property <length> measured-cell-w: monospace-probe.preferred-width / 10;
+    out property <length> measured-cell-h: monospace-probe.preferred-height;
+
     callback key-pressed(string);
     callback resized(length, length);
 
@@ -35,14 +44,39 @@ export component AppWindow inherits Window {
 
     forward-focus: focus-area;
 
+    monospace-probe := Text {
+        text: "MMMMMMMMMM";
+        font-family: root.font-family;
+        font-size: root.font-size;
+        visible: false;
+        x: -10000px;
+        y: -10000px;
+    }
+
+    // フォントロード遅延で probe の measured-* が後追い更新されたケースの
+    // ためにバックアップ発火する。
+    changed measured-cell-w => {
+        root.resized(terminal-area.width, terminal-area.height);
+    }
+    changed measured-cell-h => {
+        root.resized(terminal-area.width, terminal-area.height);
+    }
+
     focus-area := FocusScope {
         key-pressed(event) => {
             root.key-pressed(event.text);
             accept
         }
 
-        Rectangle {
+        terminal-area := Rectangle {
             background: #0b0b0b;
+
+            changed width => {
+                root.resized(self.width, self.height);
+            }
+            changed height => {
+                root.resized(self.width, self.height);
+            }
 
             // セルグリッドを行ごとに重ねる
             for row[ri] in root.rows: Rectangle {
@@ -191,9 +225,35 @@ export component DiffViewerWindow inherits Window {
     callback send-insert-and-send(string);
     callback send-copy-to-clipboard(string);
     callback terminal-key-pressed(string);
+    callback terminal-resized(length, length);
 
     callback pr-clicked(int);
     callback pr-filter-changed(int);
+
+    // 隠し Text。Slint の text shaping で実 advance 幅 / 行高を測定する。
+    // 単一 "M" だと丸め誤差が出やすいので 10 文字並べて 10 で割る。
+    out property <length> measured-terminal-cell-w: terminal-monospace-probe.preferred-width / 10;
+    out property <length> measured-terminal-cell-h: terminal-monospace-probe.preferred-height;
+
+    terminal-monospace-probe := Text {
+        text: "MMMMMMMMMM";
+        font-family: root.font-family;
+        font-size: root.terminal-font-size;
+        visible: false;
+        x: -10000px;
+        y: -10000px;
+    }
+
+    // measured-* が初期 (=0) → 実測値 に切り替わったタイミングでも cols/rows を
+    // 再計算するため再発火する。terminal-pane の changed width/height が
+    // layout 確定で 1 回だけ呼ばれた後、フォントロード遅延で probe が
+    // 後追いした場合のためのバックアップ。
+    changed measured-terminal-cell-w => {
+        root.terminal-resized(terminal-pane.width, terminal-pane.height);
+    }
+    changed measured-terminal-cell-h => {
+        root.terminal-resized(terminal-pane.width, terminal-pane.height);
+    }
 
     title: @tr("locus — diff viewer");
     preferred-width: 1700px;
@@ -774,12 +834,19 @@ export component DiffViewerWindow inherits Window {
                     }
 
                     // Terminal pane (bottom)
-                    Rectangle {
+                    terminal-pane := Rectangle {
                         height: 258px;
                         background: #0b0b0b;
                         border-width: 1px;
                         border-color: #24242c;
                         clip: true;
+
+                        changed width => {
+                            root.terminal-resized(self.width, self.height);
+                        }
+                        changed height => {
+                            root.terminal-resized(self.width, self.height);
+                        }
 
                         terminal-focus := FocusScope {
                             key-pressed(event) => {

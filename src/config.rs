@@ -35,9 +35,13 @@ impl UiConfig {
         }
     }
 
-    /// monospace の典型的な比率 (advance ≈ 0.6 em, line height ≈ 1.4 em)
-    /// から cell width/height をピクセルに変換する。
-    /// 本物の glyph metric を測る代わりに、十分実用的な近似値。
+    /// monospace の典型的な比率 (advance ≈ 0.6 em, line height ≈ 1.45 em)
+    /// から cell width/height をピクセルに変換する暫定値。
+    ///
+    /// 起動直後の Slint layout が settling していない短時間 (probe Text の
+    /// `preferred-width` / `preferred-height` がまだ 0) に fallback として
+    /// 使われる。実 glyph metric は `terminal-resized` callback 経由で
+    /// `measured-terminal-cell-w` / `measured-terminal-cell-h` から取得する。
     pub fn terminal_cell_w(&self) -> f32 {
         (self.terminal_font_size * 0.6).round().max(4.0)
     }
