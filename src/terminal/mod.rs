@@ -140,6 +140,164 @@ pub fn translate_key(text: &str) -> Vec<u8> {
     }
 }
 
+/// PTY 起動 / Term 構築 / reader thread / row model の作成までをまとめた
+/// 「UI 非依存の terminal 構築結果」。`launch` / `launch_for_diff_viewer`
+/// から共通で組み立てる。
+struct CoreParts {
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    term: Arc<Mutex<Term<EventProxy>>>,
+    processor: Arc<Mutex<Processor<StdSyncHandler>>>,
+    master_pty: Arc<Mutex<Box<dyn MasterPty + Send>>>,
+    byte_rx: Receiver<Vec<u8>>,
+    current_size: Rc<RefCell<(u16, u16)>>,
+    row_model: Rc<VecModel<TerminalRow>>,
+}
+
+/// PTY を spawn し、Term / processor / reader thread / 初期 row model を組み立てる。
+///
+/// `on_child_exit` は子プロセス終了後に走るクロージャ。terminal-only mode は
+/// ここで `slint::quit_event_loop()` を呼ぶが、diff viewer mode は何もしない。
+fn spawn_core(
+    command: &str,
+    on_child_exit: impl FnOnce() + Send + 'static,
+) -> Result<CoreParts, Box<dyn std::error::Error>> {
+    let pty_system = native_pty_system();
+    let pair = pty_system.openpty(PtySize {
+        rows: INITIAL_ROWS,
+        cols: INITIAL_COLS,
+        pixel_width: 0,
+        pixel_height: 0,
+    })?;
+
+    let mut cmd = CommandBuilder::new(command);
+    if let Ok(cwd) = std::env::current_dir() {
+        cmd.cwd(cwd);
+    }
+    cmd.env("TERM", "xterm-256color");
+
+    let mut child = pair.slave.spawn_command(cmd)?;
+    drop(pair.slave);
+
+    thread::spawn(move || {
+        let _ = child.wait();
+        on_child_exit();
+    });
+
+    let master = pair.master;
+    let mut reader = master.try_clone_reader()?;
+    let writer = Arc::new(Mutex::new(master.take_writer()?));
+    let master_pty: Arc<Mutex<Box<dyn MasterPty + Send>>> = Arc::new(Mutex::new(master));
+
+    let size = TermSize {
+        cols: INITIAL_COLS as usize,
+        rows: INITIAL_ROWS as usize,
+    };
+    let term = Arc::new(Mutex::new(Term::new(Config::default(), &size, EventProxy)));
+    let processor = Arc::new(Mutex::new(Processor::<StdSyncHandler>::new()));
+
+    let (byte_tx, byte_rx): (SyncSender<Vec<u8>>, Receiver<Vec<u8>>) = sync_channel(1024);
+    thread::spawn(move || {
+        let mut buf = [0u8; 4096];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if byte_tx.send(buf[..n].to_vec()).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let current_size = Rc::new(RefCell::new((INITIAL_COLS, INITIAL_ROWS)));
+    let row_model = Rc::new(VecModel::<TerminalRow>::default());
+    for _ in 0..INITIAL_ROWS {
+        row_model.push(empty_row(INITIAL_COLS as usize));
+    }
+
+    Ok(CoreParts {
+        writer,
+        term,
+        processor,
+        master_pty,
+        byte_rx,
+        current_size,
+        row_model,
+    })
+}
+
+/// UI から受け取った key text を PTY に流し込むハンドラ。
+fn make_key_handler(writer: Arc<Mutex<Box<dyn Write + Send>>>) -> impl Fn(SharedString) + 'static {
+    move |text: SharedString| {
+        let bytes = translate_key(text.as_str());
+        if bytes.is_empty() {
+            return;
+        }
+        if let Ok(mut w) = writer.lock() {
+            let _ = w.write_all(&bytes);
+            let _ = w.flush();
+        }
+    }
+}
+
+/// 16ms 周期の render timer を組み立てる。
+///
+/// `byte_rx` は所有権で受け取り timer closure に移動する。`update_cursor`
+/// は UI に依存する位置反映 (terminal-only / diff viewer で別の setter)。
+fn start_render_timer(
+    term: Arc<Mutex<Term<EventProxy>>>,
+    processor: Arc<Mutex<Processor<StdSyncHandler>>>,
+    row_model: Rc<VecModel<TerminalRow>>,
+    current_size: Rc<RefCell<(u16, u16)>>,
+    byte_rx: Receiver<Vec<u8>>,
+    update_cursor: impl Fn(i32, i32) + 'static,
+) -> slint::Timer {
+    let timer = slint::Timer::default();
+    timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(16),
+        move || {
+            let mut updated = false;
+            let mut term_guard = term.lock().unwrap();
+            {
+                let mut proc_guard = processor.lock().unwrap();
+                while let Ok(bytes) = byte_rx.try_recv() {
+                    proc_guard.advance(&mut *term_guard, &bytes);
+                    updated = true;
+                }
+            }
+            if !updated {
+                return;
+            }
+            let damage = collect_damaged_lines(&mut *term_guard);
+            let cursor = term_guard.grid().cursor.point;
+            let (cols_now, rows_now) = *current_size.borrow();
+            let total_rows = rows_now as usize;
+            let cols_usize = cols_now as usize;
+            match damage {
+                DamageList::All => {
+                    for r in 0..total_rows {
+                        let row = build_row(&*term_guard, r, cols_usize);
+                        row_model.set_row_data(r, row);
+                    }
+                }
+                DamageList::Some(lines) => {
+                    for r in lines {
+                        if r < total_rows {
+                            let row = build_row(&*term_guard, r, cols_usize);
+                            row_model.set_row_data(r, row);
+                        }
+                    }
+                }
+            }
+            update_cursor(cursor.column.0 as i32, cursor.line.0);
+        },
+    );
+    timer
+}
+
 /// PTY を立てて Slint AppWindow に接続する。
 ///
 /// 戻り値の [`TerminalPane`] は Timer と PTY 所有権をまとめて保持し、
@@ -152,284 +310,85 @@ pub fn launch(
     command: &str,
     bracketed_paste: bool,
 ) -> Result<TerminalPane, Box<dyn std::error::Error>> {
-    let pty_system = native_pty_system();
-    let pair = pty_system.openpty(PtySize {
-        rows: INITIAL_ROWS,
-        cols: INITIAL_COLS,
-        pixel_width: 0,
-        pixel_height: 0,
-    })?;
-
-    let mut cmd = CommandBuilder::new(command);
-    if let Ok(cwd) = std::env::current_dir() {
-        cmd.cwd(cwd);
-    }
-    cmd.env("TERM", "xterm-256color");
-
-    let mut child = pair.slave.spawn_command(cmd)?;
-    drop(pair.slave);
-
-    thread::spawn(move || {
-        let _ = child.wait();
+    let core = spawn_core(command, || {
         let _ = slint::quit_event_loop();
-    });
-
-    let master = pair.master;
-    let mut reader = master.try_clone_reader()?;
-    let writer = Arc::new(Mutex::new(master.take_writer()?));
-    let master_pty: Arc<Mutex<Box<dyn MasterPty + Send>>> = Arc::new(Mutex::new(master));
-
-    let size = TermSize {
-        cols: INITIAL_COLS as usize,
-        rows: INITIAL_ROWS as usize,
-    };
-    let term = Arc::new(Mutex::new(Term::new(Config::default(), &size, EventProxy)));
-
-    let (byte_tx, byte_rx): (SyncSender<Vec<u8>>, Receiver<Vec<u8>>) = sync_channel(1024);
-    thread::spawn(move || {
-        let mut buf = [0u8; 4096];
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    if byte_tx.send(buf[..n].to_vec()).is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    });
+    })?;
 
     ui.set_cols(INITIAL_COLS as i32);
     ui.set_visible_rows(INITIAL_ROWS as i32);
+    ui.set_rows(ModelRc::from(core.row_model.clone()));
 
-    let row_model = Rc::new(VecModel::<TerminalRow>::default());
-    for _ in 0..INITIAL_ROWS {
-        row_model.push(empty_row(INITIAL_COLS as usize));
-    }
-    ui.set_rows(ModelRc::from(row_model.clone()));
+    ui.on_key_pressed(make_key_handler(core.writer.clone()));
 
-    {
-        let writer = writer.clone();
-        ui.on_key_pressed(move |text: SharedString| {
-            let bytes = translate_key(text.as_str());
-            if bytes.is_empty() {
-                return;
-            }
-            if let Ok(mut w) = writer.lock() {
-                let _ = w.write_all(&bytes);
-                let _ = w.flush();
-            }
-        });
-    }
-
-    let processor = Arc::new(Mutex::new(Processor::<StdSyncHandler>::new()));
-    let current_size = Rc::new(RefCell::new((INITIAL_COLS, INITIAL_ROWS)));
-    let term_for_timer = term.clone();
-    let processor_for_timer = processor.clone();
-    let row_model_for_timer = row_model.clone();
-    let current_size_for_timer = current_size.clone();
     let ui_weak = ui.as_weak();
-    let timer = slint::Timer::default();
-    timer.start(
-        slint::TimerMode::Repeated,
-        Duration::from_millis(16),
-        move || {
-            let mut updated = false;
-            let mut term_guard = term_for_timer.lock().unwrap();
-            {
-                let mut proc_guard = processor_for_timer.lock().unwrap();
-                while let Ok(bytes) = byte_rx.try_recv() {
-                    proc_guard.advance(&mut *term_guard, &bytes);
-                    updated = true;
-                }
-            }
-            if !updated {
-                return;
-            }
-            let damage = collect_damaged_lines(&mut *term_guard);
-            let cursor = term_guard.grid().cursor.point;
-            let (cols_now, rows_now) = *current_size_for_timer.borrow();
-            let total_rows = rows_now as usize;
-            let cols_usize = cols_now as usize;
-            match damage {
-                DamageList::All => {
-                    for r in 0..total_rows {
-                        let row = build_row(&*term_guard, r, cols_usize);
-                        row_model_for_timer.set_row_data(r, row);
-                    }
-                }
-                DamageList::Some(lines) => {
-                    for r in lines {
-                        if r < total_rows {
-                            let row = build_row(&*term_guard, r, cols_usize);
-                            row_model_for_timer.set_row_data(r, row);
-                        }
-                    }
-                }
-            }
+    let timer = start_render_timer(
+        core.term.clone(),
+        core.processor.clone(),
+        core.row_model.clone(),
+        core.current_size.clone(),
+        core.byte_rx,
+        move |col, row| {
             if let Some(ui) = ui_weak.upgrade() {
-                ui.set_cursor_col(cursor.column.0 as i32);
-                ui.set_cursor_row(cursor.line.0);
+                ui.set_cursor_col(col);
+                ui.set_cursor_row(row);
             }
         },
     );
 
     Ok(TerminalPane {
         _timer: timer,
-        writer,
-        term,
-        _processor: processor,
-        master_pty,
-        row_model,
-        current_size,
+        writer: core.writer,
+        term: core.term,
+        _processor: core.processor,
+        master_pty: core.master_pty,
+        row_model: core.row_model,
+        current_size: core.current_size,
         bracketed_paste,
     })
 }
 
 /// Diff viewer モード用に Terminal ペインを起動する。
 ///
-/// [`launch`] との差分は接続先 Slint コンポーネントだけで、PTY / Term /
-/// Timer の組み立ては同じ。将来的に共通化する候補。
+/// [`launch`] と Core 部 (PTY / Term / Timer) は共通で、Slint コンポーネント
+/// 固有の binding (terminal-* prefix のプロパティと on_terminal_key_pressed)
+/// だけがここに残る。子プロセス終了時も UI は閉じない (PTY だけ死ぬのが
+/// 想定)。
 pub fn launch_for_diff_viewer(
     ui: &crate::DiffViewerWindow,
     command: &str,
     bracketed_paste: bool,
 ) -> Result<TerminalPane, Box<dyn std::error::Error>> {
-    let pty_system = native_pty_system();
-    let pair = pty_system.openpty(PtySize {
-        rows: INITIAL_ROWS,
-        cols: INITIAL_COLS,
-        pixel_width: 0,
-        pixel_height: 0,
-    })?;
-
-    let mut cmd = CommandBuilder::new(command);
-    if let Ok(cwd) = std::env::current_dir() {
-        cmd.cwd(cwd);
-    }
-    cmd.env("TERM", "xterm-256color");
-
-    let mut child = pair.slave.spawn_command(cmd)?;
-    drop(pair.slave);
-
-    thread::spawn(move || {
-        let _ = child.wait();
-        // diff viewer モードでは子プロセスが落ちても UI は閉じない（PTY だけ
-        // 死ぬのが想定される）。
-    });
-
-    let master = pair.master;
-    let mut reader = master.try_clone_reader()?;
-    let writer = Arc::new(Mutex::new(master.take_writer()?));
-    let master_pty: Arc<Mutex<Box<dyn MasterPty + Send>>> = Arc::new(Mutex::new(master));
-
-    let size = TermSize {
-        cols: INITIAL_COLS as usize,
-        rows: INITIAL_ROWS as usize,
-    };
-    let term = Arc::new(Mutex::new(Term::new(Config::default(), &size, EventProxy)));
-
-    let (byte_tx, byte_rx): (SyncSender<Vec<u8>>, Receiver<Vec<u8>>) = sync_channel(1024);
-    thread::spawn(move || {
-        let mut buf = [0u8; 4096];
-        loop {
-            match reader.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    if byte_tx.send(buf[..n].to_vec()).is_err() {
-                        break;
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-    });
+    let core = spawn_core(command, || {})?;
 
     ui.set_terminal_cols(INITIAL_COLS as i32);
     ui.set_terminal_rows_count(INITIAL_ROWS as i32);
+    ui.set_terminal_rows(ModelRc::from(core.row_model.clone()));
 
-    let row_model = Rc::new(VecModel::<TerminalRow>::default());
-    for _ in 0..INITIAL_ROWS {
-        row_model.push(empty_row(INITIAL_COLS as usize));
-    }
-    ui.set_terminal_rows(ModelRc::from(row_model.clone()));
+    ui.on_terminal_key_pressed(make_key_handler(core.writer.clone()));
 
-    {
-        let writer = writer.clone();
-        ui.on_terminal_key_pressed(move |text: SharedString| {
-            let bytes = translate_key(text.as_str());
-            if bytes.is_empty() {
-                return;
-            }
-            if let Ok(mut w) = writer.lock() {
-                let _ = w.write_all(&bytes);
-                let _ = w.flush();
-            }
-        });
-    }
-
-    let processor = Arc::new(Mutex::new(Processor::<StdSyncHandler>::new()));
-    let current_size = Rc::new(RefCell::new((INITIAL_COLS, INITIAL_ROWS)));
-    let term_for_timer = term.clone();
-    let processor_for_timer = processor.clone();
-    let row_model_for_timer = row_model.clone();
-    let current_size_for_timer = current_size.clone();
     let ui_weak = ui.as_weak();
-    let timer = slint::Timer::default();
-    timer.start(
-        slint::TimerMode::Repeated,
-        Duration::from_millis(16),
-        move || {
-            let mut updated = false;
-            let mut term_guard = term_for_timer.lock().unwrap();
-            {
-                let mut proc_guard = processor_for_timer.lock().unwrap();
-                while let Ok(bytes) = byte_rx.try_recv() {
-                    proc_guard.advance(&mut *term_guard, &bytes);
-                    updated = true;
-                }
-            }
-            if !updated {
-                return;
-            }
-            let damage = collect_damaged_lines(&mut *term_guard);
-            let cursor = term_guard.grid().cursor.point;
-            let (cols_now, rows_now) = *current_size_for_timer.borrow();
-            let total_rows = rows_now as usize;
-            let cols_usize = cols_now as usize;
-            match damage {
-                DamageList::All => {
-                    for r in 0..total_rows {
-                        let row = build_row(&*term_guard, r, cols_usize);
-                        row_model_for_timer.set_row_data(r, row);
-                    }
-                }
-                DamageList::Some(lines) => {
-                    for r in lines {
-                        if r < total_rows {
-                            let row = build_row(&*term_guard, r, cols_usize);
-                            row_model_for_timer.set_row_data(r, row);
-                        }
-                    }
-                }
-            }
+    let timer = start_render_timer(
+        core.term.clone(),
+        core.processor.clone(),
+        core.row_model.clone(),
+        core.current_size.clone(),
+        core.byte_rx,
+        move |col, row| {
             if let Some(ui) = ui_weak.upgrade() {
-                ui.set_terminal_cursor_col(cursor.column.0 as i32);
-                ui.set_terminal_cursor_row(cursor.line.0);
+                ui.set_terminal_cursor_col(col);
+                ui.set_terminal_cursor_row(row);
             }
         },
     );
 
     Ok(TerminalPane {
         _timer: timer,
-        writer,
-        term,
-        _processor: processor,
-        master_pty,
-        row_model,
-        current_size,
+        writer: core.writer,
+        term: core.term,
+        _processor: core.processor,
+        master_pty: core.master_pty,
+        row_model: core.row_model,
+        current_size: core.current_size,
         bracketed_paste,
     })
 }
