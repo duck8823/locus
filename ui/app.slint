@@ -287,6 +287,11 @@ export component DiffViewerWindow inherits Window {
     title: @tr("locus — diff viewer");
     preferred-width: 1700px;
     preferred-height: 960px;
+    // 240(PR list) + 240(file list) + 540(diff) + 320(draft/history) = 1340 が
+    // 横方向の最小機能幅。ヘッダー圧縮を避けるため min-width を 1280px と
+    // やや厳しめに、min-height を 720px に設定する。
+    min-width: 1280px;
+    min-height: 720px;
     background: #101014;
 
     // 起動時にグローバル keybinding 用 FocusScope に焦点を渡しておく。
