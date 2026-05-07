@@ -261,6 +261,11 @@ export component DiffViewerWindow inherits Window {
     preferred-height: 960px;
     background: #101014;
 
+    // 起動時にグローバル keybinding 用 FocusScope に焦点を渡しておく。
+    // LineEdit / terminal-focus にフォーカスが移ったときはそちらが先に
+    // キーを消費する。
+    forward-focus: global-focus;
+
     // Toast overlay: 右下に積み上げ表示
     toast-overlay := Rectangle {
         x: parent.width - 360px;
@@ -328,11 +333,44 @@ export component DiffViewerWindow inherits Window {
         }
     }
 
-    VerticalBox {
-        spacing: 0px;
-        padding: 0px;
+    // v0.0.2 最小 keybinding (#241):
+    // - Esc: 選択解除
+    // - Cmd/Ctrl+Enter: Insert+Send
+    // - Cmd/Ctrl+C: Copy
+    // 中の LineEdit / terminal-focus にフォーカスがあるときは消費されないため
+    // global ショートカットには反応しない (LineEdit 内 Cmd+C は OS 標準の
+    // text copy 動作)。
+    global-focus := FocusScope {
+        key-pressed(event) => {
+            // note-input (LineEdit) からの bubble を握りつぶさない。
+            // LineEdit は Esc / Cmd+Enter / Cmd+C を accept しないので
+            // ここまで来てしまうため、focus 状態でガードする。terminal-focus は
+            // 独自 FocusScope 内で accept するためこのスコープに届かない。
+            if (note-input.has-focus) {
+                return reject;
+            }
+            if (event.text == Key.Escape) {
+                root.clear-current-selection();
+                return accept;
+            }
+            if (event.text == Key.Return
+                && (event.modifiers.meta || event.modifiers.control)) {
+                root.send-insert-and-send(root.preview-text);
+                return accept;
+            }
+            if (event.text == "c"
+                && (event.modifiers.meta || event.modifiers.control)) {
+                root.send-copy-to-clipboard(root.preview-text);
+                return accept;
+            }
+            reject
+        }
 
-        // Header with PR context card (title + base/head + body excerpt + linked issues)
+        VerticalBox {
+            spacing: 0px;
+            padding: 0px;
+
+            // Header with PR context card (title + base/head + body excerpt + linked issues)
         Rectangle {
             height: (root.pr-body-excerpt != "" || root.linked-issues.length > 0) ? 150px : 52px;
             background: #1a1a22;
@@ -1122,13 +1160,14 @@ export component DiffViewerWindow inherits Window {
                 spacing: 14px;
                 alignment: start;
                 Text {
-                    text: @tr("Click: select line  •  Range button: extend to range  •  File button: whole file  •  Clear button: clear selection");
+                    text: @tr("Click: select line  •  Range button: extend to range  •  File button: whole file  •  Esc: clear selection  •  ⌘↵: Insert+Send  •  ⌘C: Copy");
                     color: #6a6a75;
                     font-size: 10px;
                     vertical-alignment: center;
                     overflow: elide;
                 }
             }
+        }
         }
     }
 }
