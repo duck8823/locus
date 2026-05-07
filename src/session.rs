@@ -61,7 +61,23 @@ pub fn load() -> Option<SessionState> {
 }
 
 /// セッションを書き出す。失敗時は warn ログのみで panic しない。
+///
+/// ライブリサイズ中の連続呼び出しでも実 I/O は最小限に抑えるため、
+/// 直前に書いた SessionState と同じなら早期 return する (in-process cache)。
+/// プロセス再起動の境界では cache が空なので必ず最初の 1 回は書く。
 pub fn save(state: &SessionState) {
+    use std::sync::Mutex;
+
+    static LAST_SAVED: Mutex<Option<SessionState>> = Mutex::new(None);
+
+    if let Ok(guard) = LAST_SAVED.lock()
+        && let Some(prev) = guard.as_ref()
+        && prev.window_width == state.window_width
+        && prev.window_height == state.window_height
+    {
+        return;
+    }
+
     let Some(path) = session_path() else {
         tracing::warn!("could not resolve session.json path");
         return;
@@ -81,6 +97,10 @@ pub fn save(state: &SessionState) {
     };
     if let Err(e) = std::fs::write(&path, json) {
         tracing::warn!(path = %path.display(), error = %e, "failed to write session.json");
+        return;
+    }
+    if let Ok(mut guard) = LAST_SAVED.lock() {
+        *guard = Some(state.clone());
     }
 }
 

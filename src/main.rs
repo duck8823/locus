@@ -321,7 +321,14 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     // 起動を「ネットワーク待ち」にしないため、最初に空の DiffViewerWindow を
     // 作って表示し、PR snapshot / PR list / linked issues は非同期 hydrate
     // する。GitHub クライアントの初期化失敗のみ即時エラーで abort。
-    let client_arc = build_client()?;
+    //
+    // octocrab::Octocrab::builder().build() は内部で tower buffer service を
+    // spawn するため、tokio runtime context 内で呼ぶ必要がある。enter() の
+    // guard を持っている間だけが runtime context として認識される。
+    let client_arc = {
+        let _guard = runtime_handle.enter();
+        build_client()?
+    };
 
     let placeholder_snapshot = PullRequestSnapshot {
         target: review::target::ReviewTarget::GitHubPr {
@@ -947,19 +954,17 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // セッション保存 (#231): close 要求時に現在の window size を session.json に
-    // 書き出す。失敗しても close を阻害しない (CloseRequestResponse::HideWindow)。
+    // セッション保存 (#231):
+    // - close 要求時 (X ボタン / 通常 close)
+    // - terminal-resized callback 経由 (ウィンドウリサイズで間接的に発火)
+    // の 2 経路で書き出す。Cmd+Q は Slint の on_close_requested を通らずに
+    // process exit するため、resize 経由の保存が "ほぼリアルタイムの最新値"
+    // を持っていればその時点の window size が次回起動で復元される。
     {
         let ui_weak = ui.as_weak();
         ui.window().on_close_requested(move || {
             if let Some(ui) = ui_weak.upgrade() {
-                let physical = ui.window().size();
-                let scale = ui.window().scale_factor().max(f32::EPSILON);
-                let state = session::SessionState {
-                    window_width: Some(physical.width as f32 / scale),
-                    window_height: Some(physical.height as f32 / scale),
-                };
-                session::save(&state);
+                save_window_session(&ui);
             }
             slint::CloseRequestResponse::HideWindow
         });
@@ -1018,7 +1023,23 @@ fn wire_terminal_resize(
                 tracing::warn!(%cols, %rows, error = %e, "terminal resize failed");
             }
         }
+        // ウィンドウリサイズに連れて terminal-pane の width/height も変わる
+        // ため、ここで session を保存しておくと Cmd+Q (close-requested を
+        // 通らず process exit) でも最後の window size を残せる (#231 補強)。
+        save_window_session(&ui);
     });
+}
+
+/// 現在のウィンドウサイズを logical px にして session.json へ書き出す。
+/// 失敗時は session::save 内部で warn ログのみ。
+fn save_window_session(ui: &DiffViewerWindow) {
+    let physical = ui.window().size();
+    let scale = ui.window().scale_factor().max(f32::EPSILON);
+    let state = session::SessionState {
+        window_width: Some(physical.width as f32 / scale),
+        window_height: Some(physical.height as f32 / scale),
+    };
+    session::save(&state);
 }
 
 fn apply_snapshot_to_ui(
