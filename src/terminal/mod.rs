@@ -144,7 +144,14 @@ pub fn translate_key(text: &str) -> Vec<u8> {
 ///
 /// 戻り値の [`TerminalPane`] は Timer と PTY 所有権をまとめて保持し、
 /// イベントループが回っている間 drop されないようにする。
-pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std::error::Error>> {
+///
+/// `bracketed_paste` は paste テキストを `\x1b[200~` / `\x1b[201~` で
+/// 囲うかどうか。非対応 shell では false にする。
+pub fn launch(
+    ui: &AppWindow,
+    command: &str,
+    bracketed_paste: bool,
+) -> Result<TerminalPane, Box<dyn std::error::Error>> {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
         rows: INITIAL_ROWS,
@@ -277,6 +284,7 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
         master_pty,
         row_model,
         current_size,
+        bracketed_paste,
     })
 }
 
@@ -287,6 +295,7 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
 pub fn launch_for_diff_viewer(
     ui: &crate::DiffViewerWindow,
     command: &str,
+    bracketed_paste: bool,
 ) -> Result<TerminalPane, Box<dyn std::error::Error>> {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
@@ -421,6 +430,7 @@ pub fn launch_for_diff_viewer(
         master_pty,
         row_model,
         current_size,
+        bracketed_paste,
     })
 }
 
@@ -436,6 +446,7 @@ pub struct TerminalPane {
     master_pty: Arc<Mutex<Box<dyn MasterPty + Send>>>,
     row_model: Rc<VecModel<TerminalRow>>,
     current_size: Rc<RefCell<(u16, u16)>>,
+    bracketed_paste: bool,
 }
 
 impl TerminalPane {
@@ -444,18 +455,17 @@ impl TerminalPane {
     /// multiline / control-char 入りの prompt を受け取るため、以下を行う:
     /// 1. 制御文字（NUL / ESC / BEL / CR 等）をスペースに置き換えてサニタイズ
     ///    する（改行 LF だけは保存する）
-    /// 2. bracketed paste mode (ESC[200~...ESC[201~) で本文を挟み、受け手の
-    ///    shell / agent CLI が paste として扱えるようにする（行ごとに
-    ///    submit される事故を防ぐ）
+    /// 2. bracketed paste mode が有効なら本文を `\x1b[200~` / `\x1b[201~` で
+    ///    挟み、受け手の shell / agent CLI が paste として扱えるようにする
+    ///    （行ごとに submit される事故を防ぐ）。非対応 shell では sequence が
+    ///    そのまま表示されるため `LOCUS_BRACKETED_PASTE=false` で raw 送信に
+    ///    切り替えられる。
     pub fn insert(&self, text: &str) {
         if text.is_empty() {
             return;
         }
         let sanitized = sanitize_for_pty(text);
-        let mut bytes: Vec<u8> = Vec::with_capacity(sanitized.len() + 16);
-        bytes.extend_from_slice(b"\x1b[200~");
-        bytes.extend_from_slice(sanitized.as_bytes());
-        bytes.extend_from_slice(b"\x1b[201~");
+        let bytes = encode_paste_bytes(&sanitized, self.bracketed_paste);
         if let Ok(mut w) = self.writer.lock() {
             let _ = w.write_all(&bytes);
             let _ = w.flush();
@@ -528,6 +538,22 @@ impl TerminalPane {
     }
 }
 
+/// `sanitized` を PTY 送信用バイト列に変換する。
+///
+/// `bracketed_paste=true` のとき DEC paste の境界 sequence で囲み、
+/// 非対応の shell では何も囲まずそのまま raw 送信する。
+fn encode_paste_bytes(sanitized: &str, bracketed_paste: bool) -> Vec<u8> {
+    if bracketed_paste {
+        let mut bytes = Vec::with_capacity(sanitized.len() + 16);
+        bytes.extend_from_slice(b"\x1b[200~");
+        bytes.extend_from_slice(sanitized.as_bytes());
+        bytes.extend_from_slice(b"\x1b[201~");
+        bytes
+    } else {
+        sanitized.as_bytes().to_vec()
+    }
+}
+
 /// PTY に流す前に制御文字を無害化する。
 ///
 /// - NUL / BEL / ESC / BS / VT / FF / CR / Ctrl-C 等はスペースに置換
@@ -548,7 +574,10 @@ fn sanitize_for_pty(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_grid_size, sanitize_for_pty, translate_key, MIN_COLS, MIN_ROWS};
+    use super::{
+        compute_grid_size, encode_paste_bytes, sanitize_for_pty, translate_key, MIN_COLS,
+        MIN_ROWS,
+    };
 
     #[test]
     fn compute_grid_size_floors_pane_div_cell() {
@@ -590,6 +619,25 @@ mod tests {
         let (cols, rows) = compute_grid_size(1.0e9, 1.0e9, 1.0, 1.0);
         assert_eq!(cols, super::MAX_COLS);
         assert_eq!(rows, super::MAX_ROWS);
+    }
+
+    #[test]
+    fn encode_paste_bytes_wraps_when_bracketed() {
+        let bytes = encode_paste_bytes("hello", true);
+        let head: &[u8] = b"\x1b[200~";
+        let tail: &[u8] = b"\x1b[201~";
+        assert!(bytes.starts_with(head));
+        assert!(bytes.ends_with(tail));
+        // 本文部分が末尾 tail を除き sanitized と一致
+        let body = &bytes[head.len()..bytes.len() - tail.len()];
+        assert_eq!(body, b"hello");
+    }
+
+    #[test]
+    fn encode_paste_bytes_raw_when_disabled() {
+        let bytes = encode_paste_bytes("hello", false);
+        assert_eq!(bytes, b"hello".to_vec());
+        assert!(!bytes.windows(2).any(|w| w == b"\x1b["));
     }
 
     #[test]
