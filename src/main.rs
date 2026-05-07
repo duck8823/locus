@@ -1638,12 +1638,15 @@ mod tests {
     }
 
     fn add_current_to_draft(state: &mut DiffAppState, note: Option<&str>) -> bool {
+        // run_diff_viewer の on_add_to_draft と同じ trim / empty→None 変換を踏襲する。
         let Some(anchor) = state.current_anchor.clone() else {
             return false;
         };
-        state
-            .draft
-            .push(DraftEntry::new(anchor, note.map(str::to_string)));
+        let note_opt = note
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        state.draft.push(DraftEntry::new(anchor, note_opt));
         true
     }
 
@@ -1703,14 +1706,42 @@ mod tests {
     fn flow_format_prompt_includes_added_snippet() {
         let mut st = make_state();
         click_line(&mut st, 0, 2, Side::After);
-        assert!(add_current_to_draft(&mut st, Some("comment on B")));
+        // note に snippet 同名 token を入れない (assert を tautology にしないため)
+        assert!(add_current_to_draft(&mut st, Some("inspecting after side")));
         let files = fixture_files(&st);
         let preview = format_prompt(&st.draft, &files);
         // anchor label と note が preview に含まれていること
         assert!(preview.contains("a.rs"), "preview lacks file path: {preview}");
-        assert!(preview.contains("comment on B"), "preview lacks note: {preview}");
-        // After 側 line 2 (= "B") の本文が snippet に出ていること
-        assert!(preview.contains("B"), "preview lacks after-line content: {preview}");
+        assert!(
+            preview.contains("inspecting after side"),
+            "preview lacks note: {preview}"
+        );
+        // After 側 line 2 (= "B") の本文が snippet に出ていること。
+        // note には "B" が無いので、コードフェンス内の "B" が assertion を保証する。
+        assert!(
+            preview.contains("\nB"),
+            "preview lacks after-line content: {preview}"
+        );
+        assert!(
+            !preview.contains("\na\n") || preview.contains("\nB"),
+            "preview should include after content (B), not only before (a/b): {preview}"
+        );
+    }
+
+    #[test]
+    fn flow_add_to_draft_trims_note_and_empty_becomes_none() {
+        let mut st = make_state();
+        click_line(&mut st, 0, 1, Side::After);
+        assert!(add_current_to_draft(&mut st, Some("   ")));
+        assert_eq!(st.draft.entries()[0].note, None);
+
+        click_line(&mut st, 0, 2, Side::After);
+        assert!(add_current_to_draft(&mut st, Some("  hello  ")));
+        assert_eq!(
+            st.draft.entries()[1].note.as_deref(),
+            Some("hello"),
+            "note should be trimmed of surrounding whitespace"
+        );
     }
 
     #[test]
