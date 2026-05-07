@@ -173,6 +173,9 @@ struct DiffAppState {
     /// 表示中のトースト。new -> bottom 順 (UI 側 index で逆順表示)。
     toasts: Vec<ToastEntry>,
     next_toast_id: i32,
+    /// ファイル切替時に viewport-y を保存する HashMap (#230)。
+    /// key は selected-file-index、value は logical px。
+    scroll_positions: std::collections::HashMap<usize, f32>,
 }
 
 #[derive(Debug, Clone)]
@@ -361,6 +364,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         list_generation: 0,
         toasts: Vec::new(),
         next_toast_id: 0,
+        scroll_positions: std::collections::HashMap::new(),
     }));
     DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state.clone()));
     ACTIVE_DIFF_WINDOW.with(|cell| *cell.borrow_mut() = Some(ui.as_weak()));
@@ -590,6 +594,32 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             let Some(ui) = ui_weak.upgrade() else { return };
             state.borrow_mut().cancel_range_on_file_switch();
             refresh_current_anchor_label(&ui, &state);
+        });
+    }
+
+    // file-switch-requested (#230): file row click から呼ばれる。
+    // 現在の diff-scroll-y を 旧 file index で保存し、selected-file-index を
+    // 切り替えた後に新 index に対する保存値を復元する。
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        ui.on_file_switch_requested(move |new_idx| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let old_idx = ui.get_selected_file_index() as usize;
+            let cur_scroll = ui.get_diff_scroll_y();
+            state.borrow_mut().scroll_positions.insert(old_idx, cur_scroll);
+
+            ui.set_selected_file_index(new_idx);
+
+            let restore = state
+                .borrow()
+                .scroll_positions
+                .get(&(new_idx as usize))
+                .copied()
+                .unwrap_or(0.0);
+            ui.set_diff_scroll_y(restore);
+
+            ui.invoke_file_switched(new_idx);
         });
     }
 
@@ -1351,6 +1381,7 @@ mod tests {
         list_generation: 0,
         toasts: Vec::new(),
         next_toast_id: 0,
+        scroll_positions: std::collections::HashMap::new(),
         }
     }
 
