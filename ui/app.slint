@@ -342,6 +342,13 @@ export component DiffViewerWindow inherits Window {
     // text copy 動作)。
     global-focus := FocusScope {
         key-pressed(event) => {
+            // note-input (LineEdit) からの bubble を握りつぶさない。
+            // LineEdit は Esc / Cmd+Enter / Cmd+C を accept しないので
+            // ここまで来てしまうため、focus 状態でガードする。terminal-focus は
+            // 独自 FocusScope 内で accept するためこのスコープに届かない。
+            if (note-input.has-focus) {
+                return reject;
+            }
             if (event.text == Key.Escape) {
                 root.clear-current-selection();
                 return accept;
