@@ -26,24 +26,24 @@ pub struct SessionState {
 }
 
 /// `directories` crate で OS 固有の config 領域を解決する。
-/// macOS: `~/Library/Application Support/locus/`
-/// Linux: `$XDG_CONFIG_HOME/locus/` または `~/.config/locus/`
-/// Windows: `%APPDATA%\locus\config\`
+///
+/// reverse-DNS な subfolder を避けるため `qualifier` / `organization` を
+/// 空にして `application = "locus"` だけ渡す。実際の解決先:
+/// - macOS: `~/Library/Application Support/locus/session.json`
+/// - Linux: `$XDG_CONFIG_HOME/locus/session.json` (default `~/.config/locus/`)
+/// - Windows: `%APPDATA%\locus\config\session.json`
 pub fn session_path() -> Option<PathBuf> {
-    let dirs = ProjectDirs::from("dev", "locus", "locus")?;
+    let dirs = ProjectDirs::from("", "", "locus")?;
     Some(dirs.config_dir().join("session.json"))
 }
 
 /// セッションを読み込む。
 ///
 /// 戻り値の意味:
-/// - `Some(SessionState)`: 読み込み成功 (ファイル不在は `None`)
-/// - `None`: ファイル不在 / 読み込み or parse 失敗 (warn ログを出す)
+/// - `Some(SessionState)`: 読み込み成功
+/// - `None`: ファイル不在 / 読み込み or parse 失敗 (NotFound 以外は warn ログ)
 pub fn load() -> Option<SessionState> {
     let path = session_path()?;
-    if !path.exists() {
-        return None;
-    }
     match std::fs::read_to_string(&path) {
         Ok(s) => match serde_json::from_str::<SessionState>(&s) {
             Ok(state) => Some(state),
@@ -52,6 +52,7 @@ pub fn load() -> Option<SessionState> {
                 None
             }
         },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => {
             tracing::warn!(path = %path.display(), error = %e, "failed to read session.json");
             None
