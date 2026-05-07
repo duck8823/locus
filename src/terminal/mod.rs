@@ -1,12 +1,12 @@
 //! Terminal ペインの組み立て。
 //!
 //! `alacritty_terminal` の `Term` + `portable-pty` の子プロセスを Slint の
-//! `AppWindow` に接続する。既存挙動を壊さず `src/main.rs` からの一行呼び出しに
-//! まとめることだけを目的にしている。
+//! `AppWindow` に接続する。
 //!
-//! 注: v0.1 では Terminal ペインの COLS / ROWS を固定。リサイズ追従は後続
-//! Issue で扱う。
+//! 起動時の初期 grid サイズは `INITIAL_COLS` / `INITIAL_ROWS` だが、
+//! [`TerminalPane::resize`] でウィンドウリサイズや font 変更に追従する。
 
+use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::rc::Rc;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
@@ -18,14 +18,56 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::{Config, Term, TermDamage};
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui_state::{build_row, empty_row};
 use crate::{AppWindow, TerminalRow};
 
-const COLS: u16 = 100;
-const ROWS: u16 = 30;
+/// 起動時の初期グリッドサイズ。Slint の layout が走り `terminal-resized`
+/// callback が発火するまでの間だけ使われる暫定値。
+pub const INITIAL_COLS: u16 = 100;
+pub const INITIAL_ROWS: u16 = 30;
+
+/// `TerminalPane::resize` で受理する最小値。あまりに小さいと
+/// alacritty_terminal が panic するため。
+const MIN_COLS: u16 = 20;
+const MIN_ROWS: u16 = 5;
+
+/// 与えられた pane サイズと cell metric から (cols, rows) を算出する。
+///
+/// floor で求めた値を `MIN_COLS` / `MIN_ROWS` 以上 / `u16::MAX` 以下に
+/// 丸める。cell サイズが 0 以下のときは `MIN_COLS` / `MIN_ROWS` を返す
+/// （0 除算を避ける）。
+///
+/// pane サイズが負や 0 の場合も同様に最小値を返す。
+pub fn compute_grid_size(
+    pane_w: f32,
+    pane_h: f32,
+    cell_w: f32,
+    cell_h: f32,
+) -> (u16, u16) {
+    if cell_w <= 0.0 || cell_h <= 0.0 {
+        return (MIN_COLS, MIN_ROWS);
+    }
+    let raw_cols = if pane_w > 0.0 {
+        (pane_w / cell_w).floor() as i64
+    } else {
+        0
+    };
+    let raw_rows = if pane_h > 0.0 {
+        (pane_h / cell_h).floor() as i64
+    } else {
+        0
+    };
+    let cols = raw_cols
+        .max(MIN_COLS as i64)
+        .min(u16::MAX as i64) as u16;
+    let rows = raw_rows
+        .max(MIN_ROWS as i64)
+        .min(u16::MAX as i64) as u16;
+    (cols, rows)
+}
 
 /// alacritty_terminal に渡すイベントリスナ。PoC 以来何もしていない。
 #[derive(Clone, Default)]
@@ -101,8 +143,8 @@ pub fn translate_key(text: &str) -> Vec<u8> {
 pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std::error::Error>> {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
-        rows: ROWS,
-        cols: COLS,
+        rows: INITIAL_ROWS,
+        cols: INITIAL_COLS,
         pixel_width: 0,
         pixel_height: 0,
     })?;
@@ -121,12 +163,14 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
         let _ = slint::quit_event_loop();
     });
 
-    let mut reader = pair.master.try_clone_reader()?;
-    let writer = Arc::new(Mutex::new(pair.master.take_writer()?));
+    let master = pair.master;
+    let mut reader = master.try_clone_reader()?;
+    let writer = Arc::new(Mutex::new(master.take_writer()?));
+    let master_pty: Arc<Mutex<Box<dyn MasterPty + Send>>> = Arc::new(Mutex::new(master));
 
     let size = TermSize {
-        cols: COLS as usize,
-        rows: ROWS as usize,
+        cols: INITIAL_COLS as usize,
+        rows: INITIAL_ROWS as usize,
     };
     let term = Arc::new(Mutex::new(Term::new(Config::default(), &size, EventProxy)));
 
@@ -146,12 +190,12 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
         }
     });
 
-    ui.set_cols(COLS as i32);
-    ui.set_visible_rows(ROWS as i32);
+    ui.set_cols(INITIAL_COLS as i32);
+    ui.set_visible_rows(INITIAL_ROWS as i32);
 
     let row_model = Rc::new(VecModel::<TerminalRow>::default());
-    for _ in 0..ROWS {
-        row_model.push(empty_row(COLS as usize));
+    for _ in 0..INITIAL_ROWS {
+        row_model.push(empty_row(INITIAL_COLS as usize));
     }
     ui.set_rows(ModelRc::from(row_model.clone()));
 
@@ -170,9 +214,11 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
     }
 
     let processor = Arc::new(Mutex::new(Processor::<StdSyncHandler>::new()));
+    let current_size = Rc::new(RefCell::new((INITIAL_COLS, INITIAL_ROWS)));
     let term_for_timer = term.clone();
     let processor_for_timer = processor.clone();
     let row_model_for_timer = row_model.clone();
+    let current_size_for_timer = current_size.clone();
     let ui_weak = ui.as_weak();
     let timer = slint::Timer::default();
     timer.start(
@@ -193,18 +239,20 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
             }
             let damage = collect_damaged_lines(&mut *term_guard);
             let cursor = term_guard.grid().cursor.point;
-            let total_rows = ROWS as usize;
+            let (cols_now, rows_now) = *current_size_for_timer.borrow();
+            let total_rows = rows_now as usize;
+            let cols_usize = cols_now as usize;
             match damage {
                 DamageList::All => {
                     for r in 0..total_rows {
-                        let row = build_row(&*term_guard, r, COLS as usize);
+                        let row = build_row(&*term_guard, r, cols_usize);
                         row_model_for_timer.set_row_data(r, row);
                     }
                 }
                 DamageList::Some(lines) => {
                     for r in lines {
                         if r < total_rows {
-                            let row = build_row(&*term_guard, r, COLS as usize);
+                            let row = build_row(&*term_guard, r, cols_usize);
                             row_model_for_timer.set_row_data(r, row);
                         }
                     }
@@ -220,8 +268,11 @@ pub fn launch(ui: &AppWindow, command: &str) -> Result<TerminalPane, Box<dyn std
     Ok(TerminalPane {
         _timer: timer,
         writer,
-        _term: term,
+        term,
         _processor: processor,
+        master_pty,
+        row_model,
+        current_size,
     })
 }
 
@@ -235,8 +286,8 @@ pub fn launch_for_diff_viewer(
 ) -> Result<TerminalPane, Box<dyn std::error::Error>> {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize {
-        rows: ROWS,
-        cols: COLS,
+        rows: INITIAL_ROWS,
+        cols: INITIAL_COLS,
         pixel_width: 0,
         pixel_height: 0,
     })?;
@@ -256,12 +307,14 @@ pub fn launch_for_diff_viewer(
         // 死ぬのが想定される）。
     });
 
-    let mut reader = pair.master.try_clone_reader()?;
-    let writer = Arc::new(Mutex::new(pair.master.take_writer()?));
+    let master = pair.master;
+    let mut reader = master.try_clone_reader()?;
+    let writer = Arc::new(Mutex::new(master.take_writer()?));
+    let master_pty: Arc<Mutex<Box<dyn MasterPty + Send>>> = Arc::new(Mutex::new(master));
 
     let size = TermSize {
-        cols: COLS as usize,
-        rows: ROWS as usize,
+        cols: INITIAL_COLS as usize,
+        rows: INITIAL_ROWS as usize,
     };
     let term = Arc::new(Mutex::new(Term::new(Config::default(), &size, EventProxy)));
 
@@ -281,12 +334,12 @@ pub fn launch_for_diff_viewer(
         }
     });
 
-    ui.set_terminal_cols(COLS as i32);
-    ui.set_terminal_rows_count(ROWS as i32);
+    ui.set_terminal_cols(INITIAL_COLS as i32);
+    ui.set_terminal_rows_count(INITIAL_ROWS as i32);
 
     let row_model = Rc::new(VecModel::<TerminalRow>::default());
-    for _ in 0..ROWS {
-        row_model.push(empty_row(COLS as usize));
+    for _ in 0..INITIAL_ROWS {
+        row_model.push(empty_row(INITIAL_COLS as usize));
     }
     ui.set_terminal_rows(ModelRc::from(row_model.clone()));
 
@@ -305,9 +358,11 @@ pub fn launch_for_diff_viewer(
     }
 
     let processor = Arc::new(Mutex::new(Processor::<StdSyncHandler>::new()));
+    let current_size = Rc::new(RefCell::new((INITIAL_COLS, INITIAL_ROWS)));
     let term_for_timer = term.clone();
     let processor_for_timer = processor.clone();
     let row_model_for_timer = row_model.clone();
+    let current_size_for_timer = current_size.clone();
     let ui_weak = ui.as_weak();
     let timer = slint::Timer::default();
     timer.start(
@@ -328,18 +383,20 @@ pub fn launch_for_diff_viewer(
             }
             let damage = collect_damaged_lines(&mut *term_guard);
             let cursor = term_guard.grid().cursor.point;
-            let total_rows = ROWS as usize;
+            let (cols_now, rows_now) = *current_size_for_timer.borrow();
+            let total_rows = rows_now as usize;
+            let cols_usize = cols_now as usize;
             match damage {
                 DamageList::All => {
                     for r in 0..total_rows {
-                        let row = build_row(&*term_guard, r, COLS as usize);
+                        let row = build_row(&*term_guard, r, cols_usize);
                         row_model_for_timer.set_row_data(r, row);
                     }
                 }
                 DamageList::Some(lines) => {
                     for r in lines {
                         if r < total_rows {
-                            let row = build_row(&*term_guard, r, COLS as usize);
+                            let row = build_row(&*term_guard, r, cols_usize);
                             row_model_for_timer.set_row_data(r, row);
                         }
                     }
@@ -355,20 +412,26 @@ pub fn launch_for_diff_viewer(
     Ok(TerminalPane {
         _timer: timer,
         writer,
-        _term: term,
+        term,
         _processor: processor,
+        master_pty,
+        row_model,
+        current_size,
     })
 }
 
 /// Terminal ペインを活きた状態に保つためのオーナーシップ束。
 ///
-/// 所有者が drop されると Timer と PTY writer / Term も落ちる。呼び出し側は
-/// イベントループが終わるまでこの値を保持する責任がある。
+/// 所有者が drop されると Timer と PTY writer / Term / master も落ちる。
+/// 呼び出し側はイベントループが終わるまでこの値を保持する責任がある。
 pub struct TerminalPane {
     _timer: slint::Timer,
     writer: Arc<Mutex<Box<dyn Write + Send>>>,
-    _term: Arc<Mutex<Term<EventProxy>>>,
+    term: Arc<Mutex<Term<EventProxy>>>,
     _processor: Arc<Mutex<Processor<StdSyncHandler>>>,
+    master_pty: Arc<Mutex<Box<dyn MasterPty + Send>>>,
+    row_model: Rc<VecModel<TerminalRow>>,
+    current_size: Rc<RefCell<(u16, u16)>>,
 }
 
 impl TerminalPane {
@@ -404,6 +467,61 @@ impl TerminalPane {
             let _ = w.flush();
         }
     }
+
+    /// 現在の (cols, rows)。Slint UI の表示行数同期に使う。
+    pub fn current_size(&self) -> (u16, u16) {
+        *self.current_size.borrow()
+    }
+
+    /// PTY / alacritty Term / Slint row model を新しい (cols, rows) に
+    /// 合わせて再構築する。サイズが変わらなければ no-op。
+    ///
+    /// PTY 側は SIGWINCH を子プロセスに送るため、bash や agent CLI は
+    /// 自動で折り返し位置を更新する。
+    pub fn resize(&self, cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
+        let cols = cols.max(MIN_COLS);
+        let rows = rows.max(MIN_ROWS);
+
+        {
+            let current = self.current_size.borrow();
+            if current.0 == cols && current.1 == rows {
+                return Ok(());
+            }
+        }
+
+        // PTY: ioctl(TIOCSWINSZ) を子プロセスに飛ばす。
+        self.master_pty.lock().unwrap().resize(PtySize {
+            cols,
+            rows,
+            pixel_width: 0,
+            pixel_height: 0,
+        })?;
+
+        // alacritty Term: グリッドを内部で再アロケート。
+        let mut term = self.term.lock().unwrap();
+        term.resize(TermSize {
+            cols: cols as usize,
+            rows: rows as usize,
+        });
+
+        // Slint VecModel: 行数を合わせ、全行を再描画。
+        let total = rows as usize;
+        let cols_usize = cols as usize;
+        while self.row_model.row_count() > total {
+            self.row_model.remove(self.row_model.row_count() - 1);
+        }
+        while self.row_model.row_count() < total {
+            self.row_model.push(empty_row(cols_usize));
+        }
+        for r in 0..total {
+            let row = build_row(&*term, r, cols_usize);
+            self.row_model.set_row_data(r, row);
+        }
+
+        *self.current_size.borrow_mut() = (cols, rows);
+
+        Ok(())
+    }
 }
 
 /// PTY に流す前に制御文字を無害化する。
@@ -426,7 +544,49 @@ fn sanitize_for_pty(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{sanitize_for_pty, translate_key};
+    use super::{compute_grid_size, sanitize_for_pty, translate_key, MIN_COLS, MIN_ROWS};
+
+    #[test]
+    fn compute_grid_size_floors_pane_div_cell() {
+        // 800px / 8px = 100 cols, 200px / 16px = 12.5 → 12 rows
+        let (cols, rows) = compute_grid_size(800.0, 200.0, 8.0, 16.0);
+        assert_eq!(cols, 100);
+        assert_eq!(rows, 12);
+    }
+
+    #[test]
+    fn compute_grid_size_clamps_below_minimum() {
+        // 50px / 8px = 6 → MIN_COLS, 30px / 16px = 1 → MIN_ROWS
+        let (cols, rows) = compute_grid_size(50.0, 30.0, 8.0, 16.0);
+        assert_eq!(cols, MIN_COLS);
+        assert_eq!(rows, MIN_ROWS);
+    }
+
+    #[test]
+    fn compute_grid_size_returns_minimum_for_zero_or_negative_inputs() {
+        let (cols, rows) = compute_grid_size(0.0, 0.0, 8.0, 16.0);
+        assert_eq!((cols, rows), (MIN_COLS, MIN_ROWS));
+        let (cols, rows) = compute_grid_size(-100.0, -100.0, 8.0, 16.0);
+        assert_eq!((cols, rows), (MIN_COLS, MIN_ROWS));
+    }
+
+    #[test]
+    fn compute_grid_size_returns_minimum_when_cell_size_invalid() {
+        let (cols, rows) = compute_grid_size(800.0, 200.0, 0.0, 16.0);
+        assert_eq!((cols, rows), (MIN_COLS, MIN_ROWS));
+        let (cols, rows) = compute_grid_size(800.0, 200.0, 8.0, 0.0);
+        assert_eq!((cols, rows), (MIN_COLS, MIN_ROWS));
+        let (cols, rows) = compute_grid_size(800.0, 200.0, -1.0, 16.0);
+        assert_eq!((cols, rows), (MIN_COLS, MIN_ROWS));
+    }
+
+    #[test]
+    fn compute_grid_size_caps_at_u16_max() {
+        // 巨大な pane / 極小 cell → u16::MAX で頭打ち
+        let (cols, rows) = compute_grid_size(1.0e9, 1.0e9, 1.0, 1.0);
+        assert_eq!(cols, u16::MAX);
+        assert_eq!(rows, u16::MAX);
+    }
 
     #[test]
     fn sanitize_preserves_newlines_and_tabs() {
