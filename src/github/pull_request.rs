@@ -237,19 +237,53 @@ fn parse_no_gh_auth_env(value: Option<&str>) -> bool {
 ///
 /// gh CLI が未インストール / 未ログイン / その他いずれの理由でも
 /// unauthenticated にフォールバックさせるため、エラーは握って `None` を返す。
+///
+/// - `--hostname github.com` を固定指定して GH_HOST / Enterprise 設定の
+///   影響を排除する (Octocrab は default で github.com に接続するため)。
+/// - `GH_AUTH_TIMEOUT` (秒) を超えても gh が返らない場合は諦めて `None`。
+///   Credential helper が固まったときに build_client が永遠にブロックする
+///   のを防ぐ。既定 3 秒。
 fn gh_auth_token() -> Option<String> {
-    let output = std::process::Command::new("gh")
-        .args(["auth", "token"])
-        .output()
+    use std::io::Read;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let timeout_secs = std::env::var("GH_AUTH_TIMEOUT")
+        .ok()
+        .and_then(|s| s.trim().parse::<u64>().ok())
+        .unwrap_or(3);
+
+    let mut child = std::process::Command::new("gh")
+        .args(["auth", "token", "--hostname", "github.com"])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
         .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let token = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    if token.is_empty() {
-        None
-    } else {
-        Some(token)
+
+    let mut stdout = child.stdout.take()?;
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = stdout.read_to_string(&mut buf);
+        let _ = tx.send(buf);
+    });
+
+    match rx.recv_timeout(Duration::from_secs(timeout_secs)) {
+        Ok(buf) => {
+            let status = child.wait().ok()?;
+            if !status.success() {
+                return None;
+            }
+            let token = buf.trim().to_string();
+            if token.is_empty() { None } else { Some(token) }
+        }
+        Err(_) => {
+            // タイムアウトした場合は子プロセスを kill して諦める。
+            let _ = child.kill();
+            let _ = child.wait();
+            None
+        }
     }
 }
 
