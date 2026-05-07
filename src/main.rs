@@ -762,6 +762,8 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                             st.draft.clear();
                             st.current_anchor = None;
                             st.pending_range = false;
+                            // snapshot 切替で旧 PR の scroll cache を引きずらない (#230)
+                            st.scroll_positions.clear();
                         }
                         refresh_current_anchor_label(&ui, state);
                         refresh_draft_panel(&ui, state);
@@ -925,7 +927,10 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 let Some(ui) = weak_for_task.upgrade() else { return };
                 apply_snapshot_to_ui(&ui, &snapshot, &linked);
                 with_app_state(|state| {
-                    state.borrow_mut().snapshot = snapshot;
+                    let mut st = state.borrow_mut();
+                    st.snapshot = snapshot;
+                    // snapshot 切替で旧 file index の scroll cache を引きずらない
+                    st.scroll_positions.clear();
                 });
             });
         });
@@ -1005,6 +1010,10 @@ fn apply_snapshot_to_ui(
     let model = std::rc::Rc::new(slint::VecModel::from(file_views));
     ui.set_files(slint::ModelRc::from(model));
     ui.set_selected_file_index(0);
+    // snapshot 切替で files が差し替わるため、index-keyed scroll cache を
+    // 引きずらないよう viewport-y をリセットする (#230)。HashMap 自体の
+    // クリアは状態へのアクセスが必要なので呼び出し側 (with_app_state) で行う。
+    ui.set_diff_scroll_y(0.0);
 }
 
 fn build_pr_list_model(
