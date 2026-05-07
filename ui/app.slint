@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, ListView, ScrollView, LineEdit, Button } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, ListView, ScrollView, LineEdit, Button, CheckBox } from "std-widgets.slint";
 
 // ===== Terminal pane モード (既存) =====
 
@@ -188,6 +188,12 @@ export component DiffViewerWindow inherits Window {
     in-out property <string> note-input-text;
 
     in-out property <string> preview-text;
+    in property <int> preview-max-chars: 32000;
+    in-out property <bool> preview-override: false;
+    // preview-text の文字数 (code-point ベース)。Slint 側で自動再計算するので
+    // Rust から set する必要はなく、TextInput でユーザーが編集した場合も
+    // 即時反映される。
+    out property <int> preview-length: root.preview-text.character-count;
     in property <[HistoryEntryView]> history-entries;
 
     in property <[TerminalRow]> terminal-rows;
@@ -812,6 +818,13 @@ export component DiffViewerWindow inherits Window {
                                     font-size: 11px;
                                     vertical-alignment: center;
                                 }
+                                Text {
+                                    text: root.preview-length + " / " + root.preview-max-chars;
+                                    color: root.preview-length > root.preview-max-chars ? #e58585 : #5a5a6a;
+                                    font-size: 10px;
+                                    font-family: root.font-family;
+                                    vertical-alignment: center;
+                                }
                                 Rectangle { horizontal-stretch: 1; }
                                 Button {
                                     text: @tr("Refresh");
@@ -819,17 +832,46 @@ export component DiffViewerWindow inherits Window {
                                 }
                                 Button {
                                     text: @tr("Insert");
-                                    enabled: root.terminal-available;
+                                    enabled: root.terminal-available
+                                        && (root.preview-length <= root.preview-max-chars
+                                            || root.preview-override);
                                     clicked => { root.send-insert-only(root.preview-text); }
                                 }
                                 Button {
                                     text: @tr("Insert+Send");
-                                    enabled: root.terminal-available;
+                                    enabled: root.terminal-available
+                                        && (root.preview-length <= root.preview-max-chars
+                                            || root.preview-override);
                                     clicked => { root.send-insert-and-send(root.preview-text); }
                                 }
                                 Button {
                                     text: @tr("Copy");
+                                    enabled: root.preview-length <= root.preview-max-chars
+                                        || root.preview-override;
                                     clicked => { root.send-copy-to-clipboard(root.preview-text); }
+                                }
+                            }
+
+                            // Over-limit warning + override checkbox (#226)
+                            if root.preview-length > root.preview-max-chars: HorizontalBox {
+                                spacing: 8px;
+                                alignment: start;
+                                Text {
+                                    text: "⚠";
+                                    color: #ffb060;
+                                    font-size: 14px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: @tr("Preview exceeds the limit. Send buttons are disabled.");
+                                    color: #e58585;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                                CheckBox {
+                                    text: @tr("Send anyway (override)");
+                                    checked <=> root.preview-override;
                                 }
                             }
 
