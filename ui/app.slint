@@ -400,12 +400,16 @@ export component DiffViewerWindow inherits Window {
                     font-size: 14px;
                     font-weight: 600;
                     overflow: elide;
+                    wrap: no-wrap;
+                    horizontal-alignment: left;
                 }
                 Text {
                     text: @tr("base") + " " + root.base-sha + "  ←  " + @tr("head") + " " + root.head-sha;
                     color: #8a8a95;
                     font-size: 11px;
                     font-family: root.font-family;
+                    overflow: elide;
+                    wrap: no-wrap;
                 }
                 if root.pr-body-excerpt != "": Text {
                     text: root.pr-body-excerpt;
@@ -426,6 +430,9 @@ export component DiffViewerWindow inherits Window {
                             vertical-alignment: top;
                         }
                         for issue in root.linked-issues: Rectangle {
+                            // 1 つの linked-issue chip が長文 title で本体レイアウトを
+                            // 押し潰さないよう最大幅を固定し、内側の Text は elide。
+                            max-width: 360px;
                             background: issue.state == "error"
                                 ? #2a1010
                                 : (issue.state == "closed" ? #2a1a2a : #1a2a1a);
@@ -457,6 +464,7 @@ export component DiffViewerWindow inherits Window {
                                         color: #d0d0d5;
                                         font-size: 10px;
                                         overflow: elide;
+                                        wrap: no-wrap;
                                     }
                                 }
                                 if issue.body_excerpt != "": Text {
