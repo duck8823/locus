@@ -73,25 +73,29 @@ impl UiConfig {
     }
 }
 
-/// OS 別の monospace + CJK fallback font family list。Slint Text の
-/// `font-family` は CSS 風のカンマ区切り fallback を解決するため、
-/// 先頭の monospace に CJK glyph がなくても次の候補に倒れる。
+/// OS 別の monospace + CJK + symbol fallback font family list。
 ///
-/// terminal pane と diff viewer は `LOCUS_FONT_FAMILY` で同じリストを共有
-/// する (env 未設定時の既定)。LOCUS_FONT_FAMILY が明示指定されていれば
-/// 全面的に上書きする。
+/// Slint Text の `font-family` は cosmic-text 経由でカンマ区切りの
+/// fallback list を解決するため、先頭の monospace に glyph がない CJK や
+/// symbol (例: U+21AF zigzag arrow) も後続の候補で描画される。
+///
+/// 構成:
+/// - 1 番目: ASCII / Latin の monospace (Menlo / Consolas)
+/// - 2 番目: CJK glyph 持ち (Hiragino Sans / Yu Gothic / Noto Sans CJK JP)
+/// - 3 番目以降: symbol / arrow glyph 補強 (Apple Symbols 等)
+/// - 末尾: monospace fallback
 const fn default_font_family() -> &'static str {
     #[cfg(target_os = "macos")]
     {
-        "Menlo, Hiragino Sans, Consolas, monospace"
+        "Menlo, Hiragino Sans, Apple Symbols, Consolas, monospace"
     }
     #[cfg(target_os = "windows")]
     {
-        "Consolas, Yu Gothic, monospace"
+        "Consolas, Yu Gothic, Segoe UI Symbol, monospace"
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        "DejaVu Sans Mono, Noto Sans CJK JP, monospace"
+        "DejaVu Sans Mono, Noto Sans CJK JP, Noto Sans Symbols 2, monospace"
     }
 }
 
