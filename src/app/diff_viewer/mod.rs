@@ -8,5 +8,6 @@ pub(crate) mod snapshot;
 pub(crate) mod refresh;
 pub(crate) mod session;
 pub(crate) mod state;
+pub(crate) mod terminal_resize;
 pub(crate) mod toast;
 pub(crate) mod util;
