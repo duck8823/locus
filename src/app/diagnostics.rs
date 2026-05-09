@@ -39,7 +39,7 @@ fn schedule_diagnostic_file_switch(ui: &DiffViewerWindow, delay: Duration, attem
             from = current,
             to = next,
             files = count,
-            "diagnostic file switch requested"
+            "diagnostic file switch triggered"
         );
         ui.invoke_file_switch_requested(next);
     });
