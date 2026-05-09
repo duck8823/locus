@@ -98,6 +98,41 @@ Locus **does not call LLMs itself**. Instead, it hosts a Terminal pane (built on
 - **`tree-sitter-go`** (first target language) — semantic diff
 - **`octocrab`** — GitHub PR snapshots
 
+## Diagnostics for LLM
+
+`scripts/diagnose_ui.sh` is a self-contained harness for an LLM (or anyone) to launch locus on a real desktop, capture logs, and verify visual / perf state without sitting in front of the screen for every iteration. It builds with `cargo build`, launches `target/debug/locus` with `LOCUS_LOG=debug` and the terminal cell debug grid forced on, sleeps for `--duration` seconds (default `8`), best-effort focuses the launched process with `osascript`, takes a `screencapture` screenshot when available, and terminates the launched PID gracefully (TERM → KILL) without touching unrelated processes.
+
+```sh
+# terminal-only mode with sh as the inner agent CLI
+scripts/diagnose_ui.sh terminal --duration 6
+
+# diff viewer mode against an existing PR
+scripts/diagnose_ui.sh github duck8823/locus#236 --duration 10
+
+# tweak terminal grid metrics / fonts (passes through as env overrides)
+scripts/diagnose_ui.sh terminal \
+  --cell-w 8 --cell-h 18 \
+  --terminal-font-size 14 \
+  --font-family "SF Mono, Menlo, monospace"
+
+# reuse a previous build (skip cargo build)
+scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/run-A
+```
+
+Every run drops these files into `--out-dir` (default `target/locus-diagnostics/<timestamp>/`):
+
+| File | Contents |
+|---|---|
+| `app.log` | stdout/stderr from `target/debug/locus` (no build noise mixed in) |
+| `build.log` | `cargo build` output (omitted with `--no-build`) |
+| `command.txt` | resolved argv and the exact env vars injected into the child |
+| `env.txt` | snapshot of the script's own environment |
+| `perf_summary.txt` | grep counts and matched lines for `preview refreshed` / `terminal resized` / `pr session saved` / `linked issues fetched` / `initial hydrate ...`, plus a tail of WARN/ERROR/panic lines |
+| `screenshot.png` | desktop screenshot taken mid-run (only when `screencapture` is available and succeeds) |
+| `report.json` | mode, command, env overrides, duration, exit status, screenshot/focus status, artifact paths, tool availability, free-form notes |
+
+When `cargo build` fails, the binary is missing, or locus exits before the harness terminates it, the script still writes `report.json` and exits non-zero (propagating the child's exit status when available) so an LLM caller can read the failure mode programmatically instead of inferring it from missing files. A clean run (locus is still alive after `--duration` and shuts down on TERM) exits 0.
+
 ## What's in this repo right now
 
 - `Cargo.toml` / `src/` / `ui/` / `build.rs` — Rust + Slint binary
