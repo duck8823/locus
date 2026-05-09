@@ -98,6 +98,7 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
         terminal_font_size = ui_cfg.terminal_font_size,
         terminal_cell_w = ui_cfg.terminal_cell_w(),
         terminal_cell_h = ui_cfg.terminal_cell_h(),
+        terminal_probe_metrics = ui_cfg.terminal_probe_metrics,
         terminal_debug_grid = ui_cfg.terminal_debug_grid,
         "terminal typography configured"
     );
@@ -107,6 +108,7 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
         let ui_weak = ui.as_weak();
         let ui_cfg = ui_cfg.clone();
         ui.on_resized(move |w_logical: f32, h_logical: f32| {
+            let started = Instant::now();
             let Some(ui) = ui_weak.upgrade() else {
                 return;
             };
@@ -115,8 +117,12 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
             if w_logical <= 0.0 || h_logical <= 0.0 {
                 return;
             }
-            let cell_w = ui_cfg.terminal_cell_w_from_measurement(ui.get_measured_cell_w());
-            let cell_h = ui_cfg.terminal_cell_h_from_measurement(ui.get_measured_cell_h());
+            let measured_cell_w = ui.get_measured_cell_w();
+            let measured_cell_h = ui.get_measured_cell_h();
+            let cell_w = ui_cfg.terminal_cell_w_from_measurement(measured_cell_w);
+            let cell_h = ui_cfg.terminal_cell_h_from_measurement(measured_cell_h);
+            let cell_w_source = ui_cfg.terminal_cell_w_source(measured_cell_w);
+            let cell_h_source = ui_cfg.terminal_cell_h_source(measured_cell_h);
             ui.set_cell_w(cell_w);
             ui.set_cell_h(cell_h);
             let (cols, rows) = terminal::compute_grid_size(w_logical, h_logical, cell_w, cell_h);
@@ -125,6 +131,18 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
                     let (cols_now, rows_now) = pane.current_size();
                     ui.set_cols(cols_now as i32);
                     ui.set_visible_rows(rows_now as i32);
+                    tracing::debug!(
+                        pane_w = w_logical,
+                        pane_h = h_logical,
+                        cell_w,
+                        cell_h,
+                        cell_w_source,
+                        cell_h_source,
+                        cols = cols_now,
+                        rows = rows_now,
+                        elapsed_ms = started.elapsed().as_millis() as u64,
+                        "terminal resized"
+                    );
                 }
                 Err(e) => {
                     tracing::warn!(%cols, %rows, error = %e, "terminal resize failed");
@@ -188,6 +206,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         terminal_font_size = ui_cfg.terminal_font_size,
         terminal_cell_w = ui_cfg.terminal_cell_w(),
         terminal_cell_h = ui_cfg.terminal_cell_h(),
+        terminal_probe_metrics = ui_cfg.terminal_probe_metrics,
         terminal_debug_grid = ui_cfg.terminal_debug_grid,
         "diff viewer typography configured"
     );
@@ -953,16 +972,17 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
 /// から `terminal-resized(width, height)` を発火する。ここでは:
 ///
 /// 1. UI から `measured-terminal-cell-w` / `measured-terminal-cell-h` を読み、
-///    cell-w / cell-h プロパティに反映する（render と PTY の grid を一致させる）。
+///    `UiConfig` の優先順位 (override > opt-in probe > fallback) で cell metric を
+///    解決して cell-w / cell-h プロパティに反映する。
 /// 2. (pane size / cell size) を floor して新しい cols / rows を算出する。
 /// 3. `TerminalPane::resize` で PTY + alacritty Term + row model を再構成する。
 fn wire_terminal_resize(
     ui: &DiffViewerWindow,
     pane: Rc<terminal::TerminalPane>,
-    fallback: &config::UiConfig,
+    ui_cfg: &config::UiConfig,
 ) {
     let ui_weak = ui.as_weak();
-    let fallback = fallback.clone();
+    let ui_cfg = ui_cfg.clone();
     ui.on_terminal_resized(move |w_logical: f32, h_logical: f32| {
         let started = Instant::now();
         let Some(ui) = ui_weak.upgrade() else {
@@ -973,11 +993,17 @@ fn wire_terminal_resize(
         if w_logical <= 0.0 || h_logical <= 0.0 {
             return;
         }
-        // 実 glyph metric が未測定 (= 0) の間は従来の比率近似を使う。
-        // `LOCUS_TERMINAL_CELL_W/H` が指定されている場合は、実測値より
-        // 手動 override を優先して grid と glyph のズレを切り分けられる。
-        let cell_w = fallback.terminal_cell_w_from_measurement(ui.get_measured_terminal_cell_w());
-        let cell_h = fallback.terminal_cell_h_from_measurement(ui.get_measured_terminal_cell_h());
+        // 既定では Slint 隠し Text probe (`measured-terminal-cell-w/h`) を信用せず
+        // 比率 fallback (`font_size * 0.6` / `* 1.45`) を採用する。macOS で probe が
+        // SF Mono / Menlo の advance を過大・行高を過小に返し grid と glyph がズレる
+        // #292 / #289 の再現を回避するため。`LOCUS_TERMINAL_CELL_W/H` の手動 override
+        // が最優先、`LOCUS_TERMINAL_PROBE_METRICS=true` で opt-in 時のみ probe 採用。
+        let measured_cell_w = ui.get_measured_terminal_cell_w();
+        let measured_cell_h = ui.get_measured_terminal_cell_h();
+        let cell_w = ui_cfg.terminal_cell_w_from_measurement(measured_cell_w);
+        let cell_h = ui_cfg.terminal_cell_h_from_measurement(measured_cell_h);
+        let cell_w_source = ui_cfg.terminal_cell_w_source(measured_cell_w);
+        let cell_h_source = ui_cfg.terminal_cell_h_source(measured_cell_h);
         ui.set_terminal_cell_w(cell_w);
         ui.set_terminal_cell_h(cell_h);
         let (cols, rows) = terminal::compute_grid_size(w_logical, h_logical, cell_w, cell_h);
@@ -991,6 +1017,8 @@ fn wire_terminal_resize(
                     pane_h = h_logical,
                     cell_w,
                     cell_h,
+                    cell_w_source,
+                    cell_h_source,
                     cols = cols_now,
                     rows = rows_now,
                     elapsed_ms = started.elapsed().as_millis() as u64,
