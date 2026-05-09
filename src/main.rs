@@ -37,17 +37,18 @@ mod session;
 mod terminal;
 mod ui_state;
 
-use app::diff_viewer::state::{DiffAppState, HistoryEntry, ToastKind};
-use app::diff_viewer::util::{
-    current_hhmmss, excerpt, resolve_line_number, send_mode_label, short_sha,
+use app::diff_viewer::snapshot::{
+    apply_snapshot_to_ui, build_pr_list_model, LinkedIssueDisplay,
 };
+use app::diff_viewer::state::{DiffAppState, HistoryEntry, ToastKind};
+use app::diff_viewer::util::{current_hhmmss, resolve_line_number, send_mode_label};
 
 use github::issue_context::{
-    extract_linked_issue_numbers, fetch_issue_context_async, IssueContextRecord, IssueState,
+    extract_linked_issue_numbers, fetch_issue_context_async,
 };
 use github::pull_request::{
     build_client, fetch_pr_snapshot, fetch_pull_requests, parse_pr_spec, PrListFilter,
-    PrListState, PullRequestSnapshot, PullRequestSummary,
+    PullRequestSnapshot,
 };
 use review::draft::{DraftEntry, PromptDraft, SendMode};
 use review::formatter::{format_prompt, FileSourceEntry};
@@ -55,7 +56,6 @@ use review::formatter::{format_prompt, FileSourceEntry};
 use review::selection::Side;
 use review::selection::{Granularity, SelectionAnchor};
 use review::snapshot::FileId;
-use ui_state::diff_view::build_diff_file_views;
 use ui_state::draft_view::{anchor_label, build_draft_entry_views, side_from_line_kind};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -992,53 +992,6 @@ fn save_pr_session(owner: &str, repo: &str, state: &DiffAppState, ui: &DiffViewe
     });
 }
 
-fn apply_snapshot_to_ui(
-    ui: &DiffViewerWindow,
-    snapshot: &PullRequestSnapshot,
-    linked_issues: &[LinkedIssueDisplay],
-) {
-    ui.set_pr_title(SharedString::from(snapshot.title.as_str()));
-    ui.set_head_sha(SharedString::from(short_sha(&snapshot.head_sha)));
-    ui.set_base_sha(SharedString::from(short_sha(&snapshot.base_sha)));
-    ui.set_pr_body_excerpt(SharedString::from(excerpt(
-        snapshot.body.as_deref().unwrap_or(""),
-        180,
-    )));
-    ui.set_linked_issues(build_issue_context_model(linked_issues));
-
-    let file_views = build_diff_file_views(&snapshot.files);
-    let model = std::rc::Rc::new(slint::VecModel::from(file_views));
-    ui.set_files(slint::ModelRc::from(model));
-    ui.set_selected_file_index(0);
-    // snapshot 切替で files が差し替わるため、index-keyed scroll cache を
-    // 引きずらないよう viewport-y をリセットする (#230)。HashMap 自体の
-    // クリアは状態へのアクセスが必要なので呼び出し側 (with_app_state) で行う。
-    ui.set_diff_scroll_y(0.0);
-}
-
-fn build_pr_list_model(
-    summaries: &[PullRequestSummary],
-) -> slint::ModelRc<PullRequestListItemView> {
-    let model = slint::VecModel::<PullRequestListItemView>::default();
-    for s in summaries {
-        let state_label = match s.state {
-            PrListState::Open => "open",
-            PrListState::Closed => "closed",
-        };
-        model.push(PullRequestListItemView {
-            number: s.number as i32,
-            number_label: SharedString::from(format!("#{}", s.number)),
-            title: SharedString::from(s.title.as_str()),
-            author: SharedString::from(s.author.as_str()),
-            updated_excerpt: SharedString::from(s.updated_at.as_str()),
-            state: SharedString::from(state_label),
-        });
-    }
-    slint::ModelRc::from(
-        std::rc::Rc::new(model)
-            as std::rc::Rc<dyn slint::Model<Data = PullRequestListItemView>>,
-    )
-}
 
 fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
     let st = state.borrow();
@@ -1179,13 +1132,6 @@ fn append_history(state: &Rc<RefCell<DiffAppState>>, mode: SendMode, body: &str)
 }
 
 
-enum LinkedIssueDisplay {
-    Found(IssueContextRecord),
-    /// 取得失敗。404 と PR が返ったケースは静かに隠すため LinkedIssueDisplay
-    /// に乗せない。本バリアントは認証エラー / rate limit / 5xx 等の non-2xx。
-    Failed { number: u64, message: String },
-}
-
 /// linked issue 番号一覧を受け取り、各 issue を tokio::spawn 系で並列 fetch
 /// する。`octocrab::Octocrab` は内部で reqwest クライアントを共有しているので
 /// 数件の concurrent 呼び出しは安全。
@@ -1255,41 +1201,6 @@ async fn fetch_linked_issues_parallel(
     out
 }
 
-fn build_issue_context_model(
-    records: &[LinkedIssueDisplay],
-) -> slint::ModelRc<IssueContextView> {
-    let model = slint::VecModel::<IssueContextView>::default();
-    for entry in records {
-        match entry {
-            LinkedIssueDisplay::Found(r) => {
-                let state = match r.state {
-                    IssueState::Open => "open",
-                    IssueState::Closed => "closed",
-                };
-                model.push(IssueContextView {
-                    number: SharedString::from(format!("#{}", r.number)),
-                    title: SharedString::from(r.title.as_str()),
-                    state: SharedString::from(state),
-                    body_excerpt: SharedString::from(excerpt(
-                        r.body.as_deref().unwrap_or(""),
-                        140,
-                    )),
-                });
-            }
-            LinkedIssueDisplay::Failed { number, message } => {
-                model.push(IssueContextView {
-                    number: SharedString::from(format!("#{number}")),
-                    title: SharedString::from(i18n::tr("(failed to fetch)")),
-                    state: SharedString::from("error"),
-                    body_excerpt: SharedString::from(message.as_str()),
-                });
-            }
-        }
-    }
-    slint::ModelRc::from(
-        std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = IssueContextView>>,
-    )
-}
 
 #[cfg(test)]
 mod tests {
