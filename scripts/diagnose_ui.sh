@@ -251,6 +251,27 @@ print(json.dumps(sys.argv[1:], ensure_ascii=False))
 ' "$@"
 }
 
+write_filtered_env() {
+    # 診断成果物は PR / issue に貼られる可能性があるため、全 env dump は避ける。
+    # locus / Rust / terminal 再現に必要な代表値だけ残し、credential らしい名前は
+    # whitelist とは独立に redacted marker として出す。
+    env | sort | awk -F= '
+        BEGIN {
+            safe = "^(LOCUS_|PATH$|LANG$|LC_|TERM$|SHELL$|HOME$|USER$|TMPDIR$|PWD$|CARGO_|RUST_|RUSTUP_|CI$|GITHUB_REPOSITORY$|GH_HOST$)"
+            secret = "(TOKEN|SECRET|PASSWORD|PASS|KEY|COOKIE|CREDENTIAL|AUTH)"
+        }
+        {
+            name = $1
+            upper_name = toupper(name)
+            if (upper_name ~ secret) {
+                print name "=<redacted>"
+            } else if (name ~ safe) {
+                print $0
+            }
+        }
+    ' > "$ENV_TXT"
+}
+
 cleanup_app() {
     # SIGTERM で落とし、それでも残ったら SIGKILL。
     # 二重呼び出し (明示呼び + EXIT trap) でも副作用が出ないよう冪等にする。
@@ -460,7 +481,7 @@ command -v cargo >/dev/null 2>&1 && HAS_CARGO=1
 # command.txt / env.txt
 {
     case "$MODE" in
-        terminal) printf '%s %s %s\n' "$BIN" "[passthrough]" "$AGENT_CMD" ;;
+        terminal) printf '%s %s\n' "$BIN" "$AGENT_CMD" ;;
         github)   printf '%s github %s\n' "$BIN" "$GITHUB_SPEC" ;;
     esac
     printf '\n# duration: %s seconds\n' "$DURATION"
@@ -472,7 +493,7 @@ command -v cargo >/dev/null 2>&1 && HAS_CARGO=1
     printf '# no_build: %s\n' "$NO_BUILD"
 } > "$COMMAND_TXT"
 
-env > "$ENV_TXT" 2>/dev/null || true
+write_filtered_env 2>/dev/null || true
 
 # build
 if [ "$NO_BUILD" -eq 0 ]; then
@@ -619,11 +640,13 @@ esac
     printf '\n'
     printf '== keyword counts ==\n'
     for kw in \
+        "typography configured" \
         "preview refreshed" \
         "terminal resized" \
         "terminal resize failed" \
         "window session saved" \
         "pr session saved" \
+        "pr switch fetch completed" \
         "linked issues fetched" \
         "initial hydrate snapshot+list fetched" \
         "initial hydrate completed" \
@@ -639,7 +662,7 @@ esac
     printf '\n'
     printf '== matched lines ==\n'
     if [ -f "$APP_LOG" ]; then
-        grep -E -- 'preview refreshed|terminal resized|window session saved|pr session saved|linked issues fetched|initial hydrate' \
+        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
             "$APP_LOG" 2>/dev/null \
             | head -n 200 \
             || printf '  (no matching debug lines found)\n'
