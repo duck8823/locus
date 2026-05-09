@@ -28,6 +28,9 @@ pub struct UiConfig {
     /// Insert+Send 押下前に「送信していい？」と確認 checkbox を要求するかどうか。
     /// `LOCUS_CONFIRM_SEND=true` で有効化、既定 false (毎回の確認はうざいため)。
     pub confirm_send: bool,
+    /// terminal cell metric の崩れを実機で視覚 trace するための debug grid overlay。
+    /// `LOCUS_TERMINAL_DEBUG_GRID=true` で各 cell に薄い border を出す。既定 false。
+    pub terminal_debug_grid: bool,
 }
 
 impl UiConfig {
@@ -63,6 +66,9 @@ impl UiConfig {
             parse_positive_f32_env(std::env::var("LOCUS_TERMINAL_CELL_W").ok().as_deref());
         let terminal_cell_h_override =
             parse_positive_f32_env(std::env::var("LOCUS_TERMINAL_CELL_H").ok().as_deref());
+        let terminal_debug_grid = parse_terminal_debug_grid_env(
+            std::env::var("LOCUS_TERMINAL_DEBUG_GRID").ok().as_deref(),
+        );
         Self {
             font_family,
             terminal_font_family,
@@ -73,6 +79,7 @@ impl UiConfig {
             bracketed_paste,
             prompt_max_chars,
             confirm_send,
+            terminal_debug_grid,
         }
     }
 
@@ -194,6 +201,19 @@ pub fn parse_confirm_send_env(value: Option<&str>) -> bool {
     }
 }
 
+/// `LOCUS_TERMINAL_DEBUG_GRID` で terminal cell metric の debug overlay を出すか。
+///
+/// - 未設定 / 空 / 不明値 / `0` / `false` / `off` / `no` → false (既定)
+/// - `1` / `true` / `on` / `yes` → true
+///
+/// 既定挙動を変えないため fail-closed 側にしている (`confirm_send` と同じ規則)。
+pub fn parse_terminal_debug_grid_env(value: Option<&str>) -> bool {
+    match value.map(|s| s.trim().to_ascii_lowercase()) {
+        Some(v) => matches!(v.as_str(), "1" | "true" | "on" | "yes"),
+        None => false,
+    }
+}
+
 /// 正の有限な f32 だけを受理する環境変数 parser。
 pub fn parse_positive_f32_env(value: Option<&str>) -> Option<f32> {
     value
@@ -228,6 +248,7 @@ mod tests {
             bracketed_paste: true,
             prompt_max_chars: 32_000,
             confirm_send: false,
+            terminal_debug_grid: false,
         };
         assert!(cfg.terminal_cell_w() >= 6.0);
         assert!(cfg.terminal_cell_h() >= 14.0);
@@ -245,6 +266,7 @@ mod tests {
             bracketed_paste: true,
             prompt_max_chars: 32_000,
             confirm_send: false,
+            terminal_debug_grid: false,
         };
         let big = UiConfig {
             font_family: "x".into(),
@@ -256,6 +278,7 @@ mod tests {
             bracketed_paste: true,
             prompt_max_chars: 32_000,
             confirm_send: false,
+            terminal_debug_grid: false,
         };
         assert!(big.terminal_cell_w() > small.terminal_cell_w());
         assert!(big.terminal_cell_h() > small.terminal_cell_h());
@@ -349,11 +372,33 @@ mod tests {
             bracketed_paste: true,
             prompt_max_chars: 32_000,
             confirm_send: false,
+            terminal_debug_grid: false,
         };
         assert_eq!(cfg.terminal_cell_w(), 9.5);
         assert_eq!(cfg.terminal_cell_h(), 18.5);
         assert_eq!(cfg.terminal_cell_w_from_measurement(7.0), 9.5);
         assert_eq!(cfg.terminal_cell_h_from_measurement(15.0), 18.5);
+    }
+
+    #[test]
+    fn terminal_debug_grid_default_off() {
+        assert!(!parse_terminal_debug_grid_env(None));
+        assert!(!parse_terminal_debug_grid_env(Some("")));
+        assert!(!parse_terminal_debug_grid_env(Some("garbage")));
+    }
+
+    #[test]
+    fn terminal_debug_grid_explicit_on() {
+        for v in ["1", "true", "True", "on", "yes", "ON", "  YES  "] {
+            assert!(parse_terminal_debug_grid_env(Some(v)));
+        }
+    }
+
+    #[test]
+    fn terminal_debug_grid_explicit_off() {
+        for v in ["0", "false", "off", "no", "False"] {
+            assert!(!parse_terminal_debug_grid_env(Some(v)));
+        }
     }
 
     #[test]
@@ -368,6 +413,7 @@ mod tests {
             bracketed_paste: true,
             prompt_max_chars: 32_000,
             confirm_send: false,
+            terminal_debug_grid: false,
         };
         assert_eq!(cfg.terminal_cell_w_from_measurement(7.25), 7.25);
         assert_eq!(cfg.terminal_cell_h_from_measurement(15.75), 15.75);

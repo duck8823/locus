@@ -66,6 +66,7 @@ For GitHub access, locus reads tokens in this order:
 | `LOCUS_FONT_SIZE` | (unset) | Single override for both terminal and diff font sizes. |
 | `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | Terminal pane font size in logical pixels. |
 | `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | Slint font probe / fallback ratio | Manual terminal cell width/height override in logical pixels. Use for diagnosing glyph/cell metric mismatch. |
+| `LOCUS_TERMINAL_DEBUG_GRID` | `false` | `1`/`true`/`on`/`yes` to draw thin grid lines at terminal cell boundaries so cell-vs-glyph mismatches are visible at a glance. Layout is unchanged. |
 | `LOCUS_DIFF_FONT_SIZE` | `12.0` | Diff pane font size in logical pixels. |
 | `LOCUS_BRACKETED_PASTE` | `true` | `false`/`0`/`off`/`no` to send raw bytes when the agent CLI does not understand `\x1b[200~ ... \x1b[201~`. |
 | `LOCUS_PROMPT_MAX_CHARS` | `32000` | Preview is gated above this character count; an override checkbox allows sending anyway. |
