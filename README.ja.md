@@ -155,10 +155,10 @@ interaction artifact に skipped / failed として記録します。
 | `build.log` | `cargo build` の出力 (`--no-build` の場合は出ない) |
 | `command.txt` | 起動した argv と子プロセスに注入した環境変数 |
 | `env.txt` | 再現に必要な環境変数の filtered snapshot。credential らしい変数は redacted |
-| `perf_summary.txt` | `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal render tick` / `pr session saved` / `linked issues fetched` / `initial hydrate ...` の grep カウントとマッチ行、加えて WARN/ERROR/panic の tail |
+| `perf_summary.txt` | `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal input forward failed` / `terminal render tick` / `pr session saved` / `linked issues fetched` / `initial hydrate ...` の grep カウントとマッチ行、加えて WARN/ERROR/panic の tail |
 | `screenshot.png` | 起動 N 秒後のデスクトップ (`screencapture` がある環境のみ) |
 | `interaction_events.jsonl` | scripted interaction の start/done/skipped/failed event、timestamp、status (`--interaction` 指定時のみ) |
-| `interaction_summary.json` | `interaction_events.jsonl` と `app.log` を突き合わせた interaction count と best-effort latency summary |
+| `interaction_summary.json` | `interaction_events.jsonl` と `app.log` を突き合わせた interaction count と best-effort latency summary。`observed=false` / `unobserved` は注入は完了したが対応する app log が見つからなかった状態 |
 | `report.json` | mode / command / env override / duration / exit status / screenshot/focus status / artifact paths / tool availability / notes |
 
 `cargo build` 失敗・binary 不在・locus が harness 停止より前に死んだ場合のいずれでも `report.json` を必ず書き出し、non-zero exit します (子プロセスの exit status が分かる場合はそれを伝播)。`--duration` 経過後に harness が TERM で停止させた正常 run のみ exit 0 です。

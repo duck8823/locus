@@ -237,16 +237,14 @@ fn make_key_handler(writer: Arc<Mutex<Box<dyn Write + Send>>>) -> impl Fn(Shared
         let started = Instant::now();
         let mut forwarded = false;
         if let Ok(mut w) = writer.lock() {
-            let _ = w.write_all(&bytes);
-            let _ = w.flush();
-            forwarded = true;
+            forwarded = w.write_all(&bytes).and_then(|_| w.flush()).is_ok();
         }
-        tracing::debug!(
-            bytes_len,
-            forwarded,
-            elapsed_us = started.elapsed().as_micros() as u64,
-            "terminal input forwarded"
-        );
+        let elapsed_us = started.elapsed().as_micros() as u64;
+        if forwarded {
+            tracing::debug!(bytes_len, elapsed_us, "terminal input forwarded");
+        } else {
+            tracing::debug!(bytes_len, elapsed_us, "terminal input forward failed");
+        }
     }
 }
 

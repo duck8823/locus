@@ -28,7 +28,7 @@ scripts/diagnose_ui.sh terminal --interaction terminal-type --interaction termin
 scripts/diagnose_ui.sh github duck8823/locus#302 --interaction file-switch-next --duration 8
 ```
 
-出力先は既定で `target/locus-diagnostics/<timestamp>/`。`report.json` / `app.log` / `perf_summary.txt` / `screenshot.png` を確認し、必要なら `view_image` で screenshot を目視確認する。`--interaction` 指定時は `interaction_events.jsonl` / `interaction_summary.json` も確認し、注入 event と app log の突合 latency を見る。`env.txt` は filtered snapshot で credential らしい値は redacted される。
+出力先は既定で `target/locus-diagnostics/<timestamp>/`。`report.json` / `app.log` / `perf_summary.txt` / `screenshot.png` を確認し、必要なら `view_image` で screenshot を目視確認する。`--interaction` 指定時は `interaction_events.jsonl` / `interaction_summary.json` も確認し、注入 event と app log の突合 latency を見る。`observed=false` / `unobserved` の場合は、操作注入は走ったが app log 上の反応を確認できていないため、操作遅延の測定値として扱わない。`env.txt` は filtered snapshot で credential らしい値は redacted される。
 
 ## AI レビュー設定 (`/review-and-merge` で使用)
 

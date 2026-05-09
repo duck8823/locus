@@ -155,10 +155,10 @@ unless you explicitly choose an output directory inside the working tree.
 | `build.log` | `cargo build` output (omitted with `--no-build`) |
 | `command.txt` | resolved argv and the exact env vars injected into the child |
 | `env.txt` | filtered environment snapshot for reproduction; credential-like variables are redacted |
-| `perf_summary.txt` | grep counts and matched lines for `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal render tick` / `pr session saved` / `linked issues fetched` / `initial hydrate ...`, plus a tail of WARN/ERROR/panic lines |
+| `perf_summary.txt` | grep counts and matched lines for `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal input forward failed` / `terminal render tick` / `pr session saved` / `linked issues fetched` / `initial hydrate ...`, plus a tail of WARN/ERROR/panic lines |
 | `screenshot.png` | desktop screenshot taken mid-run (only when `screencapture` is available and succeeds) |
 | `interaction_events.jsonl` | scripted interaction start/done/skipped/failed events with timestamps and status (only when `--interaction` is used) |
-| `interaction_summary.json` | interaction counts plus best-effort latency summaries by matching `interaction_events.jsonl` with `app.log` |
+| `interaction_summary.json` | interaction counts plus best-effort latency summaries by matching `interaction_events.jsonl` with `app.log`; `observed=false` / `unobserved` means the input was injected but no matching app log was seen |
 | `report.json` | mode, command, env overrides, duration, exit status, screenshot/focus status, artifact paths, tool availability, free-form notes |
 
 When `cargo build` fails, the binary is missing, or locus exits before the harness terminates it, the script still writes `report.json` and exits non-zero (propagating the child's exit status when available) so an LLM caller can read the failure mode programmatically instead of inferring it from missing files. A clean run (locus is still alive after `--duration` and shuts down on TERM) exits 0.

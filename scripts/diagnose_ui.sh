@@ -12,7 +12,7 @@
 #   perf_summary.txt           LOCUS_LOG=debug が吐く主要 perf 行の grep カウント
 #   screenshot.png             screencapture が使える環境では起動 N 秒後の画面
 #   interaction_events.jsonl   --interaction で注入した操作の start/done/skipped/failed イベント
-#   interaction_summary.json   イベントと app.log を突き合わせた latency_ms / counts サマリ
+#   interaction_summary.json   イベントと app.log を突き合わせた latency_ms / observed counts サマリ
 #   report.json                mode / command / env / duration / exit_status / paths / tools
 #
 # ふるまい:
@@ -817,6 +817,9 @@ for ev in events:
         "injection_duration_ms": None,
         "latency_ms": None,
         "match_keyword": None,
+        "observed": False,
+        "observation_status": "pending",
+        "observation_reason": None,
         "reason": None,
         "detail": None,
     })
@@ -845,31 +848,64 @@ for ev in events:
 for a in agg.values():
     if a["start_unix_ms"] is not None and a["end_unix_ms"] is not None:
         a["injection_duration_ms"] = a["end_unix_ms"] - a["start_unix_ms"]
+    if a["status"] == "skipped":
+        a["observation_status"] = "skipped"
+        a["observation_reason"] = a["reason"]
+        continue
+    if a["status"] == "failed":
+        a["observation_status"] = "failed"
+        a["observation_reason"] = a["reason"]
+        continue
     if a["status"] not in ("ok", "started"):
+        a["observation_status"] = "unknown"
         continue
     start = a["start_unix_ms"]
     if start is None:
+        a["observation_status"] = "unmatched"
+        a["observation_reason"] = "missing_start_timestamp"
         continue
     if a["name"] == "terminal-type":
         hit = first_after(forwarded, start)
         if hit is not None:
             a["latency_ms"] = hit - start
             a["match_keyword"] = "terminal input forwarded"
+        else:
+            a["observation_status"] = "unmatched"
+            a["observation_reason"] = "no terminal input forwarded log after injection"
     elif a["name"] == "terminal-scroll":
         hit = first_after(render_hits, start)
         if hit is not None:
             a["latency_ms"] = hit - start
             a["match_keyword"] = "terminal render tick|terminal render idle flush"
+        else:
+            a["observation_status"] = "unmatched"
+            a["observation_reason"] = "no terminal render tick/idle flush log after injection"
     elif a["name"] == "file-switch-next":
         hit = first_after(file_switch_hits, start)
         if hit is not None:
             a["latency_ms"] = hit - start
             a["match_keyword"] = "file switch requested"
+        else:
+            a["observation_status"] = "unmatched"
+            a["observation_reason"] = "no file switch requested log after injection"
+    else:
+        a["observation_status"] = "unknown"
+        a["observation_reason"] = "unknown_interaction"
+    if a["latency_ms"] is not None:
+        a["observed"] = True
+        a["observation_status"] = "matched"
+        a["observation_reason"] = None
 
 ordered = [agg[k] for k in sorted(agg.keys())]
 events_total = len(ordered)
 skipped = sum(1 for a in ordered if a["status"] == "skipped")
 failed = sum(1 for a in ordered if a["status"] == "failed")
+observed = sum(1 for a in ordered if a["observed"])
+unobserved = sum(
+    1
+    for a in ordered
+    if a["status"] in ("ok", "started") and not a["observed"]
+)
 
 out = {
     "schema_version": 1,
@@ -880,6 +916,8 @@ out = {
         "events_total": events_total,
         "skipped": skipped,
         "failed": failed,
+        "observed": observed,
+        "unobserved": unobserved,
     },
 }
 
@@ -1348,6 +1386,7 @@ esac
         "terminal resized" \
         "terminal resize failed" \
         "terminal input forwarded" \
+        "terminal input forward failed" \
         "terminal render tick" \
         "terminal render idle flush" \
         "file switch requested" \
@@ -1370,7 +1409,7 @@ esac
     printf '\n'
     printf '== matched lines ==\n'
     if [ -f "$APP_LOG" ]; then
-        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
+        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal input forward failed|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
             "$APP_LOG" 2>/dev/null \
             | head -n 200 \
             || printf '  (no matching debug lines found)\n'
