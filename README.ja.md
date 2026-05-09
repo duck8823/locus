@@ -157,7 +157,7 @@ interaction artifact に skipped / failed として記録します。
 | `build.log` | `cargo build` の出力 (`--no-build` の場合は出ない) |
 | `command.txt` | 起動した argv と子プロセスに注入した環境変数 |
 | `env.txt` | 再現に必要な環境変数の filtered snapshot。credential らしい変数は redacted |
-| `perf_summary.txt` | `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal input forward failed` / `terminal render tick` / `terminal render idle flush` / `file switch requested` / `diagnostic file switch` / `window session saved` / `pr session saved` / `linked issues fetched` / `initial hydrate ...` の grep カウントとマッチ行、加えて WARN/ERROR/panic の tail |
+| `perf_summary.txt` | `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal input forward failed` / `terminal scroll event` / `terminal render tick` / `terminal render idle flush` / `file switch requested` / `diagnostic file switch` / `window session saved` / `pr session saved` / `linked issues fetched` / `initial hydrate ...` の grep カウントとマッチ行、加えて WARN/ERROR/panic の tail |
 | `screenshot.png` | 起動 N 秒後のデスクトップ (`screencapture` がある環境のみ) |
 | `interaction_events.jsonl` | scripted interaction の start/done/skipped/failed event、timestamp、status (`--interaction` 指定時のみ) |
 | `interaction_summary.json` | `interaction_events.jsonl` と `app.log` を突き合わせた interaction count と best-effort latency summary/statistics。`observed=false` / `unobserved` は注入は完了したが対応する app log が見つからなかった状態 |

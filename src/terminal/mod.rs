@@ -248,6 +248,21 @@ fn make_key_handler(writer: Arc<Mutex<Box<dyn Write + Send>>>) -> impl Fn(Shared
     }
 }
 
+fn diag_trace_render_ticks_enabled() -> bool {
+    std::env::var("LOCUS_DIAG_TRACE_RENDER_TICKS")
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "on" | "yes"))
+        .unwrap_or(false)
+}
+
+fn make_scroll_diagnostic_handler() -> impl Fn(f32, f32) + 'static {
+    let trace_scroll_events = diag_trace_render_ticks_enabled();
+    move |delta_x, delta_y| {
+        if trace_scroll_events {
+            tracing::debug!(delta_x, delta_y, "terminal scroll event");
+        }
+    }
+}
+
 /// 1 tick あたりの VTE 処理量を制限する budget。
 ///
 /// terminal が大量に書き込んでくると VTE 処理 + row model 更新が UI thread
@@ -431,9 +446,7 @@ fn start_render_timer(
 ) -> slint::Timer {
     let timer = slint::Timer::default();
     let deferred_since: Cell<Option<Instant>> = Cell::new(None);
-    let trace_all_render_ticks = std::env::var("LOCUS_DIAG_TRACE_RENDER_TICKS")
-        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "on" | "yes"))
-        .unwrap_or(false);
+    let trace_all_render_ticks = diag_trace_render_ticks_enabled();
     timer.start(
         slint::TimerMode::Repeated,
         Duration::from_millis(16),
@@ -561,6 +574,7 @@ pub fn launch(
     ui.set_rows(ModelRc::from(core.row_model.clone()));
 
     ui.on_key_pressed(make_key_handler(core.writer.clone()));
+    ui.on_terminal_scroll_diagnostic(make_scroll_diagnostic_handler());
 
     let ui_weak = ui.as_weak();
     let timer = start_render_timer(
@@ -607,6 +621,7 @@ pub fn launch_for_diff_viewer(
     ui.set_terminal_rows(ModelRc::from(core.row_model.clone()));
 
     ui.on_terminal_key_pressed(make_key_handler(core.writer.clone()));
+    ui.on_terminal_scroll_diagnostic(make_scroll_diagnostic_handler());
 
     let ui_weak = ui.as_weak();
     let timer = start_render_timer(

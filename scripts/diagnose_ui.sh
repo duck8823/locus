@@ -781,6 +781,7 @@ def parse_ts(ts):
 
 forwarded = []
 render_hits = []
+scroll_hits = []
 file_switch_hits = []
 if app_log and os.path.exists(app_log):
     with open(app_log, "r", encoding="utf-8", errors="replace") as f:
@@ -795,6 +796,8 @@ if app_log and os.path.exists(app_log):
                 forwarded.append(ums)
             if "terminal render tick" in line or "terminal render idle flush" in line:
                 render_hits.append(ums)
+            if "terminal scroll event" in line:
+                scroll_hits.append(ums)
             if "file switch requested" in line:
                 file_switch_hits.append(ums)
 
@@ -876,13 +879,13 @@ for a in agg.values():
             a["observation_status"] = "unmatched"
             a["observation_reason"] = "no terminal input forwarded log after injection"
     elif a["name"] == "terminal-scroll":
-        hit = first_after(render_hits, start)
+        hit = first_after(scroll_hits, start)
         if hit is not None:
             a["latency_ms"] = hit - start
-            a["match_keyword"] = "terminal render tick|terminal render idle flush"
+            a["match_keyword"] = "terminal scroll event"
         else:
             a["observation_status"] = "unmatched"
-            a["observation_reason"] = "no terminal render tick/idle flush log after injection"
+            a["observation_reason"] = "no terminal scroll event log after injection"
     elif a["name"] == "file-switch-next":
         hit = first_after(file_switch_hits, start)
         if hit is not None:
@@ -1443,6 +1446,7 @@ esac
         "terminal resize failed" \
         "terminal input forwarded" \
         "terminal input forward failed" \
+        "terminal scroll event" \
         "terminal render tick" \
         "terminal render idle flush" \
         "file switch requested" \
@@ -1465,7 +1469,7 @@ esac
     printf '\n'
     printf '== matched lines ==\n'
     if [ -f "$APP_LOG" ]; then
-        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal input forward failed|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
+        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal input forward failed|terminal scroll event|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
             "$APP_LOG" 2>/dev/null \
             | head -n 200 \
             || printf '  (no matching debug lines found)\n'
