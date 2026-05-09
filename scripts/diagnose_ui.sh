@@ -94,7 +94,9 @@ options:
                             NAME: terminal-type | terminal-scroll | file-switch-next
                             terminal-scroll requires Python Quartz
                             (pyobjc-framework-Quartz) on macOS; otherwise skipped.
-  --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)
+                            file-switch-next は app-side single-shot のため 1 回のみ指定可。
+  --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)。
+                            --interaction 指定時は --duration 以下であること。
   --no-build                cargo build をスキップ
   -h, --help                ヘルプ
 USAGE
@@ -1130,13 +1132,23 @@ case "$INTERACTION_DELAY" in
 esac
 
 if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
+    if [ "$INTERACTION_DELAY" -gt "$DURATION" ]; then
+        die "--interaction-delay must be less than or equal to --duration when --interaction is used (delay=$INTERACTION_DELAY duration=$DURATION)"
+    fi
+    _file_switch_count=0
     for _name in "${INTERACTIONS[@]}"; do
         case "$_name" in
-            terminal-type|terminal-scroll|file-switch-next) ;;
+            terminal-type|terminal-scroll) ;;
+            file-switch-next)
+                _file_switch_count=$((_file_switch_count + 1))
+                if [ "$_file_switch_count" -gt 1 ]; then
+                    die "--interaction file-switch-next can be specified at most once (app-side single-shot diagnostic)"
+                fi
+                ;;
             *) die "--interaction must be one of: terminal-type, terminal-scroll, file-switch-next (got: $_name)" ;;
         esac
     done
-    unset _name
+    unset _name _file_switch_count
 fi
 
 if [ -n "$WINDOW_SIZE" ]; then

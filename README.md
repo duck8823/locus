@@ -141,9 +141,12 @@ scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/ru
 
 `terminal-type` uses macOS System Events via `osascript`. `terminal-scroll`
 uses Quartz through Python (`pyobjc-framework-Quartz`). `file-switch-next`
-arms an app-side diagnostic timer in `github` mode. When the required tools,
-mode, or permissions are missing, the harness records a skipped/failed
-interaction in the artifacts instead of failing the whole run.
+arms a single app-side diagnostic timer in `github` mode and can be specified
+at most once per run. When interactions are requested, `--interaction-delay`
+must be less than or equal to `--duration` so short smoke diagnostics do not
+wait longer than their requested run time. When the required tools, mode, or
+permissions are missing, the harness records a skipped/failed interaction in
+the artifacts instead of failing the whole run.
 
 Every run drops these files into `--out-dir` (default `target/locus-diagnostics/<timestamp>/`):
 the default location is under `target/`, so these artifacts are ignored by git
