@@ -537,7 +537,10 @@ emit_event() {
     line+=',"name":'
     line+="$(json_escape_fallback "$iname")"
     line+=",\"index\":$iindex"
-    line+=",\"timestamp_unix_ms\":$emitted_ms"
+    case "$emitted_ms" in
+        ''|*[!0-9-]*) line+=',"timestamp_unix_ms":null' ;;
+        *) line+=",\"timestamp_unix_ms\":$emitted_ms" ;;
+    esac
     line+=',"status":'
     line+="$(json_escape_fallback "$default_status")"
     while [ "$#" -gt 0 ]; do

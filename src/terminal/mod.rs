@@ -434,7 +434,7 @@ fn start_render_timer(
     let timer = slint::Timer::default();
     let deferred_since: Cell<Option<Instant>> = Cell::new(None);
     let trace_all_render_ticks = std::env::var("LOCUS_DIAG_TRACE_RENDER_TICKS")
-        .map(|v| v == "true" || v == "1")
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "on" | "yes"))
         .unwrap_or(false);
     timer.start(
         slint::TimerMode::Repeated,
