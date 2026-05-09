@@ -741,7 +741,7 @@ write_interaction_summary() {
         REQUESTED_INTERACTIONS_JSON="${INTERACTIONS_JSON:-[]}" \
         INTERACTION_DELAY_SEC="$INTERACTION_DELAY" \
             "$HAS_PYTHON3_BIN" - <<'PY'
-import json, os, re
+import json, math, os, re
 from datetime import datetime
 
 app_log = os.environ.get("APP_LOG") or ""
@@ -907,6 +907,39 @@ unobserved = sum(
     if a["status"] in ("ok", "started") and not a["observed"]
 )
 
+def percentile(values, p):
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    index = max(0, math.ceil((p / 100.0) * len(sorted_values)) - 1)
+    return sorted_values[min(index, len(sorted_values) - 1)]
+
+def latency_stats(values):
+    if not values:
+        return {
+            "count": 0,
+            "min_ms": None,
+            "p50_ms": None,
+            "p95_ms": None,
+            "max_ms": None,
+        }
+    return {
+        "count": len(values),
+        "min_ms": min(values),
+        "p50_ms": percentile(values, 50),
+        "p95_ms": percentile(values, 95),
+        "max_ms": max(values),
+    }
+
+latencies_by_name = {}
+all_latencies = []
+for a in ordered:
+    latency = a.get("latency_ms")
+    if latency is None:
+        continue
+    all_latencies.append(latency)
+    latencies_by_name.setdefault(a.get("name") or "unknown", []).append(latency)
+
 out = {
     "schema_version": 1,
     "requested": requested,
@@ -918,6 +951,13 @@ out = {
         "failed": failed,
         "observed": observed,
         "unobserved": unobserved,
+    },
+    "latency_stats": {
+        "overall": latency_stats(all_latencies),
+        "by_interaction": {
+            name: latency_stats(values)
+            for name, values in sorted(latencies_by_name.items())
+        },
     },
 }
 
