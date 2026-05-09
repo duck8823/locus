@@ -122,11 +122,35 @@ scripts/diagnose_ui.sh github duck8823/locus#236 --probe-metrics --duration 10
 # pin the front window to a known size for reproducible min-size screenshots (macOS)
 scripts/diagnose_ui.sh terminal --window-size 1280x720 --duration 6
 
+# inject scripted input/scroll interactions and summarize latency artifacts (macOS)
+scripts/diagnose_ui.sh terminal \
+  --interaction terminal-type \
+  --interaction terminal-scroll \
+  --interaction-delay 1 \
+  --duration 4
+
+# diff-viewer file switch interaction (requires github mode)
+scripts/diagnose_ui.sh github duck8823/locus#236 \
+  --interaction file-switch-next \
+  --interaction-delay 2 \
+  --duration 6
+
 # reuse a previous build (skip cargo build)
 scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/run-A
 ```
 
+`terminal-type` uses macOS System Events via `osascript`. `terminal-scroll`
+uses Quartz through Python (`pyobjc-framework-Quartz`). `file-switch-next`
+arms a single app-side diagnostic timer in `github` mode and must be the only
+interaction in that run. When interactions are requested, `--interaction-delay`
+must be less than or equal to `--duration` so short smoke diagnostics do not
+wait longer than their requested run time. When the required tools, mode, or
+permissions are missing, the harness records a skipped/failed interaction in
+the artifacts instead of failing the whole run.
+
 Every run drops these files into `--out-dir` (default `target/locus-diagnostics/<timestamp>/`):
+the default location is under `target/`, so these artifacts are ignored by git
+unless you explicitly choose an output directory inside the working tree.
 
 | File | Contents |
 |---|---|
@@ -134,8 +158,10 @@ Every run drops these files into `--out-dir` (default `target/locus-diagnostics/
 | `build.log` | `cargo build` output (omitted with `--no-build`) |
 | `command.txt` | resolved argv and the exact env vars injected into the child |
 | `env.txt` | filtered environment snapshot for reproduction; credential-like variables are redacted |
-| `perf_summary.txt` | grep counts and matched lines for `preview refreshed` / `terminal resized` / `pr session saved` / `linked issues fetched` / `initial hydrate ...`, plus a tail of WARN/ERROR/panic lines |
+| `perf_summary.txt` | grep counts and matched lines for `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal input forward failed` / `terminal scroll event` / `terminal render tick` / `terminal render idle flush` / `file switch requested` / `diagnostic file switch` / `window session saved` / `pr session saved` / `linked issues fetched` / `initial hydrate ...`, plus a tail of WARN/ERROR/panic lines |
 | `screenshot.png` | desktop screenshot taken mid-run (only when `screencapture` is available and succeeds) |
+| `interaction_events.jsonl` | scripted interaction start/done/skipped/failed events with timestamps and status (only when `--interaction` is used) |
+| `interaction_summary.json` | interaction counts plus best-effort latency summaries/statistics by matching `interaction_events.jsonl` with `app.log`; `observed=false` / `unobserved` means the input was injected but no matching app log was seen |
 | `report.json` | mode, command, env overrides, duration, exit status, screenshot/focus status, artifact paths, tool availability, free-form notes |
 
 When `cargo build` fails, the binary is missing, or locus exits before the harness terminates it, the script still writes `report.json` and exits non-zero (propagating the child's exit status when available) so an LLM caller can read the failure mode programmatically instead of inferring it from missing files. A clean run (locus is still alive after `--duration` and shuts down on TERM) exits 0.

@@ -5,13 +5,15 @@
 # LLM / オペレータが locus の terminal-only mode と diff viewer mode を
 # 実機で起動し、以下のアーティファクトを out-dir に書き出すための入口。
 #
-#   app.log         child process (cargo build した debug binary) の stdout/stderr
-#   build.log       cargo build の stdout/stderr (--no-build 時は省略)
-#   command.txt     起動した argv と注入した環境変数
-#   env.txt         スクリプト時点の環境変数 dump
-#   perf_summary.txt LOCUS_LOG=debug が吐く主要 perf 行の grep カウント
-#   screenshot.png  screencapture が使える環境では起動 N 秒後の画面
-#   report.json     mode / command / env / duration / exit_status / paths / tools
+#   app.log                    child process (cargo build した debug binary) の stdout/stderr
+#   build.log                  cargo build の stdout/stderr (--no-build 時は省略)
+#   command.txt                起動した argv と注入した環境変数
+#   env.txt                    スクリプト時点の環境変数 dump
+#   perf_summary.txt           LOCUS_LOG=debug が吐く主要 perf 行の grep カウント
+#   screenshot.png             screencapture が使える環境では起動 N 秒後の画面
+#   interaction_events.jsonl   --interaction で注入した操作の start/done/skipped/failed イベント
+#   interaction_summary.json   イベントと app.log を突き合わせた latency_ms / observed counts サマリ
+#   report.json                mode / command / env / duration / exit_status / paths / tools
 #
 # ふるまい:
 #   - 既定で `cargo build` 実行 → `target/debug/locus ...` を子プロセスで起動。
@@ -44,6 +46,11 @@
 #   --window-size WxH         macOS で起動後に front window を WIDTHxHEIGHT に
 #                             リサイズして再現スクショを撮る (#290 等の min-size
 #                             目視診断向け)
+#   --interaction NAME        起動後に注入する操作。複数回指定可。対応 NAME:
+#                             terminal-type / terminal-scroll / file-switch-next
+#                             terminal-scroll は Python Quartz
+#                             (pyobjc-framework-Quartz) がある macOS で有効
+#   --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)
 #   --no-build                cargo build をスキップ (target/debug/locus 既存前提)
 #   -h, --help                このヘルプ
 #
@@ -83,6 +90,14 @@ options:
   --terminal-font-size VAL  LOCUS_TERMINAL_FONT_SIZE override
   --window-size WxH         macOS で起動後に front window を WIDTHxHEIGHT に
                             リサイズ (例: 1280x720)
+  --interaction NAME        起動後に注入する操作。複数回指定可。
+                            NAME: terminal-type | terminal-scroll | file-switch-next
+                            terminal-scroll requires Python Quartz
+                            (pyobjc-framework-Quartz) on macOS; otherwise skipped.
+                            file-switch-next は app-side single-shot のため
+                            1 回のみ、かつ単独指定のみ可。
+  --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)。
+                            --interaction 指定時は --duration 以下であること。
   --no-build                cargo build をスキップ
   -h, --help                ヘルプ
 USAGE
@@ -143,6 +158,8 @@ write_report_json() {
         REPORT_TIMESTAMP="$TS" \
         REPORT_CMD_JSON="$CMD_ARGS_JSON" \
         REPORT_ENV_JSON="$ENV_VARS_JSON" \
+        REPORT_INTERACTIONS_JSON="${INTERACTIONS_JSON:-[]}" \
+        REPORT_INTERACTION_DELAY="$INTERACTION_DELAY" \
             "$HAS_PYTHON3_BIN" - <<'PY'
 import json, os
 
@@ -169,7 +186,8 @@ def loads_or_none(s):
 out_dir = env("REPORT_OUT_DIR")
 artifacts = {}
 for name in ("app.log", "build.log", "command.txt", "env.txt",
-             "perf_summary.txt", "screenshot.png"):
+             "perf_summary.txt", "screenshot.png",
+             "interaction_events.jsonl", "interaction_summary.json"):
     p = os.path.join(out_dir, name)
     artifacts[name] = {
         "path": p,
@@ -202,6 +220,10 @@ data = {
     },
     "command": loads_or_none(env("REPORT_CMD_JSON")) or [],
     "env_overrides": loads_or_none(env("REPORT_ENV_JSON")) or [],
+    "interactions": {
+        "requested": loads_or_none(env("REPORT_INTERACTIONS_JSON")) or [],
+        "delay_seconds": maybe_int(env("REPORT_INTERACTION_DELAY")),
+    },
     "process": {
         "pid": maybe_int(env("REPORT_APP_PID")),
         "exit_status": maybe_int(env("REPORT_APP_EXIT")),
@@ -270,6 +292,7 @@ PY
             "$([ "${HAS_SCREENCAPTURE:-0}" = 1 ] && echo true || echo false)" \
             "$([ "${HAS_OSASCRIPT:-0}" = 1 ] && echo true || echo false)" \
             "$([ "${HAS_CARGO:-0}" = 1 ] && echo true || echo false)"
+        printf '  "interactions": { "requested": [], "delay_seconds": %s },\n' "$INTERACTION_DELAY"
         printf '  "notes": %s\n' "$(json_escape_fallback "$REPORT_NOTES")"
         printf '}\n'
     } > "$report_path"
@@ -481,6 +504,567 @@ focus_app_for_screenshot() {
     fi
 }
 
+# ---- interaction injection -------------------------------------------------
+
+# 現在時刻を Unix epoch ms で返す。tracing_subscriber の RFC3339 timestamp と
+# 突き合わせるため、Python があれば time.time() で ms 精度を得る。bash 3 の
+# date には %N が無いので fallback は秒精度 (× 1000)。
+unix_ms() {
+    if [ -n "${HAS_PYTHON3_BIN:-}" ]; then
+        "$HAS_PYTHON3_BIN" -c 'import time; print(int(time.time() * 1000))' 2>/dev/null \
+            || printf '%s000' "$(date +%s)"
+    else
+        printf '%s000' "$(date +%s)"
+    fi
+}
+
+sleep_ms() {
+    local ms="$1"
+    case "$ms" in
+        ''|*[!0-9]*) return ;;
+    esac
+    [ "$ms" -gt 0 ] || return
+    sleep "$((ms / 1000)).$(printf '%03d' "$((ms % 1000))")"
+}
+
+# JSONL に 1 行追記する。固定フィールド (event/name/index) と任意の
+# key=value ペアを取る。数値キー (start_unix_ms / end_unix_ms / latency_ms)
+# はそのまま number として出力し、それ以外は string として escape する。
+emit_event() {
+    local event="$1" iname="$2" iindex="$3"
+    shift 3
+    local line emitted_ms default_status
+    emitted_ms="$(unix_ms)"
+    case "$event" in
+        start) default_status="started" ;;
+        done) default_status="ok" ;;
+        skipped) default_status="skipped" ;;
+        failed) default_status="failed" ;;
+        *) default_status="$event" ;;
+    esac
+    line='{"event":'
+    line+="$(json_escape_fallback "$event")"
+    line+=',"phase":'
+    line+="$(json_escape_fallback "$event")"
+    line+=',"name":'
+    line+="$(json_escape_fallback "$iname")"
+    line+=",\"index\":$iindex"
+    case "$emitted_ms" in
+        ''|*[!0-9-]*) line+=',"timestamp_unix_ms":null' ;;
+        *) line+=",\"timestamp_unix_ms\":$emitted_ms" ;;
+    esac
+    line+=',"status":'
+    line+="$(json_escape_fallback "$default_status")"
+    while [ "$#" -gt 0 ]; do
+        local pair="$1" key val
+        key="${pair%%=*}"
+        val="${pair#*=}"
+        case "$key" in
+            start_unix_ms|end_unix_ms|latency_ms|bytes_len)
+                # 数値が空 / 非数値の場合は null にフォールバック
+                case "$val" in
+                    ''|*[!0-9-]*) line+=",\"$key\":null" ;;
+                    *) line+=",\"$key\":$val" ;;
+                esac
+                ;;
+            *)
+                line+=",\"$key\":"
+                line+="$(json_escape_fallback "$val")"
+                ;;
+        esac
+        shift
+    done
+    line+='}'
+    printf '%s\n' "$line" >> "$INTERACTION_EVENTS"
+}
+
+inject_terminal_type() {
+    local idx="$1"
+    local start_ms
+
+    if [ -z "${APP_PID:-}" ] || ! kill -0 "$APP_PID" 2>/dev/null; then
+        start_ms="$(unix_ms)"
+        emit_event "skipped" "terminal-type" "$idx" \
+            "start_unix_ms=$start_ms" "reason=app_not_running"
+        return
+    fi
+    if [ "${HAS_OSASCRIPT:-0}" -ne 1 ]; then
+        start_ms="$(unix_ms)"
+        emit_event "skipped" "terminal-type" "$idx" \
+            "start_unix_ms=$start_ms" "reason=no_osascript"
+        return
+    fi
+
+    # bytes_len は app 側 (terminal/mod.rs) の "terminal input forwarded" だけが
+    # 出す。注入文字列そのものは ここの interaction_events にだけ書き、app.log
+    # には keystroke の結果として bytes_len のみが流れる。
+    local payload="locus-diagnostic-input"
+
+    if ! osascript \
+        -e "tell application \"System Events\"" \
+        -e "    tell (first application process whose unix id is $APP_PID)" \
+        -e "        set frontmost to true" \
+        -e "    end tell" \
+        -e "end tell" >/dev/null 2>&1; then
+        start_ms="$(unix_ms)"
+        emit_event "failed" "terminal-type" "$idx" \
+            "start_unix_ms=$start_ms" "reason=osascript_focus_failed"
+        return
+    fi
+    sleep 0.2
+
+    start_ms="$(unix_ms)"
+    emit_event "start" "terminal-type" "$idx" \
+        "start_unix_ms=$start_ms" "detail=type '$payload' + return"
+
+    if osascript \
+        -e "tell application \"System Events\"" \
+        -e "    keystroke \"$payload\"" \
+        -e "    key code 36" \
+        -e "end tell" >/dev/null 2>&1; then
+        local end_ms
+        end_ms="$(unix_ms)"
+        emit_event "done" "terminal-type" "$idx" \
+            "start_unix_ms=$start_ms" "end_unix_ms=$end_ms" \
+            "bytes_len=$((${#payload} + 1))"
+    else
+        emit_event "failed" "terminal-type" "$idx" \
+            "start_unix_ms=$start_ms" "reason=osascript_failed"
+    fi
+}
+
+inject_terminal_scroll() {
+    local idx="$1"
+    local start_ms
+
+    if [ -z "${APP_PID:-}" ] || ! kill -0 "$APP_PID" 2>/dev/null; then
+        start_ms="$(unix_ms)"
+        emit_event "skipped" "terminal-scroll" "$idx" \
+            "start_unix_ms=$start_ms" "reason=app_not_running"
+        return
+    fi
+    if [ -z "${HAS_PYTHON3_BIN:-}" ]; then
+        start_ms="$(unix_ms)"
+        emit_event "skipped" "terminal-scroll" "$idx" \
+            "start_unix_ms=$start_ms" "reason=no_python3"
+        return
+    fi
+
+    # focus は best-effort: scroll wheel event は HID 層で post されるため、
+    # 対象 window が前面でないとロケータ次第で別 app に届く可能性がある。
+    if [ "${HAS_OSASCRIPT:-0}" -eq 1 ]; then
+        osascript \
+            -e "tell application \"System Events\" to set frontmost of (first application process whose unix id is $APP_PID) to true" \
+            >/dev/null 2>&1 || true
+        sleep 0.2
+    fi
+
+    start_ms="$(unix_ms)"
+    emit_event "start" "terminal-scroll" "$idx" \
+        "start_unix_ms=$start_ms" "detail=move pointer to terminal area; post 6 scroll wheel events (line, dy=-3)"
+
+    APP_PID="$APP_PID" MODE="$MODE" "$HAS_PYTHON3_BIN" - >/dev/null 2>&1 <<'PY'
+import os
+import sys, time
+try:
+    import Quartz
+except ImportError:
+    sys.exit(11)
+
+try:
+    pid = int(os.environ.get("APP_PID", "0"))
+except ValueError:
+    sys.exit(12)
+if pid <= 0:
+    sys.exit(12)
+
+options = (
+    Quartz.kCGWindowListOptionOnScreenOnly
+    | Quartz.kCGWindowListExcludeDesktopElements
+)
+windows = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []
+candidates = []
+for w in windows:
+    if w.get("kCGWindowOwnerPID") != pid:
+        continue
+    if w.get("kCGWindowLayer", 0) != 0:
+        continue
+    bounds = w.get("kCGWindowBounds") or {}
+    width = float(bounds.get("Width", 0) or 0)
+    height = float(bounds.get("Height", 0) or 0)
+    if width <= 0 or height <= 0:
+        continue
+    x = float(bounds.get("X", 0) or 0)
+    y = float(bounds.get("Y", 0) or 0)
+    candidates.append((width * height, x, y, width, height))
+if not candidates:
+    sys.exit(13)
+
+_, x, y, width, height = sorted(candidates, reverse=True)[0]
+mode = os.environ.get("MODE") or "terminal"
+if mode == "github":
+    # Diff viewer: terminal pane is the bottom part of the left content area.
+    content_width = max(1.0, width - 320.0)
+    target = (x + min(content_width, width) * 0.5, y + max(24.0, height - 129.0))
+else:
+    # Terminal-only window: the terminal fills the window.
+    target = (x + width * 0.5, y + height * 0.5)
+
+move = Quartz.CGEventCreateMouseEvent(
+    None, Quartz.kCGEventMouseMoved, target, Quartz.kCGMouseButtonLeft
+)
+if move is None:
+    sys.exit(21)
+Quartz.CGEventPost(Quartz.kCGHIDEventTap, move)
+time.sleep(0.05)
+for event_type in (Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp):
+    click = Quartz.CGEventCreateMouseEvent(
+        None, event_type, target, Quartz.kCGMouseButtonLeft
+    )
+    if click is None:
+        sys.exit(22)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, click)
+    time.sleep(0.03)
+
+for _ in range(6):
+    e = Quartz.CGEventCreateScrollWheelEvent(
+        None, Quartz.kCGScrollEventUnitLine, 1, -3
+    )
+    if e is None:
+        sys.exit(20)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, e)
+    time.sleep(0.05)
+PY
+    local rc=$?
+    case "$rc" in
+        0)
+            local end_ms
+            end_ms="$(unix_ms)"
+            emit_event "done" "terminal-scroll" "$idx" \
+                "start_unix_ms=$start_ms" "end_unix_ms=$end_ms"
+            ;;
+        11)
+            emit_event "skipped" "terminal-scroll" "$idx" \
+                "start_unix_ms=$start_ms" "reason=no_quartz"
+            ;;
+        12)
+            emit_event "skipped" "terminal-scroll" "$idx" \
+                "start_unix_ms=$start_ms" "reason=no_pid_for_scroll"
+            ;;
+        13)
+            emit_event "skipped" "terminal-scroll" "$idx" \
+                "start_unix_ms=$start_ms" "reason=no_window_for_scroll"
+            ;;
+        *)
+            emit_event "failed" "terminal-scroll" "$idx" \
+                "start_unix_ms=$start_ms" "reason=quartz_post_failed"
+            ;;
+    esac
+}
+
+inject_file_switch_next() {
+    local idx="$1"
+    local start_ms
+    if [ -n "${RUN_START_MS:-}" ] && [ -n "${FILE_SWITCH_TRIGGER_OFFSET_MS:-}" ]; then
+        start_ms="$((RUN_START_MS + FILE_SWITCH_TRIGGER_OFFSET_MS))"
+    else
+        start_ms="$(unix_ms)"
+    fi
+
+    if [ "$MODE" != "github" ]; then
+        emit_event "skipped" "file-switch-next" "$idx" \
+            "start_unix_ms=$start_ms" "reason=requires_github_mode"
+        return
+    fi
+    if [ -z "${APP_PID:-}" ] || ! kill -0 "$APP_PID" 2>/dev/null; then
+        emit_event "skipped" "file-switch-next" "$idx" \
+            "start_unix_ms=$start_ms" "reason=app_not_running"
+        return
+    fi
+
+    emit_event "start" "file-switch-next" "$idx" \
+        "start_unix_ms=$start_ms" "detail=app-side diagnostic timer requests next file"
+    emit_event "done" "file-switch-next" "$idx" \
+        "start_unix_ms=$start_ms" "end_unix_ms=$(unix_ms)" \
+        "detail=armed via LOCUS_DIAG_FILE_SWITCH_AFTER_MS"
+}
+
+run_interactions() {
+    [ "${#INTERACTIONS[@]}" -gt 0 ] || return
+    local i=0 name
+    for name in "${INTERACTIONS[@]}"; do
+        case "$name" in
+            terminal-type)   inject_terminal_type "$i" ;;
+            terminal-scroll) inject_terminal_scroll "$i" ;;
+            file-switch-next) inject_file_switch_next "$i" ;;
+            *)
+                # 未対応 NAME は parse 段階で die しているため到達しないが
+                # 防衛的に残す。
+                local _start_ms
+                _start_ms="$(unix_ms)"
+                emit_event "skipped" "$name" "$i" \
+                    "start_unix_ms=$_start_ms" "reason=unknown_interaction"
+                ;;
+        esac
+        i=$((i + 1))
+        # 連続した interaction が同フレームに混ざらないよう少しだけ間を空ける
+        sleep 0.2
+    done
+}
+
+# events と app.log を突き合わせて latency_ms / counts を JSON で出す。
+# Python があるときに完全版、無いときは skip note 入りの最小 JSON。
+write_interaction_summary() {
+    if [ -n "${HAS_PYTHON3_BIN:-}" ]; then
+        APP_LOG="$APP_LOG" \
+        EVENTS_FILE="$INTERACTION_EVENTS" \
+        SUMMARY_FILE="$INTERACTION_SUMMARY" \
+        REQUESTED_INTERACTIONS_JSON="${INTERACTIONS_JSON:-[]}" \
+        INTERACTION_DELAY_SEC="$INTERACTION_DELAY" \
+            "$HAS_PYTHON3_BIN" - <<'PY'
+import json, math, os, re
+from datetime import datetime
+
+app_log = os.environ.get("APP_LOG") or ""
+events_path = os.environ.get("EVENTS_FILE") or ""
+summary_path = os.environ.get("SUMMARY_FILE") or ""
+
+try:
+    requested = json.loads(os.environ.get("REQUESTED_INTERACTIONS_JSON") or "[]")
+except json.JSONDecodeError:
+    requested = []
+
+events = []
+if events_path and os.path.exists(events_path):
+    with open(events_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+# tracing_subscriber default fmt の RFC3339 timestamp ("...Z") を
+# Unix epoch ms に変換する。マッチしない行は黙って捨てる。
+TS_RE = re.compile(r'^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)\s')
+
+def parse_ts(ts):
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return int(dt.timestamp() * 1000)
+
+forwarded = []
+render_hits = []
+scroll_hits = []
+file_switch_hits = []
+if app_log and os.path.exists(app_log):
+    with open(app_log, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            m = TS_RE.match(line)
+            if not m:
+                continue
+            ums = parse_ts(m.group(1))
+            if ums is None:
+                continue
+            if "terminal input forwarded" in line:
+                forwarded.append(ums)
+            if "terminal render tick" in line or "terminal render idle flush" in line:
+                render_hits.append(ums)
+            if "terminal scroll event" in line:
+                scroll_hits.append(ums)
+            if "file switch requested" in line:
+                file_switch_hits.append(ums)
+
+def first_after(items, threshold):
+    for ums in items:
+        if ums >= threshold:
+            return ums
+    return None
+
+# events を index ごとに集約。done/skipped/failed が start を上書きしないよう
+# start_unix_ms は最初に来た値を優先する。
+agg = {}
+for ev in events:
+    idx = ev.get("index")
+    if idx is None:
+        continue
+    a = agg.setdefault(idx, {
+        "index": idx,
+        "name": ev.get("name"),
+        "status": "unknown",
+        "start_unix_ms": None,
+        "end_unix_ms": None,
+        "injection_duration_ms": None,
+        "latency_ms": None,
+        "match_keyword": None,
+        "observed": False,
+        "observation_status": "pending",
+        "observation_reason": None,
+        "reason": None,
+        "detail": None,
+    })
+    if ev.get("name"):
+        a["name"] = ev["name"]
+    s_ms = ev.get("start_unix_ms")
+    if a["start_unix_ms"] is None and s_ms is not None:
+        a["start_unix_ms"] = s_ms
+    if ev.get("event") == "start":
+        if a["status"] in ("unknown",):
+            a["status"] = "started"
+        if ev.get("detail"):
+            a["detail"] = ev["detail"]
+    elif ev.get("event") == "done":
+        a["status"] = ev.get("status") or "ok"
+        if ev.get("end_unix_ms") is not None:
+            a["end_unix_ms"] = ev["end_unix_ms"]
+    elif ev.get("event") == "skipped":
+        a["status"] = "skipped"
+        a["reason"] = ev.get("reason")
+    elif ev.get("event") == "failed":
+        a["status"] = "failed"
+        a["reason"] = ev.get("reason")
+
+# latency 計算: ok/started のときだけ意味がある。
+for a in agg.values():
+    if a["start_unix_ms"] is not None and a["end_unix_ms"] is not None:
+        a["injection_duration_ms"] = a["end_unix_ms"] - a["start_unix_ms"]
+    if a["status"] == "skipped":
+        a["observation_status"] = "skipped"
+        a["observation_reason"] = a["reason"]
+        continue
+    if a["status"] == "failed":
+        a["observation_status"] = "failed"
+        a["observation_reason"] = a["reason"]
+        continue
+    if a["status"] not in ("ok", "started"):
+        a["observation_status"] = "unknown"
+        continue
+    start = a["start_unix_ms"]
+    if start is None:
+        a["observation_status"] = "unmatched"
+        a["observation_reason"] = "missing_start_timestamp"
+        continue
+    if a["name"] == "terminal-type":
+        hit = first_after(forwarded, start)
+        if hit is not None:
+            a["latency_ms"] = hit - start
+            a["match_keyword"] = "terminal input forwarded"
+        else:
+            a["observation_status"] = "unmatched"
+            a["observation_reason"] = "no terminal input forwarded log after injection"
+    elif a["name"] == "terminal-scroll":
+        hit = first_after(scroll_hits, start)
+        if hit is not None:
+            a["latency_ms"] = hit - start
+            a["match_keyword"] = "terminal scroll event"
+        else:
+            a["observation_status"] = "unmatched"
+            a["observation_reason"] = "no terminal scroll event log after injection"
+    elif a["name"] == "file-switch-next":
+        hit = first_after(file_switch_hits, start)
+        if hit is not None:
+            a["latency_ms"] = hit - start
+            a["match_keyword"] = "file switch requested"
+        else:
+            a["observation_status"] = "unmatched"
+            a["observation_reason"] = "no file switch requested log after injection"
+    else:
+        a["observation_status"] = "unknown"
+        a["observation_reason"] = "unknown_interaction"
+    if a["latency_ms"] is not None:
+        a["observed"] = True
+        a["observation_status"] = "matched"
+        a["observation_reason"] = None
+
+ordered = [agg[k] for k in sorted(agg.keys())]
+events_total = len(ordered)
+skipped = sum(1 for a in ordered if a["status"] == "skipped")
+failed = sum(1 for a in ordered if a["status"] == "failed")
+observed = sum(1 for a in ordered if a["observed"])
+unobserved = sum(
+    1
+    for a in ordered
+    if a["status"] in ("ok", "started") and not a["observed"]
+)
+
+def percentile(values, p):
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    index = max(0, math.ceil((p / 100.0) * len(sorted_values)) - 1)
+    return sorted_values[min(index, len(sorted_values) - 1)]
+
+def latency_stats(values):
+    if not values:
+        return {
+            "count": 0,
+            "min_ms": None,
+            "p50_ms": None,
+            "p95_ms": None,
+            "max_ms": None,
+        }
+    return {
+        "count": len(values),
+        "min_ms": min(values),
+        "p50_ms": percentile(values, 50),
+        "p95_ms": percentile(values, 95),
+        "max_ms": max(values),
+    }
+
+latencies_by_name = {}
+all_latencies = []
+for a in ordered:
+    latency = a.get("latency_ms")
+    if latency is None:
+        continue
+    all_latencies.append(latency)
+    latencies_by_name.setdefault(a.get("name") or "unknown", []).append(latency)
+
+out = {
+    "schema_version": 1,
+    "requested": requested,
+    "interaction_delay_seconds": int(os.environ.get("INTERACTION_DELAY_SEC") or 0),
+    "interactions": ordered,
+    "counts": {
+        "events_total": events_total,
+        "skipped": skipped,
+        "failed": failed,
+        "observed": observed,
+        "unobserved": unobserved,
+    },
+    "latency_stats": {
+        "overall": latency_stats(all_latencies),
+        "by_interaction": {
+            name: latency_stats(values)
+            for name, values in sorted(latencies_by_name.items())
+        },
+    },
+}
+
+with open(summary_path, "w", encoding="utf-8") as f:
+    json.dump(out, f, ensure_ascii=False, indent=2)
+    f.write("\n")
+PY
+        return
+    fi
+
+    # Python 不在: 最低限の skip JSON を残しておく
+    {
+        printf '{\n'
+        printf '  "schema_version": 1,\n'
+        printf '  "requested": [],\n'
+        printf '  "interaction_delay_seconds": %s,\n' "$INTERACTION_DELAY"
+        printf '  "interactions": [],\n'
+        printf '  "counts": { "events_total": 0, "skipped": 0, "failed": 0 },\n'
+        printf '  "notes": "skipped: python3 not available"\n'
+        printf '}\n'
+    } > "$INTERACTION_SUMMARY"
+}
+
 # ---- arg parsing -----------------------------------------------------------
 
 MODE=""
@@ -497,6 +1081,8 @@ TERMINAL_FONT_SIZE=""
 WINDOW_SIZE=""
 WINDOW_WIDTH=""
 WINDOW_HEIGHT=""
+INTERACTIONS=()
+INTERACTION_DELAY=1
 NO_BUILD=0
 
 if [ "$#" -lt 1 ]; then
@@ -593,6 +1179,18 @@ while [ "$#" -gt 0 ]; do
             WINDOW_SIZE="$1"
             shift
             ;;
+        --interaction)
+            shift
+            [ "$#" -gt 0 ] || die "--interaction requires a value (terminal-type | terminal-scroll | file-switch-next)"
+            INTERACTIONS+=("$1")
+            shift
+            ;;
+        --interaction-delay)
+            shift
+            [ "$#" -gt 0 ] || die "--interaction-delay requires a value"
+            INTERACTION_DELAY="$1"
+            shift
+            ;;
         --no-build)
             NO_BUILD=1
             shift
@@ -610,6 +1208,33 @@ done
 case "$DURATION" in
     ''|*[!0-9]*) die "--duration must be a non-negative integer (got: $DURATION)" ;;
 esac
+
+case "$INTERACTION_DELAY" in
+    ''|*[!0-9]*) die "--interaction-delay must be a non-negative integer (got: $INTERACTION_DELAY)" ;;
+esac
+
+if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
+    if [ "$INTERACTION_DELAY" -gt "$DURATION" ]; then
+        die "--interaction-delay must be less than or equal to --duration when --interaction is used (delay=$INTERACTION_DELAY duration=$DURATION)"
+    fi
+    _file_switch_count=0
+    for _name in "${INTERACTIONS[@]}"; do
+        case "$_name" in
+            terminal-type|terminal-scroll) ;;
+            file-switch-next)
+                _file_switch_count=$((_file_switch_count + 1))
+                if [ "$_file_switch_count" -gt 1 ]; then
+                    die "--interaction file-switch-next can be specified at most once (app-side single-shot diagnostic)"
+                fi
+                ;;
+            *) die "--interaction must be one of: terminal-type, terminal-scroll, file-switch-next (got: $_name)" ;;
+        esac
+    done
+    if [ "$_file_switch_count" -eq 1 ] && [ "${#INTERACTIONS[@]}" -gt 1 ]; then
+        die "--interaction file-switch-next must be used alone (app-side timer is armed from launch)"
+    fi
+    unset _name _file_switch_count
+fi
 
 if [ -n "$WINDOW_SIZE" ]; then
     case "$WINDOW_SIZE" in
@@ -643,6 +1268,8 @@ COMMAND_TXT="$OUT_DIR/command.txt"
 ENV_TXT="$OUT_DIR/env.txt"
 PERF_SUMMARY="$OUT_DIR/perf_summary.txt"
 SCREENSHOT="$OUT_DIR/screenshot.png"
+INTERACTION_EVENTS="$OUT_DIR/interaction_events.jsonl"
+INTERACTION_SUMMARY="$OUT_DIR/interaction_summary.json"
 REPORT_JSON="$OUT_DIR/report.json"
 
 REPORT_NOTES=""
@@ -657,6 +1284,8 @@ WINDOW_ID=""
 WINDOW_ID_STATUS="skipped"
 BUILD_STATUS="skipped"
 BIN="target/debug/locus"
+RUN_START_MS=""
+FILE_SWITCH_TRIGGER_OFFSET_MS=""
 
 # tool availability
 HAS_PYTHON3_BIN="$(command -v python3 || true)"
@@ -681,6 +1310,12 @@ command -v cargo >/dev/null 2>&1 && HAS_CARGO=1
     printf '# font_family: %s\n' "$FONT_FAMILY"
     printf '# terminal_font_size: %s\n' "$TERMINAL_FONT_SIZE"
     printf '# window_size: %s\n' "$WINDOW_SIZE"
+    if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
+        printf '# interactions: %s\n' "${INTERACTIONS[*]}"
+    else
+        printf '# interactions:\n'
+    fi
+    printf '# interaction_delay: %s\n' "$INTERACTION_DELAY"
     printf '# no_build: %s\n' "$NO_BUILD"
 } > "$COMMAND_TXT"
 
@@ -733,6 +1368,20 @@ fi
 [ -n "$CELL_H" ]              && ENV_VARS+=("LOCUS_TERMINAL_CELL_H=$CELL_H")
 [ -n "$FONT_FAMILY" ]         && ENV_VARS+=("LOCUS_TERMINAL_FONT_FAMILY=$FONT_FAMILY")
 [ -n "$TERMINAL_FONT_SIZE" ]  && ENV_VARS+=("LOCUS_TERMINAL_FONT_SIZE=$TERMINAL_FONT_SIZE")
+if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
+    # interaction latency を app.log と突き合わせられるよう、高速 render tick も
+    # 診断時だけ出す。通常 run では従来通り slow/budget-hit のみ。
+    ENV_VARS+=("LOCUS_DIAG_TRACE_RENDER_TICKS=true")
+fi
+for _interaction in "${INTERACTIONS[@]}"; do
+    if [ "$_interaction" = "file-switch-next" ]; then
+        # app 側 single-shot timer が file-switch-requested callback を発火する。
+        # script 側 event start はこの timer の予定発火時刻に合わせる。
+        FILE_SWITCH_TRIGGER_OFFSET_MS=$((INTERACTION_DELAY * 1000))
+        ENV_VARS+=("LOCUS_DIAG_FILE_SWITCH_AFTER_MS=$FILE_SWITCH_TRIGGER_OFFSET_MS")
+    fi
+done
+unset _interaction
 
 case "$MODE" in
     terminal) CMD_ARGS=("$BIN" "$AGENT_CMD") ;;
@@ -742,9 +1391,15 @@ esac
 if [ -n "$HAS_PYTHON3_BIN" ]; then
     CMD_ARGS_JSON="$(to_json_array "${CMD_ARGS[@]}")"
     ENV_VARS_JSON="$(to_json_array "${ENV_VARS[@]}")"
+    if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
+        INTERACTIONS_JSON="$(to_json_array "${INTERACTIONS[@]}")"
+    else
+        INTERACTIONS_JSON="[]"
+    fi
 else
     CMD_ARGS_JSON="[]"
     ENV_VARS_JSON="[]"
+    INTERACTIONS_JSON="[]"
 fi
 
 # command.txt に最終的な argv / env も追記
@@ -769,11 +1424,30 @@ log "out-dir: $OUT_DIR"
 env "${ENV_VARS[@]}" "${CMD_ARGS[@]}" > "$APP_LOG" 2>&1 &
 APP_PID=$!
 APP_TERMINATION="running"
+RUN_START_MS="$(unix_ms)"
 
-log "launched pid=$APP_PID; sleeping ${DURATION}s"
+log "launched pid=$APP_PID"
 
-# DURATION が 0 でも sleep 0 を呼ぶと一瞬で抜けるだけで安全。
-sleep "$DURATION"
+# DURATION が 0 でも sleep 0 を呼ぶと一瞬で抜けるだけで安全。interactions が
+# 指定されていれば INTERACTION_DELAY 秒待って注入し、残り duration を sleep。
+# interactions 未指定なら従来通り duration 全部 sleep。
+if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
+    : > "$INTERACTION_EVENTS"
+    log "sleeping ${INTERACTION_DELAY}s before interactions: ${INTERACTIONS[*]}"
+    sleep_ms "$((INTERACTION_DELAY * 1000))"
+    run_interactions
+    NOW_MS="$(unix_ms)"
+    REMAINING_MS=$((RUN_START_MS + (DURATION * 1000) - NOW_MS))
+    if [ "$REMAINING_MS" -gt 0 ]; then
+        log "sleeping remaining ${REMAINING_MS}ms after interactions"
+        sleep_ms "$REMAINING_MS"
+    else
+        log "duration already elapsed after interactions"
+    fi
+else
+    log "sleeping ${DURATION}s"
+    sleep "$DURATION"
+fi
 
 # 既に死んでいたら exit code を読み、screenshot は試みない。
 # `wait` の終了コードを `APP_EXIT` に取りたいので、`|| true` を挟まない
@@ -855,6 +1529,13 @@ esac
         "preview refreshed" \
         "terminal resized" \
         "terminal resize failed" \
+        "terminal input forwarded" \
+        "terminal input forward failed" \
+        "terminal scroll event" \
+        "terminal render tick" \
+        "terminal render idle flush" \
+        "file switch requested" \
+        "diagnostic file switch" \
         "window session saved" \
         "pr session saved" \
         "pr switch fetch completed" \
@@ -873,7 +1554,7 @@ esac
     printf '\n'
     printf '== matched lines ==\n'
     if [ -f "$APP_LOG" ]; then
-        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
+        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal input forward failed|terminal scroll event|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
             "$APP_LOG" 2>/dev/null \
             | head -n 200 \
             || printf '  (no matching debug lines found)\n'
@@ -889,6 +1570,12 @@ esac
     fi
 } > "$PERF_SUMMARY"
 
+# interaction_summary.json — events file が無い (interactions 未指定) でも
+# Python があれば空の interactions / counts を持つ JSON を出す。
+if [ "${#INTERACTIONS[@]}" -gt 0 ] || [ -f "$INTERACTION_EVENTS" ]; then
+    write_interaction_summary
+fi
+
 # report.json
 write_report_json "$REPORT_JSON"
 
@@ -896,5 +1583,7 @@ log "done. artifacts:"
 log "  $REPORT_JSON"
 log "  $APP_LOG"
 log "  $PERF_SUMMARY"
+[ -f "$INTERACTION_EVENTS" ]  && log "  $INTERACTION_EVENTS"
+[ -f "$INTERACTION_SUMMARY" ] && log "  $INTERACTION_SUMMARY"
 [ "$SCREENSHOT_STATUS" = "ok" ] && log "  $SCREENSHOT"
 exit "$FINAL_EXIT"

@@ -40,6 +40,7 @@ export component AppWindow inherits Window {
 
     callback key-pressed(string);
     callback resized(length, length);
+    callback terminal-scroll-diagnostic(length, length);
 
     title: @tr("locus — Terminal pane");
     preferred-width: 900px;
@@ -147,6 +148,13 @@ export component AppWindow inherits Window {
                 background: #ffffff40;
                 border-width: 1px;
                 border-color: #ffffff;
+            }
+
+            terminal-scroll-area := TouchArea {
+                scroll-event(event) => {
+                    root.terminal-scroll-diagnostic(event.delta-x, event.delta-y);
+                    reject
+                }
             }
         }
     }
@@ -294,6 +302,7 @@ export component DiffViewerWindow inherits Window {
     callback send-copy-to-clipboard(string);
     callback terminal-key-pressed(string);
     callback terminal-resized(length, length);
+    callback terminal-scroll-diagnostic(length, length);
 
     callback pr-clicked(int);
     callback pr-filter-changed(int);
@@ -1160,6 +1169,11 @@ export component DiffViewerWindow inherits Window {
                             terminal-click-area := TouchArea {
                                 clicked => {
                                     terminal-focus.focus();
+                                }
+
+                                scroll-event(event) => {
+                                    root.terminal-scroll-diagnostic(event.delta-x, event.delta-y);
+                                    reject
                                 }
                             }
                         }

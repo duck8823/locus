@@ -122,11 +122,34 @@ scripts/diagnose_ui.sh github duck8823/locus#236 --probe-metrics --duration 10
 # front window を固定サイズに resize して min-size 目視診断のスクショを再現する (macOS)
 scripts/diagnose_ui.sh terminal --window-size 1280x720 --duration 6
 
+# scripted input / scroll を注入して latency artifact を作る (macOS)
+scripts/diagnose_ui.sh terminal \
+  --interaction terminal-type \
+  --interaction terminal-scroll \
+  --interaction-delay 1 \
+  --duration 4
+
+# diff-viewer の file switch interaction (github mode が必要)
+scripts/diagnose_ui.sh github duck8823/locus#236 \
+  --interaction file-switch-next \
+  --interaction-delay 2 \
+  --duration 6
+
 # 既存 build を流用する (cargo build をスキップ)
 scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/run-A
 ```
 
+`terminal-type` は macOS System Events (`osascript`) を使います。
+`terminal-scroll` は Python の Quartz (`pyobjc-framework-Quartz`) を使います。
+`file-switch-next` は `github` mode で app 側の single-shot 診断 timer を arm するため、
+1 run につき 1 回だけ、かつ単独で指定します。interaction 指定時の `--interaction-delay` は
+短時間 smoke 診断が指定時間を超えて待ち続けないよう `--duration` 以下に制限します。
+必要な tool / mode / 権限が無い場合でも harness 全体は失敗させず、
+interaction artifact に skipped / failed として記録します。
+
 各実行は次のファイルを `--out-dir` (既定 `target/locus-diagnostics/<timestamp>/`) に書き出します:
+既定の出力先は `target/` 配下なので、明示的に working tree 内の別ディレクトリを
+指定しない限り git には含まれません。
 
 | ファイル | 内容 |
 |---|---|
@@ -134,8 +157,10 @@ scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/ru
 | `build.log` | `cargo build` の出力 (`--no-build` の場合は出ない) |
 | `command.txt` | 起動した argv と子プロセスに注入した環境変数 |
 | `env.txt` | 再現に必要な環境変数の filtered snapshot。credential らしい変数は redacted |
-| `perf_summary.txt` | `preview refreshed` / `terminal resized` / `pr session saved` / `linked issues fetched` / `initial hydrate ...` の grep カウントとマッチ行、加えて WARN/ERROR/panic の tail |
+| `perf_summary.txt` | `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal input forward failed` / `terminal scroll event` / `terminal render tick` / `terminal render idle flush` / `file switch requested` / `diagnostic file switch` / `window session saved` / `pr session saved` / `linked issues fetched` / `initial hydrate ...` の grep カウントとマッチ行、加えて WARN/ERROR/panic の tail |
 | `screenshot.png` | 起動 N 秒後のデスクトップ (`screencapture` がある環境のみ) |
+| `interaction_events.jsonl` | scripted interaction の start/done/skipped/failed event、timestamp、status (`--interaction` 指定時のみ) |
+| `interaction_summary.json` | `interaction_events.jsonl` と `app.log` を突き合わせた interaction count と best-effort latency summary/statistics。`observed=false` / `unobserved` は注入は完了したが対応する app log が見つからなかった状態 |
 | `report.json` | mode / command / env override / duration / exit status / screenshot/focus status / artifact paths / tool availability / notes |
 
 `cargo build` 失敗・binary 不在・locus が harness 停止より前に死んだ場合のいずれでも `report.json` を必ず書き出し、non-zero exit します (子プロセスの exit status が分かる場合はそれを伝播)。`--duration` 経過後に harness が TERM で停止させた正常 run のみ exit 0 です。

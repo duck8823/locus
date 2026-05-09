@@ -24,6 +24,7 @@ mod terminal;
 mod ui_state;
 
 use app::diff_viewer::linked_issues::fetch_linked_issues_parallel;
+use app::diagnostics::schedule_diagnostic_interactions;
 use app::diff_viewer::snapshot::{apply_snapshot_to_ui, build_pr_list_model};
 use app::diff_viewer::refresh::{
     append_history, refresh_current_anchor_label, refresh_draft_panel, refresh_history_panel,
@@ -500,6 +501,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         let repo = repo.clone();
         ui.on_file_switch_requested(move |new_idx| {
             let Some(ui) = ui_weak.upgrade() else { return };
+            let started = Instant::now();
             let old_idx = ui.get_selected_file_index() as usize;
             let cur_scroll = ui.get_diff_scroll_y();
             state.borrow_mut().scroll_positions.insert(old_idx, cur_scroll);
@@ -518,6 +520,14 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             save_pr_session(&owner, &repo, &state.borrow(), &ui);
 
             ui.invoke_file_switched(new_idx);
+            tracing::debug!(
+                old_idx,
+                new_idx,
+                saved_scroll = cur_scroll,
+                restored_scroll = restore,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "file switch requested"
+            );
         });
     }
 
@@ -960,6 +970,8 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             },
         );
     }
+
+    schedule_diagnostic_interactions(&ui);
 
     ui.run()?;
     drop(position_save_timer);

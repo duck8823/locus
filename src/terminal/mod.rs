@@ -9,7 +9,7 @@
 use std::cell::{Cell, RefCell};
 use std::io::{Read, Write};
 use std::rc::Rc;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -18,7 +18,7 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::{Config, Term, TermDamage};
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui_state::{build_row, empty_row};
@@ -222,15 +222,43 @@ fn spawn_core(
 }
 
 /// UI から受け取った key text を PTY に流し込むハンドラ。
+///
+/// 入力遅延診断 (#310) のために `bytes_len` と PTY write の `elapsed_us` を
+/// debug log で残す。key forwarding は sub-ms で終わることが多いため、
+/// ここだけは ms ではなく us で記録する。入力テキスト自体はパスワード等が
+/// 混じり得るため絶対に log に乗せない。
 fn make_key_handler(writer: Arc<Mutex<Box<dyn Write + Send>>>) -> impl Fn(SharedString) + 'static {
     move |text: SharedString| {
         let bytes = translate_key(text.as_str());
         if bytes.is_empty() {
             return;
         }
+        let bytes_len = bytes.len();
+        let started = Instant::now();
+        let mut forwarded = false;
         if let Ok(mut w) = writer.lock() {
-            let _ = w.write_all(&bytes);
-            let _ = w.flush();
+            forwarded = w.write_all(&bytes).and_then(|_| w.flush()).is_ok();
+        }
+        let elapsed_us = started.elapsed().as_micros() as u64;
+        if forwarded {
+            tracing::debug!(bytes_len, elapsed_us, "terminal input forwarded");
+        } else {
+            tracing::debug!(bytes_len, elapsed_us, "terminal input forward failed");
+        }
+    }
+}
+
+fn diag_trace_render_ticks_enabled() -> bool {
+    std::env::var("LOCUS_DIAG_TRACE_RENDER_TICKS")
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "on" | "yes"))
+        .unwrap_or(false)
+}
+
+fn make_scroll_diagnostic_handler() -> impl Fn(f32, f32) + 'static {
+    let trace_scroll_events = diag_trace_render_ticks_enabled();
+    move |delta_x, delta_y| {
+        if trace_scroll_events {
+            tracing::debug!(delta_x, delta_y, "terminal scroll event");
         }
     }
 }
@@ -418,6 +446,7 @@ fn start_render_timer(
 ) -> slint::Timer {
     let timer = slint::Timer::default();
     let deferred_since: Cell<Option<Instant>> = Cell::new(None);
+    let trace_all_render_ticks = diag_trace_render_ticks_enabled();
     timer.start(
         slint::TimerMode::Repeated,
         Duration::from_millis(16),
@@ -504,7 +533,8 @@ fn start_render_timer(
                     drop(term_guard);
 
                     let elapsed = tick_start.elapsed();
-                    if budget_hit || elapsed >= RENDER_SLOW_TICK_THRESHOLD {
+                    if trace_all_render_ticks || budget_hit || elapsed >= RENDER_SLOW_TICK_THRESHOLD
+                    {
                         tracing::debug!(
                             chunks,
                             bytes,
@@ -544,6 +574,7 @@ pub fn launch(
     ui.set_rows(ModelRc::from(core.row_model.clone()));
 
     ui.on_key_pressed(make_key_handler(core.writer.clone()));
+    ui.on_terminal_scroll_diagnostic(make_scroll_diagnostic_handler());
 
     let ui_weak = ui.as_weak();
     let timer = start_render_timer(
@@ -590,6 +621,7 @@ pub fn launch_for_diff_viewer(
     ui.set_terminal_rows(ModelRc::from(core.row_model.clone()));
 
     ui.on_terminal_key_pressed(make_key_handler(core.writer.clone()));
+    ui.on_terminal_scroll_diagnostic(make_scroll_diagnostic_handler());
 
     let ui_weak = ui.as_weak();
     let timer = start_render_timer(
@@ -759,9 +791,9 @@ fn sanitize_for_pty(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_grid_size, decide_idle_action, decide_render_action, drain_with_budget,
-        encode_paste_bytes, sanitize_for_pty, translate_key, IdleTickAction, PaintDecision,
-        RenderBudget, MIN_COLS, MIN_ROWS,
+        IdleTickAction, MIN_COLS, MIN_ROWS, PaintDecision, RenderBudget, compute_grid_size,
+        decide_idle_action, decide_render_action, drain_with_budget, encode_paste_bytes,
+        sanitize_for_pty, translate_key,
     };
     use std::sync::mpsc::sync_channel;
     use std::time::{Duration, Instant};
