@@ -1,7 +1,7 @@
 use super::snapshot::FileId;
 
 /// 選択時にどちら側の行番号を指しているか。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Side {
     Before,
     After,
@@ -11,7 +11,7 @@ pub enum Side {
 ///
 /// line-based な固定を避けるため、line 以上の粒度（range/hunk/file）を
 /// 型レベルで用意する。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Granularity {
     File,
     Hunk { hunk_index: usize },
@@ -24,7 +24,7 @@ pub enum Granularity {
 /// PromptDraft はこれを複数束ねて整形する。Comment ではなく Selection と
 /// 呼ぶのは、送り先が GitHub ではなく AI Agent CLI であり、「書き戻し前提の
 /// レビューコメント」という体験を避けるため。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SelectionAnchor {
     pub file_id: FileId,
     pub file_path: String,
