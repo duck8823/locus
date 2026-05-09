@@ -224,8 +224,9 @@ fn spawn_core(
 /// UI から受け取った key text を PTY に流し込むハンドラ。
 ///
 /// 入力遅延診断 (#310) のために `bytes_len` と PTY write の `elapsed_us` を
-/// debug log で残すが、入力テキスト自体はパスワード等が混じり得るため絶対に
-/// log に乗せない。
+/// debug log で残す。key forwarding は sub-ms で終わることが多いため、
+/// ここだけは ms ではなく us で記録する。入力テキスト自体はパスワード等が
+/// 混じり得るため絶対に log に乗せない。
 fn make_key_handler(writer: Arc<Mutex<Box<dyn Write + Send>>>) -> impl Fn(SharedString) + 'static {
     move |text: SharedString| {
         let bytes = translate_key(text.as_str());

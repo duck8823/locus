@@ -146,6 +146,8 @@ scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/ru
 interaction artifact に skipped / failed として記録します。
 
 各実行は次のファイルを `--out-dir` (既定 `target/locus-diagnostics/<timestamp>/`) に書き出します:
+既定の出力先は `target/` 配下なので、明示的に working tree 内の別ディレクトリを
+指定しない限り git には含まれません。
 
 | ファイル | 内容 |
 |---|---|

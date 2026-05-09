@@ -7,9 +7,9 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, SharedString};
 
 slint::include_modules!();
 
@@ -24,6 +24,7 @@ mod terminal;
 mod ui_state;
 
 use app::diff_viewer::linked_issues::fetch_linked_issues_parallel;
+use app::diagnostics::schedule_diagnostic_interactions;
 use app::diff_viewer::snapshot::{apply_snapshot_to_ui, build_pr_list_model};
 use app::diff_viewer::refresh::{
     append_history, refresh_current_anchor_label, refresh_draft_panel, refresh_history_panel,
@@ -154,51 +155,6 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.run()?;
     drop(pane);
     Ok(())
-}
-
-fn schedule_diagnostic_file_switch(ui: &DiffViewerWindow, delay: Duration, attempts_left: u8) {
-    let ui_weak = ui.as_weak();
-    slint::Timer::single_shot(delay, move || {
-        let Some(ui) = ui_weak.upgrade() else { return };
-        let files = ui.get_files();
-        let count = files.row_count();
-        if count <= 1 {
-            if attempts_left > 0 {
-                schedule_diagnostic_file_switch(
-                    &ui,
-                    Duration::from_millis(250),
-                    attempts_left - 1,
-                );
-            } else {
-                tracing::debug!(files = count, "diagnostic file switch skipped");
-            }
-            return;
-        }
-
-        let current = ui.get_selected_file_index().max(0);
-        let next = if (current as usize) + 1 < count {
-            current + 1
-        } else {
-            0
-        };
-        tracing::debug!(
-            from = current,
-            to = next,
-            files = count,
-            "diagnostic file switch requested"
-        );
-        ui.invoke_file_switch_requested(next);
-    });
-}
-
-fn schedule_diagnostic_interactions(ui: &DiffViewerWindow) {
-    let Some(delay_ms) = std::env::var("LOCUS_DIAG_FILE_SWITCH_AFTER_MS")
-        .ok()
-        .and_then(|v| v.parse::<u64>().ok())
-    else {
-        return;
-    };
-    schedule_diagnostic_file_switch(ui, Duration::from_millis(delay_ms), 20);
 }
 
 fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {

@@ -146,6 +146,8 @@ mode, or permissions are missing, the harness records a skipped/failed
 interaction in the artifacts instead of failing the whole run.
 
 Every run drops these files into `--out-dir` (default `target/locus-diagnostics/<timestamp>/`):
+the default location is under `target/`, so these artifacts are ignored by git
+unless you explicitly choose an output directory inside the working tree.
 
 | File | Contents |
 |---|---|
