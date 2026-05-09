@@ -12,10 +12,21 @@ Web SaaS 時代 (Next.js) からの転換が完了済み (ADR 0005)。
 1. `du -sh * .* 2>/dev/null | sort -hr | head -10` で実態確認
 2. **無確認で削除して良いもの** (`.gitignore` に明記された Next.js-era leftover):
    - `node_modules/` `.next/` `.locus-data/` `playwright-report/` `test-results/` `*.tsbuildinfo`
-3. **ユーザー確認を取ってから削除**: `target/` (cargo clean、フルリビルドが必要になる)
+3. **ユーザー確認を取ってから削除**: `target/` (cargo clean、フルリビルドが必要になる)。ただし `target/locus-diagnostics/` は `scripts/diagnose_ui.sh` の実機診断成果物で、スクショ・ログが大きくなりやすい。不要な古い診断 run は削除候補として明示する。
 4. `.git/` には触れない
 
 定期掃除として `cargo sweep -t 30` (30 日以上前の artifact) も提案可。
+
+## UI 診断ハーネス
+
+実機ログ・目視結果が必要な issue (#292 / #289 / #288 / #290 など) では、人間の観察待ちにせず `scripts/diagnose_ui.sh` を使う。
+
+```sh
+scripts/diagnose_ui.sh terminal --duration 6
+scripts/diagnose_ui.sh github duck8823/locus#302 --duration 8
+```
+
+出力先は既定で `target/locus-diagnostics/<timestamp>/`。`report.json` / `app.log` / `perf_summary.txt` / `screenshot.png` を確認し、必要なら `view_image` で screenshot を目視確認する。`env.txt` は filtered snapshot で credential らしい値は redacted される。
 
 ## AI レビュー設定 (`/review-and-merge` で使用)
 

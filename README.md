@@ -100,7 +100,7 @@ Locus **does not call LLMs itself**. Instead, it hosts a Terminal pane (built on
 
 ## Diagnostics for LLM
 
-`scripts/diagnose_ui.sh` is a self-contained harness for an LLM (or anyone) to launch locus on a real desktop, capture logs, and verify visual / perf state without sitting in front of the screen for every iteration. It builds with `cargo build`, launches `target/debug/locus` with `LOCUS_LOG=debug` and the terminal cell debug grid forced on, sleeps for `--duration` seconds (default `8`), best-effort focuses the launched process with `osascript`, takes a `screencapture` screenshot when available, and terminates the launched PID gracefully (TERM → KILL) without touching unrelated processes.
+`scripts/diagnose_ui.sh` is a self-contained harness for an LLM (or anyone) to launch locus on a real desktop, capture logs, and verify visual / perf state without sitting in front of the screen for every iteration. It builds with `cargo build`, launches `target/debug/locus` with `LOCUS_LOG=debug` and the terminal cell debug grid on by default (`--no-debug-grid` disables it), sleeps for `--duration` seconds (default `8`), best-effort focuses the launched process with `osascript`, takes a `screencapture` screenshot when available, and terminates the launched PID gracefully (TERM → KILL) without touching unrelated processes.
 
 ```sh
 # terminal-only mode with sh as the inner agent CLI
@@ -126,7 +126,7 @@ Every run drops these files into `--out-dir` (default `target/locus-diagnostics/
 | `app.log` | stdout/stderr from `target/debug/locus` (no build noise mixed in) |
 | `build.log` | `cargo build` output (omitted with `--no-build`) |
 | `command.txt` | resolved argv and the exact env vars injected into the child |
-| `env.txt` | snapshot of the script's own environment |
+| `env.txt` | filtered environment snapshot for reproduction; credential-like variables are redacted |
 | `perf_summary.txt` | grep counts and matched lines for `preview refreshed` / `terminal resized` / `pr session saved` / `linked issues fetched` / `initial hydrate ...`, plus a tail of WARN/ERROR/panic lines |
 | `screenshot.png` | desktop screenshot taken mid-run (only when `screencapture` is available and succeeds) |
 | `report.json` | mode, command, env overrides, duration, exit status, screenshot/focus status, artifact paths, tool availability, free-form notes |

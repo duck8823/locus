@@ -100,7 +100,7 @@ Locus は **LLM を直接呼びません**。Terminal pane (`alacritty_terminal`
 
 ## 診断 (LLM 向け)
 
-`scripts/diagnose_ui.sh` は LLM やオペレータが locus を実機で起動し、ログ・スクショ・perf trace を screen を見続けずに収集するためのハーネスです。`cargo build` を走らせてから `target/debug/locus` を `LOCUS_LOG=debug` + terminal cell debug grid を強制 ON で起動し、`--duration` 秒 (既定 `8`) スリープした後で `osascript` による対象プロセスの最前面化を best-effort で試み、`screencapture` が使える環境ならスクショを撮り、起動した PID のみを TERM → KILL で graceful 停止します。無関係なプロセスは触りません。
+`scripts/diagnose_ui.sh` は LLM やオペレータが locus を実機で起動し、ログ・スクショ・perf trace を screen を見続けずに収集するためのハーネスです。`cargo build` を走らせてから `target/debug/locus` を `LOCUS_LOG=debug` + terminal cell debug grid 既定 ON (`--no-debug-grid` で無効化可) で起動し、`--duration` 秒 (既定 `8`) スリープした後で `osascript` による対象プロセスの最前面化を best-effort で試み、`screencapture` が使える環境ならスクショを撮り、起動した PID のみを TERM → KILL で graceful 停止します。無関係なプロセスは触りません。
 
 ```sh
 # terminal-only mode (内部 agent は sh)
@@ -126,7 +126,7 @@ scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/ru
 | `app.log` | `target/debug/locus` の stdout/stderr (build ノイズと混ざらない) |
 | `build.log` | `cargo build` の出力 (`--no-build` の場合は出ない) |
 | `command.txt` | 起動した argv と子プロセスに注入した環境変数 |
-| `env.txt` | スクリプト時点の環境変数スナップショット |
+| `env.txt` | 再現に必要な環境変数の filtered snapshot。credential らしい変数は redacted |
 | `perf_summary.txt` | `preview refreshed` / `terminal resized` / `pr session saved` / `linked issues fetched` / `initial hydrate ...` の grep カウントとマッチ行、加えて WARN/ERROR/panic の tail |
 | `screenshot.png` | 起動 N 秒後のデスクトップ (`screencapture` がある環境のみ) |
 | `report.json` | mode / command / env override / duration / exit status / screenshot/focus status / artifact paths / tool availability / notes |
