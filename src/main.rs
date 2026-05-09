@@ -583,7 +583,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             };
             st.draft.push(DraftEntry::new(anchor, note_opt));
             // ドラフトが変わったので per-PR session を更新する (#231)
-            save_pr_session(&owner, &repo, pr_number, &st, &ui);
+            save_pr_session(&owner, &repo, &st, &ui);
             drop(st);
             refresh_draft_panel(&ui, &state);
         });
@@ -599,7 +599,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             let Some(ui) = ui_weak.upgrade() else { return };
             let mut st = state.borrow_mut();
             st.draft.remove(index as usize);
-            save_pr_session(&owner, &repo, pr_number, &st, &ui);
+            save_pr_session(&owner, &repo, &st, &ui);
             drop(st);
             refresh_draft_panel(&ui, &state);
         });
@@ -656,7 +656,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             ui.set_diff_scroll_y(restore);
 
             // per-PR session に selected_file_index を反映
-            save_pr_session(&owner, &repo, pr_number, &state.borrow(), &ui);
+            save_pr_session(&owner, &repo, &state.borrow(), &ui);
 
             ui.invoke_file_switched(new_idx);
         });
@@ -803,6 +803,25 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                             st.pending_range = false;
                             // snapshot 切替で旧 PR の scroll cache を引きずらない (#230)
                             st.scroll_positions.clear();
+
+                            // #231 PR 切替後の per-PR draft / file index 復元
+                            let key = session::SessionState::pr_key(
+                                &owner,
+                                &repo,
+                                new_pr_number as u64,
+                            );
+                            if let Some(saved) = session::load()
+                                && let Some(per_pr) = saved.per_pr.get(&key)
+                            {
+                                for entry in &per_pr.draft {
+                                    st.draft.push(entry.clone());
+                                }
+                                if let Some(idx) = per_pr.selected_file_index
+                                    && (idx as usize) < st.snapshot.files.len()
+                                {
+                                    ui.set_selected_file_index(idx);
+                                }
+                            }
                         }
                         refresh_current_anchor_label(&ui, state);
                         refresh_draft_panel(&ui, state);
@@ -993,7 +1012,10 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     }
                 });
                 if let Some(ui) = weak_for_task.upgrade() {
-                    with_app_state(|state| refresh_draft_panel(&ui, state));
+                    with_app_state(|state| {
+                        refresh_draft_panel(&ui, state);
+                        refresh_preview(&ui, state);
+                    });
                 }
             });
         });
@@ -1112,8 +1134,15 @@ fn save_window_session(ui: &DiffViewerWindow) {
 }
 
 /// PR 単位の draft / file index を session.json の per_pr table に書き出す。
-fn save_pr_session(owner: &str, repo: &str, pr_number: u64, state: &DiffAppState, ui: &DiffViewerWindow) {
-    let key = session::SessionState::pr_key(owner, repo, pr_number);
+///
+/// PR 番号は UI の current-pr-number を読む (PR 切替後も正しい key に書く)。
+/// owner/repo は同じ window の中では不変なので closure capture でよい。
+fn save_pr_session(owner: &str, repo: &str, state: &DiffAppState, ui: &DiffViewerWindow) {
+    let pr_number = ui.get_current_pr_number();
+    if pr_number <= 0 {
+        return;
+    }
+    let key = session::SessionState::pr_key(owner, repo, pr_number as u64);
     let pr_state = session::PerPrState {
         selected_file_index: Some(ui.get_selected_file_index()),
         draft: state.draft.entries().to_vec(),

@@ -97,69 +97,44 @@ pub fn load() -> Option<SessionState> {
 
 use std::sync::Mutex;
 
-/// プロセス内 cache。disk write を「値が変化したときだけ」に絞るのと、
-/// `mutate` で 「現在の state を partial update して save」するときの
-/// ベースとして使う。プロセス起動直後は None。
+/// プロセス内 cache。`mutate` の read-modify-write を 1 つの critical section
+/// で守るために単一 Mutex で持つ。`save()` も同じ lock を使うので、
+/// 並行な mutate / save が混在しても後勝ち上書きで partial update を失わない。
 static LAST_SAVED: Mutex<Option<SessionState>> = Mutex::new(None);
 
-/// 現在の cached state を取り出す。cache が空なら disk から load、それも
-/// 失敗すれば SessionState::default()。
-fn current_or_default() -> SessionState {
-    if let Ok(guard) = LAST_SAVED.lock()
-        && let Some(prev) = guard.as_ref()
-    {
-        return prev.clone();
-    }
-    load().unwrap_or_default()
-}
-
-/// 現在の state を closure で書き換えて save する。window / per_pr など
-/// 部分的に変えたい side からの単一エントリポイント。
+/// LAST_SAVED の lock 配下で current state を取り出して closure で書き換え、
+/// disk へ flush するまでを 1 つの critical section で行う。
 pub fn mutate(updater: impl FnOnce(&mut SessionState)) {
-    let mut state = current_or_default();
+    let mut guard = match LAST_SAVED.lock() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let mut state = guard.clone().unwrap_or_else(|| load().unwrap_or_default());
     updater(&mut state);
-    save(&state);
+    if let Some(prev) = guard.as_ref()
+        && prev == &state
+    {
+        return;
+    }
+    if let Err(e) = write_state_to_disk(&state) {
+        tracing::warn!(error = %e, "failed to persist session state");
+        return;
+    }
+    *guard = Some(state);
 }
 
-/// セッションを書き出す。失敗時は warn ログのみで panic しない。
-///
-/// ライブリサイズ中の連続呼び出しでも実 I/O は最小限に抑えるため、
-/// 直前に書いた SessionState と同じなら早期 return する (in-process cache)。
-/// プロセス再起動の境界では cache が空なので必ず最初の 1 回は書く。
-pub fn save(state: &SessionState) {
-    {
-        if let Ok(guard) = LAST_SAVED.lock()
-            && let Some(prev) = guard.as_ref()
-            && prev == state
-        {
-            return;
-        }
+/// 純粋な write 経路 (lock を持たない、エラーは Err で返す)。`mutate` から
+/// 呼ばれる。
+fn write_state_to_disk(state: &SessionState) -> Result<(), String> {
+    let path = session_path().ok_or_else(|| "could not resolve session.json path".to_string())?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create_dir_all {}: {}", parent.display(), e))?;
     }
-
-    let Some(path) = session_path() else {
-        tracing::warn!("could not resolve session.json path");
-        return;
-    };
-    if let Some(parent) = path.parent()
-        && let Err(e) = std::fs::create_dir_all(parent)
-    {
-        tracing::warn!(path = %parent.display(), error = %e, "failed to create config dir");
-        return;
-    }
-    let json = match serde_json::to_string_pretty(state) {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to serialize session state");
-            return;
-        }
-    };
-    if let Err(e) = std::fs::write(&path, json) {
-        tracing::warn!(path = %path.display(), error = %e, "failed to write session.json");
-        return;
-    }
-    if let Ok(mut guard) = LAST_SAVED.lock() {
-        *guard = Some(state.clone());
-    }
+    let json = serde_json::to_string_pretty(state)
+        .map_err(|e| format!("serialize: {e}"))?;
+    std::fs::write(&path, json).map_err(|e| format!("write {}: {}", path.display(), e))?;
+    Ok(())
 }
 
 #[cfg(test)]
