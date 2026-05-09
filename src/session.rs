@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 /// ローカル永続化される session 状態。schema が将来増えたら `#[serde(default)]`
 /// で後方互換を取る (古い session.json で新フィールドは default に倒れる)。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct SessionState {
     /// 最後に閉じた時のウィンドウ幅 (logical px)。
     #[serde(default)]
@@ -23,6 +23,12 @@ pub struct SessionState {
     /// 最後に閉じた時のウィンドウ高さ (logical px)。
     #[serde(default)]
     pub window_height: Option<f32>,
+    /// 最後に閉じた時のウィンドウ X 位置 (logical px、screen 原点)。
+    #[serde(default)]
+    pub window_x: Option<f32>,
+    /// 最後に閉じた時のウィンドウ Y 位置 (logical px、screen 原点)。
+    #[serde(default)]
+    pub window_y: Option<f32>,
 }
 
 /// `directories` crate で OS 固有の config 領域を解決する。
@@ -72,8 +78,7 @@ pub fn save(state: &SessionState) {
 
     if let Ok(guard) = LAST_SAVED.lock()
         && let Some(prev) = guard.as_ref()
-        && prev.window_width == state.window_width
-        && prev.window_height == state.window_height
+        && prev == state
     {
         return;
     }
@@ -120,11 +125,12 @@ mod tests {
         let original = SessionState {
             window_width: Some(1700.0),
             window_height: Some(960.0),
+            window_x: Some(120.0),
+            window_y: Some(48.0),
         };
         let json = serde_json::to_string(&original).unwrap();
         let decoded: SessionState = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.window_width, Some(1700.0));
-        assert_eq!(decoded.window_height, Some(960.0));
+        assert_eq!(decoded, original);
     }
 
     #[test]
@@ -133,6 +139,8 @@ mod tests {
         let decoded: SessionState = serde_json::from_str(json).unwrap();
         assert!(decoded.window_width.is_none());
         assert!(decoded.window_height.is_none());
+        assert!(decoded.window_x.is_none());
+        assert!(decoded.window_y.is_none());
     }
 
     #[test]
@@ -141,5 +149,17 @@ mod tests {
         let decoded: SessionState = serde_json::from_str(json).unwrap();
         assert_eq!(decoded.window_width, Some(100.0));
         assert!(decoded.window_height.is_none());
+    }
+
+    #[test]
+    fn old_session_without_position_loads_cleanly() {
+        // 旧 session.json (window_width / window_height のみ) が新 schema で
+        // 読めて、欠落した window_x / window_y が None に倒れる。
+        let json = r#"{"window_width": 1300.0, "window_height": 822.0}"#;
+        let decoded: SessionState = serde_json::from_str(json).unwrap();
+        assert_eq!(decoded.window_width, Some(1300.0));
+        assert_eq!(decoded.window_height, Some(822.0));
+        assert!(decoded.window_x.is_none());
+        assert!(decoded.window_y.is_none());
     }
 }
