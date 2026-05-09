@@ -6,13 +6,13 @@
 //! 起動時の初期 grid サイズは `INITIAL_COLS` / `INITIAL_ROWS` だが、
 //! [`TerminalPane::resize`] でウィンドウリサイズや font 変更に追従する。
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::io::{Read, Write};
 use std::rc::Rc;
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
@@ -47,12 +47,7 @@ const MAX_ROWS: u16 = 200;
 /// （0 除算を避ける）。
 ///
 /// pane サイズが負や 0 の場合も同様に最小値を返す。
-pub fn compute_grid_size(
-    pane_w: f32,
-    pane_h: f32,
-    cell_w: f32,
-    cell_h: f32,
-) -> (u16, u16) {
+pub fn compute_grid_size(pane_w: f32, pane_h: f32, cell_w: f32, cell_h: f32) -> (u16, u16) {
     if cell_w <= 0.0 || cell_h <= 0.0 {
         return (MIN_COLS, MIN_ROWS);
     }
@@ -66,10 +61,8 @@ pub fn compute_grid_size(
     } else {
         0
     };
-    let cols = raw_cols
-        .clamp(MIN_COLS as i64, MAX_COLS as i64) as u16;
-    let rows = raw_rows
-        .clamp(MIN_ROWS as i64, MAX_ROWS as i64) as u16;
+    let cols = raw_cols.clamp(MIN_COLS as i64, MAX_COLS as i64) as u16;
+    let rows = raw_rows.clamp(MIN_ROWS as i64, MAX_ROWS as i64) as u16;
     (cols, rows)
 }
 
@@ -242,10 +235,179 @@ fn make_key_handler(writer: Arc<Mutex<Box<dyn Write + Send>>>) -> impl Fn(Shared
     }
 }
 
+/// 1 tick あたりの VTE 処理量を制限する budget。
+///
+/// terminal が大量に書き込んでくると VTE 処理 + row model 更新が UI thread
+/// を専有して scroll/input をブロックするため、chunk 数 / byte 数 / 経過時間
+/// で打ち切る。channel に残った bytes は次の tick で消化する (#288)。
+#[derive(Clone, Copy)]
+struct RenderBudget {
+    max_chunks: usize,
+    max_bytes: usize,
+    max_elapsed: Duration,
+}
+
+const RENDER_TICK_BUDGET: RenderBudget = RenderBudget {
+    max_chunks: 48,
+    max_bytes: 192 * 1024,
+    max_elapsed: Duration::from_millis(7),
+};
+
+/// この値を超えた tick は「重い」と見なして debug log する閾値。
+const RENDER_SLOW_TICK_THRESHOLD: Duration = Duration::from_millis(12);
+
+/// budget hit が連続するとき、row model paint を最大どれだけ defer するか。
+///
+/// バーストが続いて budget hit が連続した場合、毎 tick paint すると Slint
+/// の repaint コストで他の操作が詰まるため、原則 paint を coalesce する。
+/// ただしこの上限を超えたら 1 回は paint し、terminal が完全に固まった
+/// ように見えないようにする (#288 追補)。
+const RENDER_MAX_DEFER: Duration = Duration::from_millis(750);
+
+/// Paint vs Defer の判定結果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PaintDecision {
+    Paint,
+    Defer,
+}
+
+/// budget hit な tick が来たとき、row model paint を即時行うか defer するかを決定する。
+///
+/// 戻り値の 2 つ目は次 tick まで持ち越す defer 開始時刻。`Some(start)` なら
+/// defer 継続、`None` なら paint 済み (もしくは defer 不要) でリセット済み。
+///
+/// 仕様:
+/// - `budget_hit == false`: 通常通り paint。defer 状態はクリア。
+/// - `budget_hit == true`, `deferred_since == None`: 初回 budget hit。即 paint
+///   せず defer を開始する (idle → burst の瞬間に重い full paint をしないため)。
+/// - `budget_hit == true`, `deferred_since == Some(start)`:
+///   - `now - start >= max_defer` → 1 回 paint してリセット。
+///   - そうでなければ defer 継続。
+fn decide_render_action(
+    budget_hit: bool,
+    now: Instant,
+    deferred_since: Option<Instant>,
+    max_defer: Duration,
+) -> (PaintDecision, Option<Instant>) {
+    if !budget_hit {
+        return (PaintDecision::Paint, None);
+    }
+    match deferred_since {
+        None => (PaintDecision::Defer, Some(now)),
+        Some(start) => {
+            if now.duration_since(start) >= max_defer {
+                (PaintDecision::Paint, None)
+            } else {
+                (PaintDecision::Defer, Some(start))
+            }
+        }
+    }
+}
+
+/// `byte_rx` が空 (Empty/Disconnected) の idle tick で何をするかの判定結果。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IdleTickAction {
+    /// 通常通り早抜けする。
+    Skip,
+    /// 直前の budget hit で paint を持ち越していた damage を 1 回 flush する。
+    FlushDeferred,
+}
+
+/// idle tick (byte が来なかった tick) の挙動を決める。
+///
+/// `drain_with_budget` は最後の chunk で budget が尽きた場合も `budget_hit=true`
+/// を返すため、その後 channel が空でも `Defer` として残ってしまう。続く tick で
+/// byte が来ないと paint されないままになるので、idle tick で deferred state を
+/// 検出したら 1 回 flush して state をクリアする。
+///
+/// 戻り値の 2 つ目は呼び出し側が `deferred_since` Cell に書き戻す次状態。
+fn decide_idle_action(deferred_since: Option<Instant>) -> (IdleTickAction, Option<Instant>) {
+    match deferred_since {
+        Some(_) => (IdleTickAction::FlushDeferred, None),
+        None => (IdleTickAction::Skip, None),
+    }
+}
+
+/// alacritty の damage を吸い上げて row_model / cursor を更新する。
+///
+/// 戻り値: (実際に書き換えた行数, 全行 paint だったか)。debug log 用。
+fn paint_damage(
+    term: &mut Term<EventProxy>,
+    row_model: &VecModel<TerminalRow>,
+    cols: u16,
+    rows: u16,
+    update_cursor: &dyn Fn(i32, i32),
+) -> (usize, bool) {
+    let damage = collect_damaged_lines(term);
+    let cursor = term.grid().cursor.point;
+    let total_rows = rows as usize;
+    let cols_usize = cols as usize;
+    let mut damaged_lines: usize = 0;
+    let mut full_damage = false;
+    match damage {
+        DamageList::All => {
+            full_damage = true;
+            for r in 0..total_rows {
+                let row = build_row(&*term, r, cols_usize);
+                row_model.set_row_data(r, row);
+            }
+            damaged_lines = total_rows;
+        }
+        DamageList::Some(lines) => {
+            for r in lines {
+                if r < total_rows {
+                    let row = build_row(&*term, r, cols_usize);
+                    row_model.set_row_data(r, row);
+                    damaged_lines += 1;
+                }
+            }
+        }
+    }
+    update_cursor(cursor.column.0 as i32, cursor.line.0);
+    (damaged_lines, full_damage)
+}
+
+/// `byte_rx` から budget を超えない範囲で chunk を取り出し `process` に渡す。
+///
+/// 戻り値 (chunks, bytes, budget_hit)。`budget_hit` はループが budget 条件で
+/// 打ち切られたことを意味する (channel に残りがあるかは未検査)。
+fn drain_with_budget<F>(
+    rx: &Receiver<Vec<u8>>,
+    first: Vec<u8>,
+    started: Instant,
+    budget: &RenderBudget,
+    mut process: F,
+) -> (usize, usize, bool)
+where
+    F: FnMut(&[u8]),
+{
+    let mut chunks: usize = 1;
+    let mut bytes: usize = first.len();
+    process(&first);
+    while chunks < budget.max_chunks
+        && bytes < budget.max_bytes
+        && started.elapsed() < budget.max_elapsed
+    {
+        match rx.try_recv() {
+            Ok(b) => {
+                bytes += b.len();
+                chunks += 1;
+                process(&b);
+            }
+            Err(_) => return (chunks, bytes, false),
+        }
+    }
+    (chunks, bytes, true)
+}
+
 /// 16ms 周期の render timer を組み立てる。
 ///
 /// `byte_rx` は所有権で受け取り timer closure に移動する。`update_cursor`
 /// は UI に依存する位置反映 (terminal-only / diff viewer で別の setter)。
+///
+/// 1 tick あたりの処理量は [`RENDER_TICK_BUDGET`] で制限する。byte が来て
+/// いない tick では term/processor mutex を取らずに早抜けし、入力 / resize
+/// と競合しないようにする (#288)。
 fn start_render_timer(
     term: Arc<Mutex<Term<EventProxy>>>,
     processor: Arc<Mutex<Processor<StdSyncHandler>>>,
@@ -255,44 +417,107 @@ fn start_render_timer(
     update_cursor: impl Fn(i32, i32) + 'static,
 ) -> slint::Timer {
     let timer = slint::Timer::default();
+    let deferred_since: Cell<Option<Instant>> = Cell::new(None);
     timer.start(
         slint::TimerMode::Repeated,
         Duration::from_millis(16),
         move || {
-            let mut updated = false;
+            let tick_start = Instant::now();
+            // byte が 1 つも来ていない tick では term/processor lock を取らない。
+            // 入力 (writer.lock) や resize (term.lock) と競合させない。
+            let first = match byte_rx.try_recv() {
+                Ok(b) => b,
+                Err(_) => {
+                    // ただし直前 tick で budget hit のまま defer を持ち越して
+                    // いた場合は、ここで蓄積 damage を 1 回 paint する。
+                    // 次以降の idle tick では deferred_since が None なので
+                    // 通常通り早抜けする。
+                    let (action, next_defer) = decide_idle_action(deferred_since.get());
+                    deferred_since.set(next_defer);
+                    if let IdleTickAction::FlushDeferred = action {
+                        let mut term_guard = term.lock().unwrap();
+                        let (cols_now, rows_now) = *current_size.borrow();
+                        let (damaged_lines, full_damage) = paint_damage(
+                            &mut term_guard,
+                            &row_model,
+                            cols_now,
+                            rows_now,
+                            &update_cursor,
+                        );
+                        drop(term_guard);
+                        tracing::debug!(
+                            chunks = 0usize,
+                            bytes = 0usize,
+                            damaged_lines,
+                            full_damage,
+                            budget_exhausted = false,
+                            render_deferred = false,
+                            elapsed_ms = tick_start.elapsed().as_millis() as u64,
+                            "terminal render idle flush"
+                        );
+                    }
+                    return;
+                }
+            };
+
             let mut term_guard = term.lock().unwrap();
-            {
+            let (chunks, bytes, budget_hit) = {
                 let mut proc_guard = processor.lock().unwrap();
-                while let Ok(bytes) = byte_rx.try_recv() {
-                    proc_guard.advance(&mut *term_guard, &bytes);
-                    updated = true;
+                drain_with_budget(&byte_rx, first, tick_start, &RENDER_TICK_BUDGET, |chunk| {
+                    proc_guard.advance(&mut *term_guard, chunk)
+                })
+            };
+
+            let (decision, next_defer) = decide_render_action(
+                budget_hit,
+                tick_start,
+                deferred_since.get(),
+                RENDER_MAX_DEFER,
+            );
+            deferred_since.set(next_defer);
+
+            match decision {
+                PaintDecision::Defer => {
+                    // bytes は VTE/Term に既に反映済み。alacritty の damage は
+                    // reset しない限り蓄積されるため、次に paint する tick で
+                    // まとめて吸い上げる。row_model / cursor も更新しない。
+                    drop(term_guard);
+                    let elapsed = tick_start.elapsed();
+                    tracing::debug!(
+                        chunks,
+                        bytes,
+                        budget_exhausted = budget_hit,
+                        render_deferred = true,
+                        elapsed_ms = elapsed.as_millis() as u64,
+                        "terminal render tick"
+                    );
                 }
-            }
-            if !updated {
-                return;
-            }
-            let damage = collect_damaged_lines(&mut *term_guard);
-            let cursor = term_guard.grid().cursor.point;
-            let (cols_now, rows_now) = *current_size.borrow();
-            let total_rows = rows_now as usize;
-            let cols_usize = cols_now as usize;
-            match damage {
-                DamageList::All => {
-                    for r in 0..total_rows {
-                        let row = build_row(&*term_guard, r, cols_usize);
-                        row_model.set_row_data(r, row);
+                PaintDecision::Paint => {
+                    let (cols_now, rows_now) = *current_size.borrow();
+                    let (damaged_lines, full_damage) = paint_damage(
+                        &mut term_guard,
+                        &row_model,
+                        cols_now,
+                        rows_now,
+                        &update_cursor,
+                    );
+                    drop(term_guard);
+
+                    let elapsed = tick_start.elapsed();
+                    if budget_hit || elapsed >= RENDER_SLOW_TICK_THRESHOLD {
+                        tracing::debug!(
+                            chunks,
+                            bytes,
+                            damaged_lines,
+                            full_damage,
+                            budget_exhausted = budget_hit,
+                            render_deferred = false,
+                            elapsed_ms = elapsed.as_millis() as u64,
+                            "terminal render tick"
+                        );
                     }
                 }
-                DamageList::Some(lines) => {
-                    for r in lines {
-                        if r < total_rows {
-                            let row = build_row(&*term_guard, r, cols_usize);
-                            row_model.set_row_data(r, row);
-                        }
-                    }
-                }
             }
-            update_cursor(cursor.column.0 as i32, cursor.line.0);
         },
     );
     timer
@@ -534,9 +759,12 @@ fn sanitize_for_pty(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_grid_size, encode_paste_bytes, sanitize_for_pty, translate_key, MIN_COLS,
-        MIN_ROWS,
+        compute_grid_size, decide_idle_action, decide_render_action, drain_with_budget,
+        encode_paste_bytes, sanitize_for_pty, translate_key, IdleTickAction, PaintDecision,
+        RenderBudget, MIN_COLS, MIN_ROWS,
     };
+    use std::sync::mpsc::sync_channel;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn compute_grid_size_floors_pane_div_cell() {
@@ -652,5 +880,173 @@ mod tests {
     fn regular_utf8_passes_through() {
         assert_eq!(translate_key("あ"), "あ".as_bytes());
         assert_eq!(translate_key("a"), b"a");
+    }
+
+    fn unconstrained_budget() -> RenderBudget {
+        RenderBudget {
+            max_chunks: 1024,
+            max_bytes: 1024 * 1024,
+            max_elapsed: Duration::from_secs(60),
+        }
+    }
+
+    #[test]
+    fn drain_stops_when_channel_empty() {
+        let (tx, rx) = sync_channel::<Vec<u8>>(8);
+        tx.send(vec![1u8; 8]).unwrap();
+        tx.send(vec![2u8; 8]).unwrap();
+        drop(tx);
+        let first = rx.try_recv().unwrap();
+        let mut received: Vec<usize> = Vec::new();
+        let (chunks, bytes, budget_hit) =
+            drain_with_budget(&rx, first, Instant::now(), &unconstrained_budget(), |b| {
+                received.push(b.len())
+            });
+        assert_eq!(chunks, 2);
+        assert_eq!(bytes, 16);
+        assert_eq!(received, vec![8, 8]);
+        assert!(!budget_hit);
+    }
+
+    #[test]
+    fn drain_respects_chunks_cap() {
+        let (tx, rx) = sync_channel::<Vec<u8>>(64);
+        for _ in 0..50 {
+            tx.send(vec![0u8; 4]).unwrap();
+        }
+        drop(tx);
+        let first = rx.try_recv().unwrap();
+        let budget = RenderBudget {
+            max_chunks: 4,
+            ..unconstrained_budget()
+        };
+        let mut count = 0;
+        let (chunks, bytes, budget_hit) =
+            drain_with_budget(&rx, first, Instant::now(), &budget, |_| count += 1);
+        assert_eq!(chunks, 4);
+        assert_eq!(bytes, 16);
+        assert_eq!(count, 4);
+        assert!(budget_hit);
+    }
+
+    #[test]
+    fn drain_respects_bytes_cap() {
+        let (tx, rx) = sync_channel::<Vec<u8>>(8);
+        for _ in 0..5 {
+            tx.send(vec![0u8; 100]).unwrap();
+        }
+        drop(tx);
+        let first = rx.try_recv().unwrap();
+        let budget = RenderBudget {
+            max_bytes: 200,
+            ..unconstrained_budget()
+        };
+        let (chunks, bytes, budget_hit) =
+            drain_with_budget(&rx, first, Instant::now(), &budget, |_| {});
+        assert_eq!(chunks, 2);
+        assert_eq!(bytes, 200);
+        assert!(budget_hit);
+    }
+
+    #[test]
+    fn decide_paint_when_budget_not_hit() {
+        // budget hit でない tick は通常通り paint。defer 状態はクリアされる。
+        let now = Instant::now();
+        let (decision, next) = decide_render_action(false, now, None, Duration::from_millis(750));
+        assert_eq!(decision, PaintDecision::Paint);
+        assert!(next.is_none());
+
+        // 直前まで defer していても、budget が落ち着いたら即 paint。
+        let started = now - Duration::from_millis(200);
+        let (decision, next) =
+            decide_render_action(false, now, Some(started), Duration::from_millis(750));
+        assert_eq!(decision, PaintDecision::Paint);
+        assert!(next.is_none());
+    }
+
+    #[test]
+    fn decide_defer_on_first_budget_hit() {
+        // 初回 budget hit は即 paint せず defer 開始。next_defer に now を保存する。
+        let now = Instant::now();
+        let (decision, next) = decide_render_action(true, now, None, Duration::from_millis(750));
+        assert_eq!(decision, PaintDecision::Defer);
+        assert_eq!(next, Some(now));
+    }
+
+    #[test]
+    fn decide_defer_continues_within_max() {
+        // defer 開始から max_defer 以内は defer 継続。defer 開始時刻は維持。
+        let max = Duration::from_millis(750);
+        let started = Instant::now();
+        let now = started + Duration::from_millis(300);
+        let (decision, next) = decide_render_action(true, now, Some(started), max);
+        assert_eq!(decision, PaintDecision::Defer);
+        assert_eq!(next, Some(started));
+    }
+
+    #[test]
+    fn decide_paint_when_defer_exceeds_max() {
+        // defer が max_defer を超えたら 1 回 paint してリセット。
+        let max = Duration::from_millis(750);
+        let started = Instant::now();
+        let now = started + Duration::from_millis(800);
+        let (decision, next) = decide_render_action(true, now, Some(started), max);
+        assert_eq!(decision, PaintDecision::Paint);
+        assert!(next.is_none());
+    }
+
+    #[test]
+    fn decide_paint_at_exact_max_boundary() {
+        // ちょうど max_defer に達した瞬間も paint 側に倒す (>=)。
+        let max = Duration::from_millis(750);
+        let started = Instant::now();
+        let now = started + max;
+        let (decision, next) = decide_render_action(true, now, Some(started), max);
+        assert_eq!(decision, PaintDecision::Paint);
+        assert!(next.is_none());
+    }
+
+    #[test]
+    fn idle_tick_skips_when_no_defer() {
+        // 通常 idle tick (defer 持ち越しなし) は何もしない。
+        let (action, next) = decide_idle_action(None);
+        assert_eq!(action, IdleTickAction::Skip);
+        assert!(next.is_none());
+    }
+
+    #[test]
+    fn idle_tick_flushes_and_clears_state_when_deferred() {
+        // budget hit を持ち越したまま byte が来ない idle tick が来たら、
+        // 蓄積 damage を 1 回 flush して deferred state を必ずクリアする。
+        // クリアしないと次の idle tick でも flush 扱いになり毎 tick paint
+        // してしまう。
+        let started = Instant::now() - Duration::from_millis(100);
+        let (action, next) = decide_idle_action(Some(started));
+        assert_eq!(action, IdleTickAction::FlushDeferred);
+        assert!(
+            next.is_none(),
+            "deferred_since must be reset to None after idle flush"
+        );
+    }
+
+    #[test]
+    fn drain_processes_first_even_when_over_budget() {
+        // first chunk が単独で max_bytes を超えていてもループには入らないが
+        // 既に取り出した分は process される (情報を捨てない)。
+        let (_tx, rx) = sync_channel::<Vec<u8>>(1);
+        let first = vec![0u8; 1024];
+        let budget = RenderBudget {
+            max_bytes: 16,
+            ..unconstrained_budget()
+        };
+        let mut processed = 0usize;
+        let (chunks, bytes, budget_hit) =
+            drain_with_budget(&rx, first, Instant::now(), &budget, |b| {
+                processed += b.len()
+            });
+        assert_eq!(chunks, 1);
+        assert_eq!(bytes, 1024);
+        assert_eq!(processed, 1024);
+        assert!(budget_hit);
     }
 }
