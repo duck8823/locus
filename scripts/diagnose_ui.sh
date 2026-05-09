@@ -41,6 +41,9 @@
 #   --cell-h VALUE            LOCUS_TERMINAL_CELL_H override
 #   --font-family VALUE       LOCUS_TERMINAL_FONT_FAMILY override
 #   --terminal-font-size VAL  LOCUS_TERMINAL_FONT_SIZE override
+#   --window-size WxH         macOS で起動後に front window を WIDTHxHEIGHT に
+#                             リサイズして再現スクショを撮る (#290 等の min-size
+#                             目視診断向け)
 #   --no-build                cargo build をスキップ (target/debug/locus 既存前提)
 #   -h, --help                このヘルプ
 #
@@ -78,6 +81,8 @@ options:
   --cell-h VALUE            LOCUS_TERMINAL_CELL_H override
   --font-family VALUE       LOCUS_TERMINAL_FONT_FAMILY override
   --terminal-font-size VAL  LOCUS_TERMINAL_FONT_SIZE override
+  --window-size WxH         macOS で起動後に front window を WIDTHxHEIGHT に
+                            リサイズ (例: 1280x720)
   --no-build                cargo build をスキップ
   -h, --help                ヘルプ
 USAGE
@@ -117,10 +122,17 @@ write_report_json() {
         REPORT_CELL_H="$CELL_H" \
         REPORT_FONT_FAMILY="$FONT_FAMILY" \
         REPORT_TERMINAL_FONT_SIZE="$TERMINAL_FONT_SIZE" \
+        REPORT_WINDOW_SIZE="$WINDOW_SIZE" \
+        REPORT_WINDOW_WIDTH="$WINDOW_WIDTH" \
+        REPORT_WINDOW_HEIGHT="$WINDOW_HEIGHT" \
+        REPORT_WINDOW_RESIZE_STATUS="$WINDOW_RESIZE_STATUS" \
+        REPORT_WINDOW_ID="${WINDOW_ID:-}" \
+        REPORT_WINDOW_ID_STATUS="${WINDOW_ID_STATUS:-skipped}" \
         REPORT_APP_PID="${APP_PID:-}" \
         REPORT_APP_EXIT="${APP_EXIT:-}" \
         REPORT_APP_TERMINATION="${APP_TERMINATION:-}" \
         REPORT_SCREENSHOT_STATUS="${SCREENSHOT_STATUS:-skipped}" \
+        REPORT_SCREENSHOT_CAPTURE_MODE="${SCREENSHOT_CAPTURE_MODE:-skipped}" \
         REPORT_FOCUS_STATUS="${FOCUS_STATUS:-skipped}" \
         REPORT_HAS_SCREENCAPTURE="${HAS_SCREENCAPTURE:-0}" \
         REPORT_HAS_OSASCRIPT="${HAS_OSASCRIPT:-0}" \
@@ -186,6 +198,7 @@ data = {
         "cell_h": env("REPORT_CELL_H") or None,
         "font_family": env("REPORT_FONT_FAMILY") or None,
         "terminal_font_size": env("REPORT_TERMINAL_FONT_SIZE") or None,
+        "window_size": env("REPORT_WINDOW_SIZE") or None,
     },
     "command": loads_or_none(env("REPORT_CMD_JSON")) or [],
     "env_overrides": loads_or_none(env("REPORT_ENV_JSON")) or [],
@@ -197,6 +210,15 @@ data = {
     "screenshot": {
         "status": env("REPORT_SCREENSHOT_STATUS"),
         "focus_status": env("REPORT_FOCUS_STATUS"),
+        "capture_mode": env("REPORT_SCREENSHOT_CAPTURE_MODE"),
+    },
+    "window": {
+        "requested": env("REPORT_WINDOW_SIZE") or None,
+        "width": maybe_int(env("REPORT_WINDOW_WIDTH")),
+        "height": maybe_int(env("REPORT_WINDOW_HEIGHT")),
+        "resize_status": env("REPORT_WINDOW_RESIZE_STATUS"),
+        "id": maybe_int(env("REPORT_WINDOW_ID")),
+        "id_status": env("REPORT_WINDOW_ID_STATUS"),
     },
     "tool_availability": {
         "screencapture": env("REPORT_HAS_SCREENCAPTURE") == "1",
@@ -233,9 +255,17 @@ PY
         printf '  "process": { "pid": %s, "exit_status": %s, "termination": %s },\n' \
             "${APP_PID:-null}" "${APP_EXIT:-null}" \
             "$(json_escape_fallback "${APP_TERMINATION:-}")"
-        printf '  "screenshot": { "status": %s, "focus_status": %s },\n' \
+        printf '  "screenshot": { "status": %s, "focus_status": %s, "capture_mode": %s },\n' \
             "$(json_escape_fallback "${SCREENSHOT_STATUS:-skipped}")" \
-            "$(json_escape_fallback "${FOCUS_STATUS:-skipped}")"
+            "$(json_escape_fallback "${FOCUS_STATUS:-skipped}")" \
+            "$(json_escape_fallback "${SCREENSHOT_CAPTURE_MODE:-skipped}")"
+        printf '  "window": { "requested": %s, "width": %s, "height": %s, "resize_status": %s, "id": %s, "id_status": %s },\n' \
+            "$(json_escape_fallback "$WINDOW_SIZE")" \
+            "${WINDOW_WIDTH:-null}" \
+            "${WINDOW_HEIGHT:-null}" \
+            "$(json_escape_fallback "$WINDOW_RESIZE_STATUS")" \
+            "${WINDOW_ID:-null}" \
+            "$(json_escape_fallback "${WINDOW_ID_STATUS:-skipped}")"
         printf '  "tool_availability": { "screencapture": %s, "osascript": %s, "python3": false, "cargo": %s },\n' \
             "$([ "${HAS_SCREENCAPTURE:-0}" = 1 ] && echo true || echo false)" \
             "$([ "${HAS_OSASCRIPT:-0}" = 1 ] && echo true || echo false)" \
@@ -317,6 +347,119 @@ cleanup_app() {
     CLEANUP_DONE=1
 }
 
+apply_window_geometry() {
+    # --window-size が指定されたとき、起動した process の front window を raise して
+    # 指定 WIDTHxHEIGHT に bounds を設定する。#290 のような min-size 目視診断を
+    # 再現スクショで取るための pre-screenshot helper。
+    # Accessibility 権限・osascript 不在・window 未生成などで失敗しても script は
+    # 継続し、status を report に残す。
+    if [ -z "$WINDOW_SIZE" ]; then
+        WINDOW_RESIZE_STATUS="skipped_not_requested"
+        return
+    fi
+    if [ -z "${APP_PID:-}" ]; then
+        WINDOW_RESIZE_STATUS="skipped_no_pid"
+        return
+    fi
+    if [ "$HAS_OSASCRIPT" -ne 1 ]; then
+        WINDOW_RESIZE_STATUS="skipped_no_tool"
+        return
+    fi
+
+    if osascript \
+        -e "tell application \"System Events\"" \
+        -e "    tell (first application process whose unix id is $APP_PID)" \
+        -e "        set frontmost to true" \
+        -e "        if (count of windows) = 0 then error \"no windows\"" \
+        -e "        -- fixed position keeps diagnostic captures reproducible" \
+        -e "        set position of front window to {100, 100}" \
+        -e "        set size of front window to {$WINDOW_WIDTH, $WINDOW_HEIGHT}" \
+        -e "    end tell" \
+        -e "end tell" >/dev/null 2>&1; then
+        WINDOW_RESIZE_STATUS="ok"
+        sleep 0.3
+    else
+        WINDOW_RESIZE_STATUS="failed"
+    fi
+}
+
+detect_app_window_id() {
+    # APP_PID 所有の主 window の CGWindowID を Quartz 経由で取得する。
+    # 取れたら $WINDOW_ID にセットし $WINDOW_ID_STATUS=ok。
+    # python3 / Quartz が無い・該当 window が無い等は status に記録して空のまま返す。
+    # 候補は layer 0 / OwnerPID == APP_PID / positive bounds の中で最大面積を選ぶ。
+    WINDOW_ID=""
+    WINDOW_ID_STATUS="skipped"
+
+    if [ -z "${APP_PID:-}" ]; then
+        WINDOW_ID_STATUS="skipped_no_pid"
+        return
+    fi
+    if [ -z "${HAS_PYTHON3_BIN:-}" ]; then
+        WINDOW_ID_STATUS="skipped_no_python3"
+        return
+    fi
+
+    local detected rc
+    detected="$(APP_PID="$APP_PID" "$HAS_PYTHON3_BIN" - <<'PY' 2>/dev/null
+import os
+import sys
+try:
+    import Quartz
+except ImportError:
+    sys.exit(11)
+try:
+    pid = int(os.environ.get("APP_PID", "0"))
+except ValueError:
+    sys.exit(12)
+if pid <= 0:
+    sys.exit(12)
+options = (
+    Quartz.kCGWindowListOptionOnScreenOnly
+    | Quartz.kCGWindowListExcludeDesktopElements
+)
+windows = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []
+candidates = []
+for w in windows:
+    if w.get("kCGWindowOwnerPID") != pid:
+        continue
+    if w.get("kCGWindowLayer", 0) != 0:
+        continue
+    bounds = w.get("kCGWindowBounds") or {}
+    width = bounds.get("Width", 0) or 0
+    height = bounds.get("Height", 0) or 0
+    if width <= 0 or height <= 0:
+        continue
+    wid = w.get("kCGWindowNumber")
+    if wid is None:
+        continue
+    try:
+        candidates.append((float(width) * float(height), int(wid)))
+    except (TypeError, ValueError):
+        continue
+if not candidates:
+    sys.exit(13)
+candidates.sort(reverse=True)
+print(candidates[0][1])
+PY
+    )"
+    rc=$?
+    case "$rc" in
+        0)
+            if [ -n "$detected" ]; then
+                WINDOW_ID="$detected"
+                WINDOW_ID_STATUS="ok"
+            else
+                WINDOW_ID_STATUS="failed"
+            fi
+            ;;
+        11) WINDOW_ID_STATUS="skipped_no_quartz" ;;
+        12) WINDOW_ID_STATUS="skipped_no_pid" ;;
+        13) WINDOW_ID_STATUS="no_window" ;;
+        *)  WINDOW_ID_STATUS="failed" ;;
+    esac
+}
+
 focus_app_for_screenshot() {
     # desktop 全体の screenshot でも対象 window が背面に回ると診断価値が下がるため、
     # macOS では best-effort で起動した PID を最前面化してから撮る。
@@ -351,6 +494,9 @@ CELL_W=""
 CELL_H=""
 FONT_FAMILY=""
 TERMINAL_FONT_SIZE=""
+WINDOW_SIZE=""
+WINDOW_WIDTH=""
+WINDOW_HEIGHT=""
 NO_BUILD=0
 
 if [ "$#" -lt 1 ]; then
@@ -441,6 +587,12 @@ while [ "$#" -gt 0 ]; do
             TERMINAL_FONT_SIZE="$1"
             shift
             ;;
+        --window-size)
+            shift
+            [ "$#" -gt 0 ] || die "--window-size requires a value (e.g. 1280x720)"
+            WINDOW_SIZE="$1"
+            shift
+            ;;
         --no-build)
             NO_BUILD=1
             shift
@@ -458,6 +610,24 @@ done
 case "$DURATION" in
     ''|*[!0-9]*) die "--duration must be a non-negative integer (got: $DURATION)" ;;
 esac
+
+if [ -n "$WINDOW_SIZE" ]; then
+    case "$WINDOW_SIZE" in
+        *x*)
+            WINDOW_WIDTH="${WINDOW_SIZE%x*}"
+            WINDOW_HEIGHT="${WINDOW_SIZE#*x}"
+            ;;
+        *)
+            die "--window-size must be WIDTHxHEIGHT (positive integers, e.g. 1280x720); got: $WINDOW_SIZE"
+            ;;
+    esac
+    case "$WINDOW_WIDTH" in
+        ''|*[!0-9]*|0*) die "--window-size width must be a positive integer (got: '$WINDOW_WIDTH')" ;;
+    esac
+    case "$WINDOW_HEIGHT" in
+        ''|*[!0-9]*|0*) die "--window-size height must be a positive integer (got: '$WINDOW_HEIGHT')" ;;
+    esac
+fi
 
 # ---- preparation -----------------------------------------------------------
 
@@ -480,7 +650,11 @@ APP_TERMINATION="not_launched"
 APP_PID=""
 APP_EXIT=""
 SCREENSHOT_STATUS="skipped"
+SCREENSHOT_CAPTURE_MODE="skipped"
 FOCUS_STATUS="skipped"
+WINDOW_RESIZE_STATUS="skipped_not_requested"
+WINDOW_ID=""
+WINDOW_ID_STATUS="skipped"
 BUILD_STATUS="skipped"
 BIN="target/debug/locus"
 
@@ -506,6 +680,7 @@ command -v cargo >/dev/null 2>&1 && HAS_CARGO=1
     printf '# cell_h: %s\n' "$CELL_H"
     printf '# font_family: %s\n' "$FONT_FAMILY"
     printf '# terminal_font_size: %s\n' "$TERMINAL_FONT_SIZE"
+    printf '# window_size: %s\n' "$WINDOW_SIZE"
     printf '# no_build: %s\n' "$NO_BUILD"
 } > "$COMMAND_TXT"
 
@@ -612,18 +787,35 @@ if ! kill -0 "$APP_PID" 2>/dev/null; then
     wait "$APP_PID" 2>/dev/null
     APP_EXIT=$?
 else
+    # window geometry override (--window-size が指定されたときだけ動く)
+    apply_window_geometry
+
     # screenshot
     if [ "$HAS_SCREENCAPTURE" -eq 1 ]; then
         focus_app_for_screenshot
-        if screencapture -x "$SCREENSHOT" >/dev/null 2>&1 && [ -s "$SCREENSHOT" ]; then
+        detect_app_window_id
+
+        # window capture を優先する: desktop 全体だと壁紙のみが写ることがあり
+        # (#306) 受け入れ条件「対象 app window を含む」を満たさないため。
+        # window id が取れなかった / 失敗した場合は従来の desktop screenshot に fallback。
+        if [ -n "$WINDOW_ID" ] \
+            && screencapture -x -l "$WINDOW_ID" "$SCREENSHOT" >/dev/null 2>&1 \
+            && [ -s "$SCREENSHOT" ]; then
             SCREENSHOT_STATUS="ok"
-            log "screenshot: $SCREENSHOT"
+            SCREENSHOT_CAPTURE_MODE="window"
+            log "screenshot: $SCREENSHOT (window id=$WINDOW_ID)"
+        elif screencapture -x "$SCREENSHOT" >/dev/null 2>&1 && [ -s "$SCREENSHOT" ]; then
+            SCREENSHOT_STATUS="ok"
+            SCREENSHOT_CAPTURE_MODE="desktop"
+            log "screenshot: $SCREENSHOT (desktop fallback)"
         else
             SCREENSHOT_STATUS="failed"
+            SCREENSHOT_CAPTURE_MODE="failed"
             log "screencapture invocation failed"
         fi
     else
         SCREENSHOT_STATUS="skipped_no_tool"
+        SCREENSHOT_CAPTURE_MODE="skipped"
         log "screencapture not found; skipping screenshot"
     fi
 

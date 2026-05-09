@@ -119,6 +119,9 @@ scripts/diagnose_ui.sh terminal \
 # opt into the Slint font probe to compare against the default fallback metrics
 scripts/diagnose_ui.sh github duck8823/locus#236 --probe-metrics --duration 10
 
+# pin the front window to a known size for reproducible min-size screenshots (macOS)
+scripts/diagnose_ui.sh terminal --window-size 1280x720 --duration 6
+
 # reuse a previous build (skip cargo build)
 scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/run-A
 ```
