@@ -158,7 +158,7 @@ unless you explicitly choose an output directory inside the working tree.
 | `build.log` | `cargo build` output (omitted with `--no-build`) |
 | `command.txt` | resolved argv and the exact env vars injected into the child |
 | `env.txt` | filtered environment snapshot for reproduction; credential-like variables are redacted |
-| `perf_summary.txt` | grep counts and matched lines for `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal input forward failed` / `terminal render tick` / `pr session saved` / `linked issues fetched` / `initial hydrate ...`, plus a tail of WARN/ERROR/panic lines |
+| `perf_summary.txt` | grep counts and matched lines for `preview refreshed` / `terminal resized` / `terminal input forwarded` / `terminal input forward failed` / `terminal render tick` / `terminal render idle flush` / `file switch requested` / `diagnostic file switch` / `window session saved` / `pr session saved` / `linked issues fetched` / `initial hydrate ...`, plus a tail of WARN/ERROR/panic lines |
 | `screenshot.png` | desktop screenshot taken mid-run (only when `screencapture` is available and succeeds) |
 | `interaction_events.jsonl` | scripted interaction start/done/skipped/failed events with timestamps and status (only when `--interaction` is used) |
 | `interaction_summary.json` | interaction counts plus best-effort latency summaries/statistics by matching `interaction_events.jsonl` with `app.log`; `observed=false` / `unobserved` means the input was injected but no matching app log was seen |
