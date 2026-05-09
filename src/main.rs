@@ -40,8 +40,12 @@ mod ui_state;
 use app::diff_viewer::snapshot::{
     apply_snapshot_to_ui, build_pr_list_model, LinkedIssueDisplay,
 };
-use app::diff_viewer::state::{DiffAppState, HistoryEntry, ToastKind};
-use app::diff_viewer::util::{current_hhmmss, resolve_line_number, send_mode_label};
+use app::diff_viewer::refresh::{
+    append_history, refresh_current_anchor_label, refresh_draft_panel, refresh_history_panel,
+    refresh_preview, refresh_toasts,
+};
+use app::diff_viewer::state::{DiffAppState, ToastKind};
+use app::diff_viewer::util::resolve_line_number;
 
 use github::issue_context::{
     extract_linked_issue_numbers, fetch_issue_context_async,
@@ -51,12 +55,11 @@ use github::pull_request::{
     PullRequestSnapshot,
 };
 use review::draft::{DraftEntry, PromptDraft, SendMode};
-use review::formatter::{format_prompt, FileSourceEntry};
 #[cfg(test)]
 use review::selection::Side;
 use review::selection::{Granularity, SelectionAnchor};
 use review::snapshot::FileId;
-use ui_state::draft_view::{anchor_label, build_draft_entry_views, side_from_line_kind};
+use ui_state::draft_view::side_from_line_kind;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // tracing-subscriber を最初に初期化する。LOCUS_LOG=debug 等で詳細
@@ -992,46 +995,6 @@ fn save_pr_session(owner: &str, repo: &str, state: &DiffAppState, ui: &DiffViewe
     });
 }
 
-
-fn refresh_current_anchor_label(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
-    let st = state.borrow();
-    let has_selection = st.current_anchor.is_some();
-    let label = match &st.current_anchor {
-        Some(a) => {
-            let base = anchor_label(a);
-            if st.pending_range {
-                format!("{base}{}", i18n::tr("  [range mode: click end line]"))
-            } else {
-                base
-            }
-        }
-        None => i18n::tr("(no selection)"),
-    };
-    ui.set_current_anchor_label(SharedString::from(label));
-    ui.set_has_selection(has_selection);
-}
-
-fn refresh_draft_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
-    let st = state.borrow();
-    ui.set_draft_entries(build_draft_entry_views(&st.draft));
-}
-
-fn refresh_toasts(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
-    let st = state.borrow();
-    let model = slint::VecModel::<ToastView>::default();
-    for t in &st.toasts {
-        model.push(ToastView {
-            id: t.id,
-            kind: t.kind.to_int(),
-            title: SharedString::from(t.title.as_str()),
-            message: SharedString::from(t.message.as_str()),
-        });
-    }
-    ui.set_toasts(slint::ModelRc::from(
-        std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = ToastView>>,
-    ));
-}
-
 /// 5 秒後に該当 toast を自動で dismiss する。
 ///
 /// `slint::Timer::single_shot` は内部で self-manage されるため、Timer 自体を
@@ -1070,67 +1033,6 @@ thread_local! {
         RefCell::new(None)
     };
 }
-
-fn refresh_history_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
-    let st = state.borrow();
-    let model = slint::VecModel::<HistoryEntryView>::default();
-    // 新しい順
-    for entry in st.history.iter().rev() {
-        model.push(HistoryEntryView {
-            timestamp: SharedString::from(entry.timestamp.as_str()),
-            mode: SharedString::from(send_mode_label(entry.mode)),
-            label: SharedString::from(entry.anchors_label.as_str()),
-        });
-    }
-    ui.set_history_entries(slint::ModelRc::from(
-        std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = HistoryEntryView>>,
-    ));
-}
-
-fn refresh_preview(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
-    let st = state.borrow();
-    let entries: Vec<FileSourceEntry<'_>> = st
-        .snapshot
-        .files
-        .iter()
-        .map(|f| FileSourceEntry {
-            file_id: &f.file_id,
-            file_path: f.file_path.as_str(),
-            before_content: f.before_content.as_deref(),
-            after_content: f.after_content.as_deref(),
-        })
-        .collect();
-    let text = format_prompt(&st.draft, &entries);
-    ui.set_preview_text(SharedString::from(text));
-    // preview-length は Slint 側で root.preview-text.character-count から
-    // 自動計算されるので Rust から set する必要はない。
-}
-
-fn append_history(state: &Rc<RefCell<DiffAppState>>, mode: SendMode, body: &str) {
-    let mut st = state.borrow_mut();
-    let anchors_label = if st.draft.is_empty() {
-        i18n::tr("(edited preview)")
-    } else {
-        let count = st.draft.len();
-        let head = st.draft.entries().first().map(|e| anchor_label(&e.anchor));
-        match head {
-            Some(h) if count == 1 => h,
-            Some(h) => {
-                let extra = (count - 1).to_string();
-                format!("{h} {}", i18n::tr_args("+{} more", &[extra.as_str()]))
-            }
-            None => i18n::tr("(empty)"),
-        }
-    };
-    let timestamp = current_hhmmss();
-    st.history.push(HistoryEntry {
-        timestamp,
-        mode,
-        anchors_label,
-        body: body.to_string(),
-    });
-}
-
 
 /// linked issue 番号一覧を受け取り、各 issue を tokio::spawn 系で並列 fetch
 /// する。`octocrab::Octocrab` は内部で reqwest クライアントを共有しているので
