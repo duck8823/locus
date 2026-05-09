@@ -1,8 +1,8 @@
 //! Diff viewer 関連の純粋ユーティリティ (#224 step 2)。
 //!
 //! Slint UI / DIFF_APP_STATE thread_local に依存しないものをここに集約する。
-//! callback 経由でしか呼ばれない refresh_* / show_toast 等は thread_local に
-//! 触れるため main.rs に留め、別 step で追加移動する。
+//! UI model への反映や toast など状態・副作用を持つ helper は
+//! `refresh` / `toast` module に分離している。
 
 use crate::review::draft::SendMode;
 
