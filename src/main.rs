@@ -976,7 +976,28 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // セッション位置の定期保存 (#231 Codex MUST 対応):
+    // ウィンドウを移動しただけでは on_close_requested / on_terminal_resized
+    // は発火せず position が stale になるため、1 秒周期で save_window_session
+    // を呼ぶ。session::save() 側の LAST_SAVED キャッシュで実際の disk write は
+    // 値が変化したときのみ。timer は drop されると停止するので、ui.run() の
+    // ライフタイムで保持する。
+    let position_save_timer = slint::Timer::default();
+    {
+        let ui_weak = ui.as_weak();
+        position_save_timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_secs(1),
+            move || {
+                if let Some(ui) = ui_weak.upgrade() {
+                    save_window_session(&ui);
+                }
+            },
+        );
+    }
+
     ui.run()?;
+    drop(position_save_timer);
     drop(terminal_pane);
     Ok(())
 }
