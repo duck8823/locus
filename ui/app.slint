@@ -92,8 +92,11 @@ export component AppWindow inherits Window {
                     height: root.cell-h;
                     background: cell.bg;
                     visible: cell.span > 0;
+                    clip: true;
 
                     Text {
+                        width: parent.width;
+                        height: parent.height;
                         text: cell.ch;
                         color: cell.fg;
                         font-family: root.font-family;
@@ -215,6 +218,7 @@ export component DiffViewerWindow inherits Window {
     in property <int> terminal-rows-count: 30;
     in property <length> terminal-cell-w: 8px;
     in property <length> terminal-cell-h: 16px;
+    in property <string> terminal-font-family: "Menlo, Consolas, monospace";
     in property <int> terminal-cursor-col: 0;
     in property <int> terminal-cursor-row: 0;
     in property <bool> terminal-available: false;
@@ -266,7 +270,7 @@ export component DiffViewerWindow inherits Window {
 
     terminal-monospace-probe := Text {
         text: "MMMMMMMMMM";
-        font-family: root.font-family;
+        font-family: root.terminal-font-family;
         font-size: root.terminal-font-size;
         visible: false;
         x: -10000px;
@@ -1065,11 +1069,14 @@ export component DiffViewerWindow inherits Window {
                                     height: root.terminal-cell-h;
                                     background: cell.bg;
                                     visible: cell.span > 0;
+                                    clip: true;
 
                                     Text {
+                                        width: parent.width;
+                                        height: parent.height;
                                         text: cell.ch;
                                         color: cell.fg;
-                                        font-family: root.font-family;
+                                        font-family: root.terminal-font-family;
                                         font-size: root.terminal-font-size;
                                         horizontal-alignment: left;
                                         vertical-alignment: center;
