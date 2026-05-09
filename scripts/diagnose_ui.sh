@@ -48,6 +48,8 @@
 #                             目視診断向け)
 #   --interaction NAME        起動後に注入する操作。複数回指定可。対応 NAME:
 #                             terminal-type / terminal-scroll
+#                             terminal-scroll は Python Quartz
+#                             (pyobjc-framework-Quartz) がある macOS で有効
 #   --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)
 #   --no-build                cargo build をスキップ (target/debug/locus 既存前提)
 #   -h, --help                このヘルプ
@@ -90,6 +92,8 @@ options:
                             リサイズ (例: 1280x720)
   --interaction NAME        起動後に注入する操作。複数回指定可。
                             NAME: terminal-type | terminal-scroll
+                            terminal-scroll requires Python Quartz
+                            (pyobjc-framework-Quartz) on macOS; otherwise skipped.
   --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)
   --no-build                cargo build をスキップ
   -h, --help                ヘルプ
