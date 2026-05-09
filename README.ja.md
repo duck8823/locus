@@ -98,6 +98,41 @@ Locus は **LLM を直接呼びません**。Terminal pane (`alacritty_terminal`
 - **`tree-sitter-go`** (最初の対象言語) — セマンティック diff
 - **`octocrab`** — GitHub PR snapshot
 
+## 診断 (LLM 向け)
+
+`scripts/diagnose_ui.sh` は LLM やオペレータが locus を実機で起動し、ログ・スクショ・perf trace を screen を見続けずに収集するためのハーネスです。`cargo build` を走らせてから `target/debug/locus` を `LOCUS_LOG=debug` + terminal cell debug grid を強制 ON で起動し、`--duration` 秒 (既定 `8`) スリープした後で `osascript` による対象プロセスの最前面化を best-effort で試み、`screencapture` が使える環境ならスクショを撮り、起動した PID のみを TERM → KILL で graceful 停止します。無関係なプロセスは触りません。
+
+```sh
+# terminal-only mode (内部 agent は sh)
+scripts/diagnose_ui.sh terminal --duration 6
+
+# 既存 PR を対象に diff viewer mode
+scripts/diagnose_ui.sh github duck8823/locus#236 --duration 10
+
+# terminal grid metric / フォントを切り替えて起動
+scripts/diagnose_ui.sh terminal \
+  --cell-w 8 --cell-h 18 \
+  --terminal-font-size 14 \
+  --font-family "SF Mono, Menlo, monospace"
+
+# 既存 build を流用する (cargo build をスキップ)
+scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/run-A
+```
+
+各実行は次のファイルを `--out-dir` (既定 `target/locus-diagnostics/<timestamp>/`) に書き出します:
+
+| ファイル | 内容 |
+|---|---|
+| `app.log` | `target/debug/locus` の stdout/stderr (build ノイズと混ざらない) |
+| `build.log` | `cargo build` の出力 (`--no-build` の場合は出ない) |
+| `command.txt` | 起動した argv と子プロセスに注入した環境変数 |
+| `env.txt` | スクリプト時点の環境変数スナップショット |
+| `perf_summary.txt` | `preview refreshed` / `terminal resized` / `pr session saved` / `linked issues fetched` / `initial hydrate ...` の grep カウントとマッチ行、加えて WARN/ERROR/panic の tail |
+| `screenshot.png` | 起動 N 秒後のデスクトップ (`screencapture` がある環境のみ) |
+| `report.json` | mode / command / env override / duration / exit status / screenshot/focus status / artifact paths / tool availability / notes |
+
+`cargo build` 失敗・binary 不在・locus が harness 停止より前に死んだ場合のいずれでも `report.json` を必ず書き出し、non-zero exit します (子プロセスの exit status が分かる場合はそれを伝播)。`--duration` 経過後に harness が TERM で停止させた正常 run のみ exit 0 です。
+
 ## このリポジトリの中身
 
 - `Cargo.toml` / `src/` / `ui/` / `build.rs` — Rust + Slint バイナリ
