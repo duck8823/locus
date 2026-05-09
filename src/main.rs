@@ -27,6 +27,7 @@ use slint::{ComponentHandle, SharedString};
 
 slint::include_modules!();
 
+mod app;
 mod config;
 mod github;
 mod i18n;
@@ -36,16 +37,20 @@ mod session;
 mod terminal;
 mod ui_state;
 
+use app::diff_viewer::state::{DiffAppState, HistoryEntry, ToastKind};
+
 use github::issue_context::{
     extract_linked_issue_numbers, fetch_issue_context_async, IssueContextRecord, IssueState,
 };
 use github::pull_request::{
     build_client, fetch_pr_snapshot, fetch_pull_requests, parse_pr_spec, PrListFilter,
-    PrListState, PullRequestFile, PullRequestSnapshot, PullRequestSummary,
+    PrListState, PullRequestSnapshot, PullRequestSummary,
 };
 use review::draft::{DraftEntry, PromptDraft, SendMode};
 use review::formatter::{format_prompt, FileSourceEntry};
-use review::selection::{Granularity, SelectionAnchor, Side};
+#[cfg(test)]
+use review::selection::Side;
+use review::selection::{Granularity, SelectionAnchor};
 use review::snapshot::FileId;
 use ui_state::diff_view::build_diff_file_views;
 use ui_state::draft_view::{anchor_label, build_draft_entry_views, side_from_line_kind};
@@ -139,174 +144,6 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.run()?;
     drop(pane);
     Ok(())
-}
-
-/// 送信履歴の 1 エントリ。セッション内にのみ保持される。
-#[derive(Debug, Clone)]
-struct HistoryEntry {
-    timestamp: String,
-    mode: SendMode,
-    anchors_label: String,
-    #[allow(dead_code)]
-    body: String,
-}
-
-/// Diff viewer mode 用の状態。Slint の複数コールバックから共有する。
-///
-/// `client` / `runtime` は live モードでのみ使う。テストでは make_state が
-/// None を入れ、PR 切替や issue fetch を呼ばないテストだけが実行可能。
-struct DiffAppState {
-    owner: String,
-    repo: String,
-    snapshot: PullRequestSnapshot,
-    draft: PromptDraft,
-    current_anchor: Option<SelectionAnchor>,
-    pending_range: bool,
-    history: Vec<HistoryEntry>,
-    client: Option<std::sync::Arc<octocrab::Octocrab>>,
-    runtime: Option<tokio::runtime::Handle>,
-    /// PR snapshot 切替の世代カウンタ。PR 切替と起動 hydrate で +1。
-    /// PR list filter とは独立して進める (filter 変更で snapshot 結果を
-    /// 破棄しないため)。
-    snapshot_generation: u64,
-    /// PR list filter の世代カウンタ。
-    list_generation: u64,
-    /// 表示中のトースト。new -> bottom 順 (UI 側 index で逆順表示)。
-    toasts: Vec<ToastEntry>,
-    next_toast_id: i32,
-    /// ファイル切替時に viewport-y を保存する HashMap (#230)。
-    /// key は selected-file-index、value は logical px。
-    scroll_positions: std::collections::HashMap<usize, f32>,
-}
-
-#[derive(Debug, Clone)]
-struct ToastEntry {
-    id: i32,
-    kind: ToastKind,
-    title: String,
-    message: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-enum ToastKind {
-    Error,
-    Warn,
-    Info,
-}
-
-impl ToastKind {
-    fn to_int(self) -> i32 {
-        match self {
-            ToastKind::Error => 0,
-            ToastKind::Warn => 1,
-            ToastKind::Info => 2,
-        }
-    }
-}
-
-impl DiffAppState {
-    fn file(&self, index: usize) -> Option<&PullRequestFile> {
-        self.snapshot.files.get(index)
-    }
-
-    fn set_anchor(&mut self, anchor: SelectionAnchor) {
-        self.current_anchor = Some(anchor);
-        self.pending_range = false;
-    }
-
-    fn start_range_mode(&mut self) {
-        // range モードは「すでに Line 選択がある状態」で Range への昇格を宣言する。
-        self.pending_range = true;
-    }
-
-    /// 現在の anchor と引数の line を使って Range 選択を作る。
-    ///
-    /// file_id を受け取り、現在の anchor と同じ file の場合にのみ Range 昇格する。
-    /// 別 file の行がクリックされた場合や、side が異なる場合、pending は解除して
-    /// anchor は変更しない。
-    fn complete_range(&mut self, file_id: &FileId, line: u32, side: Side) {
-        let Some(current) = self.current_anchor.clone() else {
-            self.pending_range = false;
-            return;
-        };
-        if current.file_id != *file_id {
-            // 別 file をクリックした場合は pending を解除してその行の Line 選択にする。
-            self.pending_range = false;
-            return;
-        }
-        let Granularity::Line {
-            line: start_line,
-            side: start_side,
-        } = current.granularity
-        else {
-            self.pending_range = false;
-            return;
-        };
-        if start_side != side {
-            self.pending_range = false;
-            return;
-        }
-        let (from, to) = if start_line <= line {
-            (start_line, line)
-        } else {
-            (line, start_line)
-        };
-        self.current_anchor = Some(SelectionAnchor {
-            file_id: current.file_id,
-            file_path: current.file_path,
-            granularity: Granularity::Range {
-                start_line: from,
-                end_line: to,
-                side,
-            },
-        });
-        self.pending_range = false;
-    }
-
-    /// 選択中のファイルが変わったとき、進行中の range 作成を解除する。
-    fn cancel_range_on_file_switch(&mut self) {
-        self.pending_range = false;
-    }
-
-    /// snapshot 切替の世代を進めて返す。
-    fn next_snapshot_generation(&mut self) -> u64 {
-        self.snapshot_generation = self.snapshot_generation.wrapping_add(1);
-        self.snapshot_generation
-    }
-
-    fn is_stale_snapshot(&self, captured: u64) -> bool {
-        captured != self.snapshot_generation
-    }
-
-    fn next_list_generation(&mut self) -> u64 {
-        self.list_generation = self.list_generation.wrapping_add(1);
-        self.list_generation
-    }
-
-    fn is_stale_list(&self, captured: u64) -> bool {
-        captured != self.list_generation
-    }
-
-    fn push_toast(&mut self, kind: ToastKind, title: String, message: String) -> i32 {
-        let id = self.next_toast_id;
-        self.next_toast_id = self.next_toast_id.wrapping_add(1);
-        self.toasts.push(ToastEntry {
-            id,
-            kind,
-            title,
-            message,
-        });
-        // 多すぎたら古い方から落とす
-        if self.toasts.len() > 5 {
-            self.toasts.remove(0);
-        }
-        id
-    }
-
-    fn dismiss_toast(&mut self, id: i32) {
-        self.toasts.retain(|t| t.id != id);
-    }
 }
 
 fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
