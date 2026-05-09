@@ -38,6 +38,9 @@ mod terminal;
 mod ui_state;
 
 use app::diff_viewer::state::{DiffAppState, HistoryEntry, ToastKind};
+use app::diff_viewer::util::{
+    current_hhmmss, excerpt, resolve_line_number, send_mode_label, short_sha,
+};
 
 use github::issue_context::{
     extract_linked_issue_numbers, fetch_issue_context_async, IssueContextRecord, IssueState,
@@ -1175,62 +1178,6 @@ fn append_history(state: &Rc<RefCell<DiffAppState>>, mode: SendMode, body: &str)
     });
 }
 
-fn send_mode_label(mode: SendMode) -> String {
-    let key = match mode {
-        SendMode::InsertOnly => "Insert",
-        SendMode::InsertAndSend => "Insert+Send",
-        SendMode::CopyToClipboard => "Copy",
-    };
-    i18n::tr(key)
-}
-
-fn current_hhmmss() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let h = (secs / 3600) % 24;
-    let m = (secs / 60) % 60;
-    let s = secs % 60;
-    format!("{h:02}:{m:02}:{s:02}")
-}
-
-fn resolve_line_number(line_kind: i32, old_no: &str, new_no: &str) -> u32 {
-    // Removed 行は old 側を、それ以外は new 側を優先する。
-    // number が取れなければ old→new→0 のフォールバックでゼロ埋め。
-    let prefer_old = line_kind == 2;
-    let a = if prefer_old { old_no } else { new_no };
-    let b = if prefer_old { new_no } else { old_no };
-    a.parse::<u32>()
-        .ok()
-        .or_else(|| b.parse::<u32>().ok())
-        .unwrap_or(0)
-}
-
-fn short_sha(sha: &str) -> String {
-    sha.chars().take(7).collect()
-}
-
-fn excerpt(body: &str, max_chars: usize) -> String {
-    let trimmed = body.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    // 最初の空行までを1段落として扱い、さらに長さを切り詰める
-    let first_paragraph = trimmed
-        .split("\n\n")
-        .next()
-        .unwrap_or("")
-        .replace('\n', " ");
-    if first_paragraph.chars().count() <= max_chars {
-        first_paragraph
-    } else {
-        let mut out: String = first_paragraph.chars().take(max_chars).collect();
-        out.push('…');
-        out
-    }
-}
 
 enum LinkedIssueDisplay {
     Found(IssueContextRecord),
@@ -1533,31 +1480,8 @@ mod tests {
         assert!(!st.pending_range);
     }
 
-    #[test]
-    fn resolve_line_number_prefers_old_for_removed() {
-        assert_eq!(resolve_line_number(2, "10", "11"), 10);
-    }
-
-    #[test]
-    fn resolve_line_number_prefers_new_for_added() {
-        assert_eq!(resolve_line_number(1, "10", "11"), 11);
-    }
-
-    #[test]
-    fn resolve_line_number_falls_back_to_other_side() {
-        assert_eq!(resolve_line_number(1, "10", ""), 10);
-        assert_eq!(resolve_line_number(2, "", "11"), 11);
-    }
-
-    #[test]
-    fn short_sha_truncates_to_seven_chars() {
-        assert_eq!(short_sha("abcdef1234567890"), "abcdef1");
-    }
-
-    #[test]
-    fn short_sha_of_short_input_is_itself() {
-        assert_eq!(short_sha("abc"), "abc");
-    }
+    // resolve_line_number / short_sha / excerpt 等の純粋関数テストは
+    // src/app/diff_viewer/util.rs に移動済み。
 
     // ===== Integration / flow tests (#233) =====
     //
