@@ -119,6 +119,9 @@ scripts/diagnose_ui.sh terminal \
 # Slint font probe を明示 opt-in して既定 fallback metric と比較
 scripts/diagnose_ui.sh github duck8823/locus#236 --probe-metrics --duration 10
 
+# front window を固定サイズに resize して min-size 目視診断のスクショを再現する (macOS)
+scripts/diagnose_ui.sh terminal --window-size 1280x720 --duration 6
+
 # 既存 build を流用する (cargo build をスキップ)
 scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/run-A
 ```
