@@ -1372,16 +1372,16 @@ if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
     # interaction latency を app.log と突き合わせられるよう、高速 render tick も
     # 診断時だけ出す。通常 run では従来通り slow/budget-hit のみ。
     ENV_VARS+=("LOCUS_DIAG_TRACE_RENDER_TICKS=true")
+    for _interaction in "${INTERACTIONS[@]}"; do
+        if [ "$_interaction" = "file-switch-next" ]; then
+            # app 側 single-shot timer が file-switch-requested callback を発火する。
+            # script 側 event start はこの timer の予定発火時刻に合わせる。
+            FILE_SWITCH_TRIGGER_OFFSET_MS=$((INTERACTION_DELAY * 1000))
+            ENV_VARS+=("LOCUS_DIAG_FILE_SWITCH_AFTER_MS=$FILE_SWITCH_TRIGGER_OFFSET_MS")
+        fi
+    done
+    unset _interaction
 fi
-for _interaction in "${INTERACTIONS[@]}"; do
-    if [ "$_interaction" = "file-switch-next" ]; then
-        # app 側 single-shot timer が file-switch-requested callback を発火する。
-        # script 側 event start はこの timer の予定発火時刻に合わせる。
-        FILE_SWITCH_TRIGGER_OFFSET_MS=$((INTERACTION_DELAY * 1000))
-        ENV_VARS+=("LOCUS_DIAG_FILE_SWITCH_AFTER_MS=$FILE_SWITCH_TRIGGER_OFFSET_MS")
-    fi
-done
-unset _interaction
 
 case "$MODE" in
     terminal) CMD_ARGS=("$BIN" "$AGENT_CMD") ;;
