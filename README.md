@@ -17,6 +17,12 @@
 
 Locus is a **local native application** for macOS, built in Rust + Slint, that hosts a GitHub PR diff viewer next to an embedded terminal running your agent CLI (Claude Code / Codex / Gemini). It is currently in a v0.0.x beta sprint stabilizing toward `v0.1: core review loop`.
 
+![locus diff viewer](docs/screenshots/diff-viewer.png)
+
+The diff pane on the left, the terminal pane on the bottom hosting an agent CLI, and the draft / history side panel on the right. A `cargo run` without arguments opens just the terminal pane:
+
+![locus terminal pane only](docs/screenshots/terminal-pane.png)
+
 The original Next.js web prototype is preserved on the [`legacy/nextjs`](https://github.com/duck8823/locus/tree/legacy/nextjs) branch.
 
 ## Quickstart
