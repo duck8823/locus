@@ -94,7 +94,8 @@ options:
                             NAME: terminal-type | terminal-scroll | file-switch-next
                             terminal-scroll requires Python Quartz
                             (pyobjc-framework-Quartz) on macOS; otherwise skipped.
-                            file-switch-next は app-side single-shot のため 1 回のみ指定可。
+                            file-switch-next は app-side single-shot のため
+                            1 回のみ、かつ単独指定のみ可。
   --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)。
                             --interaction 指定時は --duration 以下であること。
   --no-build                cargo build をスキップ
@@ -1148,6 +1149,9 @@ if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
             *) die "--interaction must be one of: terminal-type, terminal-scroll, file-switch-next (got: $_name)" ;;
         esac
     done
+    if [ "$_file_switch_count" -eq 1 ] && [ "${#INTERACTIONS[@]}" -gt 1 ]; then
+        die "--interaction file-switch-next must be used alone (app-side timer is armed from launch)"
+    fi
     unset _name _file_switch_count
 fi
 

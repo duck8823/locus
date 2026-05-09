@@ -142,7 +142,7 @@ scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/ru
 `terminal-type` は macOS System Events (`osascript`) を使います。
 `terminal-scroll` は Python の Quartz (`pyobjc-framework-Quartz`) を使います。
 `file-switch-next` は `github` mode で app 側の single-shot 診断 timer を arm するため、
-1 run につき 1 回だけ指定できます。interaction 指定時の `--interaction-delay` は
+1 run につき 1 回だけ、かつ単独で指定します。interaction 指定時の `--interaction-delay` は
 短時間 smoke 診断が指定時間を超えて待ち続けないよう `--duration` 以下に制限します。
 必要な tool / mode / 権限が無い場合でも harness 全体は失敗させず、
 interaction artifact に skipped / failed として記録します。
