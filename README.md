@@ -65,7 +65,8 @@ For GitHub access, locus reads tokens in this order:
 | `LOCUS_TERMINAL_FONT_FAMILY` | OS-specific (macOS: `SF Mono, Menlo, Monaco, Osaka-Mono, Hiragino Sans, Apple Symbols, Apple Color Emoji, monospace`) | Terminal-grid-only font fallback chain. Prefer monospace candidates first; useful when terminal glyphs or cell metrics look broken. |
 | `LOCUS_FONT_SIZE` | (unset) | Single override for both terminal and diff font sizes. |
 | `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | Terminal pane font size in logical pixels. |
-| `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | Slint font probe / fallback ratio | Manual terminal cell width/height override in logical pixels. Use for diagnosing glyph/cell metric mismatch. |
+| `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | fallback ratio (`font_size * 0.6` / `font_size * 1.45`) | Manual terminal cell width/height override in logical pixels. Always wins over both probe and fallback. Use for diagnosing glyph/cell metric mismatch. |
+| `LOCUS_TERMINAL_PROBE_METRICS` | `false` | `1`/`true`/`on`/`yes` to opt back into the Slint hidden-Text probe (`measured-terminal-cell-w/h`) for cell metrics. Default is off because the probe overestimates advance and underestimates line-height for SF Mono / Menlo on macOS, garbling terminal text (#292 / #289); the ratio fallback or `LOCUS_TERMINAL_CELL_W/H` override is used instead. |
 | `LOCUS_TERMINAL_DEBUG_GRID` | `false` | `1`/`true`/`on`/`yes` to draw thin grid lines at terminal cell boundaries so cell-vs-glyph mismatches are visible at a glance. Layout is unchanged. |
 | `LOCUS_DIFF_FONT_SIZE` | `12.0` | Diff pane font size in logical pixels. |
 | `LOCUS_BRACKETED_PASTE` | `true` | `false`/`0`/`off`/`no` to send raw bytes when the agent CLI does not understand `\x1b[200~ ... \x1b[201~`. |
@@ -114,6 +115,9 @@ scripts/diagnose_ui.sh terminal \
   --cell-w 8 --cell-h 18 \
   --terminal-font-size 14 \
   --font-family "SF Mono, Menlo, monospace"
+
+# opt into the Slint font probe to compare against the default fallback metrics
+scripts/diagnose_ui.sh github duck8823/locus#236 --probe-metrics --duration 10
 
 # reuse a previous build (skip cargo build)
 scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/run-A

@@ -35,6 +35,8 @@
 #                             (default ${LOCUS_AGENT_CMD:-sh})
 #   --debug-grid              LOCUS_TERMINAL_DEBUG_GRID=true を注入 (既定 on)
 #   --no-debug-grid           LOCUS_TERMINAL_DEBUG_GRID を注入しない
+#   --probe-metrics           LOCUS_TERMINAL_PROBE_METRICS=true を注入
+#   --no-probe-metrics        LOCUS_TERMINAL_PROBE_METRICS を注入しない (既定)
 #   --cell-w VALUE            LOCUS_TERMINAL_CELL_W override
 #   --cell-h VALUE            LOCUS_TERMINAL_CELL_H override
 #   --font-family VALUE       LOCUS_TERMINAL_FONT_FAMILY override
@@ -70,6 +72,8 @@ options:
                             (default ${LOCUS_AGENT_CMD:-sh})
   --debug-grid              LOCUS_TERMINAL_DEBUG_GRID=true (既定 on)
   --no-debug-grid           LOCUS_TERMINAL_DEBUG_GRID を注入しない
+  --probe-metrics           LOCUS_TERMINAL_PROBE_METRICS=true を注入
+  --no-probe-metrics        LOCUS_TERMINAL_PROBE_METRICS を注入しない (既定)
   --cell-w VALUE            LOCUS_TERMINAL_CELL_W override
   --cell-h VALUE            LOCUS_TERMINAL_CELL_H override
   --font-family VALUE       LOCUS_TERMINAL_FONT_FAMILY override
@@ -108,6 +112,7 @@ write_report_json() {
         REPORT_BUILD_STATUS="$BUILD_STATUS" \
         REPORT_NO_BUILD="$NO_BUILD" \
         REPORT_DEBUG_GRID="$DEBUG_GRID" \
+        REPORT_PROBE_METRICS="$PROBE_METRICS" \
         REPORT_CELL_W="$CELL_W" \
         REPORT_CELL_H="$CELL_H" \
         REPORT_FONT_FAMILY="$FONT_FAMILY" \
@@ -176,6 +181,7 @@ data = {
     },
     "options": {
         "debug_grid": env("REPORT_DEBUG_GRID") == "1",
+        "probe_metrics": env("REPORT_PROBE_METRICS") == "1",
         "cell_w": env("REPORT_CELL_W") or None,
         "cell_h": env("REPORT_CELL_H") or None,
         "font_family": env("REPORT_FONT_FAMILY") or None,
@@ -340,6 +346,7 @@ AGENT_CMD="${LOCUS_AGENT_CMD:-sh}"
 DURATION=8
 OUT_DIR=""
 DEBUG_GRID=1
+PROBE_METRICS=0
 CELL_W=""
 CELL_H=""
 FONT_FAMILY=""
@@ -400,6 +407,14 @@ while [ "$#" -gt 0 ]; do
             ;;
         --no-debug-grid)
             DEBUG_GRID=0
+            shift
+            ;;
+        --probe-metrics)
+            PROBE_METRICS=1
+            shift
+            ;;
+        --no-probe-metrics)
+            PROBE_METRICS=0
             shift
             ;;
         --cell-w)
@@ -486,6 +501,7 @@ command -v cargo >/dev/null 2>&1 && HAS_CARGO=1
     esac
     printf '\n# duration: %s seconds\n' "$DURATION"
     printf '# debug_grid: %s\n' "$DEBUG_GRID"
+    printf '# probe_metrics: %s\n' "$PROBE_METRICS"
     printf '# cell_w: %s\n' "$CELL_W"
     printf '# cell_h: %s\n' "$CELL_H"
     printf '# font_family: %s\n' "$FONT_FAMILY"
@@ -534,6 +550,9 @@ fi
 ENV_VARS=("LOCUS_LOG=debug")
 if [ "$DEBUG_GRID" -eq 1 ]; then
     ENV_VARS+=("LOCUS_TERMINAL_DEBUG_GRID=true")
+fi
+if [ "$PROBE_METRICS" -eq 1 ]; then
+    ENV_VARS+=("LOCUS_TERMINAL_PROBE_METRICS=true")
 fi
 [ -n "$CELL_W" ]              && ENV_VARS+=("LOCUS_TERMINAL_CELL_W=$CELL_W")
 [ -n "$CELL_H" ]              && ENV_VARS+=("LOCUS_TERMINAL_CELL_H=$CELL_H")

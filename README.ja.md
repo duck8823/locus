@@ -65,7 +65,8 @@ GitHub アクセス用 token は次の優先順位で解決されます:
 | `LOCUS_TERMINAL_FONT_FAMILY` | OS 別 (macOS: `SF Mono, Menlo, Monaco, Osaka-Mono, Hiragino Sans, Apple Symbols, Apple Color Emoji, monospace`) | terminal grid 専用のフォント fallback。等幅候補を優先し、terminal glyph や cell metrics が崩れる場合の切り分けに使う。 |
 | `LOCUS_FONT_SIZE` | (未設定) | terminal/diff 両方のフォントサイズを一括指定。 |
 | `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | terminal pane のフォントサイズ (logical px)。 |
-| `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | Slint font probe / 比率 fallback | terminal cell の幅/高さを logical px で手動上書きする。glyph と cell metric のズレを診断・強制同期する場合に使う。 |
+| `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | 比率 fallback (`font_size * 0.6` / `font_size * 1.45`) | terminal cell の幅/高さを logical px で手動上書きする。probe / fallback のいずれよりも優先。glyph と cell metric のズレを診断・強制同期する場合に使う。 |
+| `LOCUS_TERMINAL_PROBE_METRICS` | `false` | `1`/`true`/`on`/`yes` で Slint 隠し Text probe (`measured-terminal-cell-w/h`) を採用する。既定 false。macOS の SF Mono / Menlo では probe が advance を過大・行高を過小に返し、terminal テキストが崩れる事象 (#292 / #289) があるため、既定では比率 fallback または `LOCUS_TERMINAL_CELL_W/H` による手動 override を採用する。 |
 | `LOCUS_TERMINAL_DEBUG_GRID` | `false` | `1`/`true`/`on`/`yes` で terminal の各 cell 境界に薄い grid line を描画して cell と glyph のズレを実機で視覚 trace するための debug overlay。レイアウトは変わらない。 |
 | `LOCUS_DIFF_FONT_SIZE` | `12.0` | diff pane のフォントサイズ (logical px)。 |
 | `LOCUS_BRACKETED_PASTE` | `true` | `false`/`0`/`off`/`no` で paste 境界 sequence (`\x1b[200~ ... \x1b[201~`) を使わずに raw 送信。 |
@@ -114,6 +115,9 @@ scripts/diagnose_ui.sh terminal \
   --cell-w 8 --cell-h 18 \
   --terminal-font-size 14 \
   --font-family "SF Mono, Menlo, monospace"
+
+# Slint font probe を明示 opt-in して既定 fallback metric と比較
+scripts/diagnose_ui.sh github duck8823/locus#236 --probe-metrics --duration 10
 
 # 既存 build を流用する (cargo build をスキップ)
 scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/run-A

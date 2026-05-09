@@ -17,6 +17,13 @@ pub struct UiConfig {
     /// 崩れる場合に `LOCUS_TERMINAL_CELL_W/H` で grid と glyph を強制同期する。
     pub terminal_cell_w_override: Option<f32>,
     pub terminal_cell_h_override: Option<f32>,
+    /// Slint 隠し Text probe (`measured-terminal-cell-w/h`) の値を採用するか。
+    /// 既定 false: 比率 fallback (`terminal_cell_w()` / `terminal_cell_h()`) を
+    /// 優先する。macOS の SF Mono / Menlo では probe が advance を過大、行高を
+    /// 過小に返し、結果として grid と glyph がズレる事象 (#292 / #289) を観測
+    /// したため、`LOCUS_TERMINAL_PROBE_METRICS=true` を明示しない限り probe を
+    /// 信用しない。手動 override (`LOCUS_TERMINAL_CELL_W/H`) は常に最優先。
+    pub terminal_probe_metrics: bool,
     /// PromptDraft を PTY に流し込む際に bracketed paste mode で囲うかどうか。
     /// 非対応 shell / agent CLI では `\x1b[200~` 等が文字としてそのまま表示
     /// されるため、`LOCUS_BRACKETED_PASTE=false` で raw 送信に切り替えられる。
@@ -61,14 +68,15 @@ impl UiConfig {
         let prompt_max_chars =
             parse_prompt_max_chars_env(std::env::var("LOCUS_PROMPT_MAX_CHARS").ok().as_deref());
         let confirm_send =
-            parse_confirm_send_env(std::env::var("LOCUS_CONFIRM_SEND").ok().as_deref());
+            parse_bool_env(std::env::var("LOCUS_CONFIRM_SEND").ok().as_deref());
         let terminal_cell_w_override =
             parse_positive_f32_env(std::env::var("LOCUS_TERMINAL_CELL_W").ok().as_deref());
         let terminal_cell_h_override =
             parse_positive_f32_env(std::env::var("LOCUS_TERMINAL_CELL_H").ok().as_deref());
-        let terminal_debug_grid = parse_terminal_debug_grid_env(
-            std::env::var("LOCUS_TERMINAL_DEBUG_GRID").ok().as_deref(),
-        );
+        let terminal_debug_grid =
+            parse_bool_env(std::env::var("LOCUS_TERMINAL_DEBUG_GRID").ok().as_deref());
+        let terminal_probe_metrics =
+            parse_bool_env(std::env::var("LOCUS_TERMINAL_PROBE_METRICS").ok().as_deref());
         Self {
             font_family,
             terminal_font_family,
@@ -76,6 +84,7 @@ impl UiConfig {
             diff_font_size,
             terminal_cell_w_override,
             terminal_cell_h_override,
+            terminal_probe_metrics,
             bracketed_paste,
             prompt_max_chars,
             confirm_send,
@@ -84,12 +93,13 @@ impl UiConfig {
     }
 
     /// monospace の典型的な比率 (advance ≈ 0.6 em, line height ≈ 1.45 em)
-    /// から cell width/height をピクセルに変換する暫定値。
+    /// から cell width/height をピクセルに変換する既定値。
     ///
-    /// 起動直後の Slint layout が settling していない短時間 (probe Text の
-    /// `preferred-width` / `preferred-height` がまだ 0) に fallback として
-    /// 使われる。実 glyph metric は `terminal-resized` callback 経由で
-    /// `measured-terminal-cell-w` / `measured-terminal-cell-h` から取得する。
+    /// 既定では `terminal_cell_w_from_measurement` 経由でこの比率値が採用される
+    /// (Slint 側 `measured-terminal-cell-w/h` probe は #292 / #289 の再現を
+    /// 避けるため既定 off)。`LOCUS_TERMINAL_CELL_W/H` の手動 override がある
+    /// 場合はそちらが優先され、`LOCUS_TERMINAL_PROBE_METRICS=true` を opt-in
+    /// したときだけ probe 値が採用される。
     pub fn terminal_cell_w(&self) -> f32 {
         self.terminal_cell_w_override
             .unwrap_or_else(|| (self.terminal_font_size * 0.6).round().max(4.0))
@@ -102,25 +112,49 @@ impl UiConfig {
 
     /// Slint の probe から得た cell metric を実際に採用する値へ解決する。
     ///
-    /// 手動 override がある場合は実測値より優先する。override が無い場合は
-    /// 正の有限な実測値を使い、未測定 / 異常値なら従来の比率 fallback を使う。
+    /// 優先順位は: 手動 override (`LOCUS_TERMINAL_CELL_W/H`) > probe (有効時のみ) >
+    /// 比率 fallback。probe は既定で無効化されており、`terminal_probe_metrics`
+    /// が true で、かつ実測値が正の有限値の場合だけ採用する。macOS では
+    /// `MMMMMMMMMM` の `preferred-width` が advance を過大、`preferred-height`
+    /// が行高を過小に返すケース (#292 / #289) があり、既定で信用すると grid と
+    /// glyph がズレるため。
     pub fn terminal_cell_w_from_measurement(&self, measured: f32) -> f32 {
         if let Some(cell_w) = self.terminal_cell_w_override {
-            cell_w
-        } else if measured.is_finite() && measured > 0.0 {
-            measured
-        } else {
-            self.terminal_cell_w()
+            return cell_w;
         }
+        if self.terminal_probe_metrics && measured.is_finite() && measured > 0.0 {
+            return measured;
+        }
+        self.terminal_cell_w()
     }
 
     pub fn terminal_cell_h_from_measurement(&self, measured: f32) -> f32 {
         if let Some(cell_h) = self.terminal_cell_h_override {
-            cell_h
-        } else if measured.is_finite() && measured > 0.0 {
-            measured
+            return cell_h;
+        }
+        if self.terminal_probe_metrics && measured.is_finite() && measured > 0.0 {
+            return measured;
+        }
+        self.terminal_cell_h()
+    }
+
+    pub fn terminal_cell_w_source(&self, measured: f32) -> &'static str {
+        if self.terminal_cell_w_override.is_some() {
+            "override"
+        } else if self.terminal_probe_metrics && measured.is_finite() && measured > 0.0 {
+            "probe"
         } else {
-            self.terminal_cell_h()
+            "fallback"
+        }
+    }
+
+    pub fn terminal_cell_h_source(&self, measured: f32) -> &'static str {
+        if self.terminal_cell_h_override.is_some() {
+            "override"
+        } else if self.terminal_probe_metrics && measured.is_finite() && measured > 0.0 {
+            "probe"
+        } else {
+            "fallback"
         }
     }
 }
@@ -190,24 +224,20 @@ pub fn parse_bracketed_paste_env(value: Option<&str>) -> bool {
     }
 }
 
-/// `LOCUS_CONFIRM_SEND` の値で Insert+Send 確認 checkbox を要求するかどうか。
-///
-/// - 未設定 / 空 / 不明値 / `0` / `false` / `off` / `no` → false (既定)
-/// - `1` / `true` / `on` / `yes` → true
-pub fn parse_confirm_send_env(value: Option<&str>) -> bool {
-    match value.map(|s| s.trim().to_ascii_lowercase()) {
-        Some(v) => matches!(v.as_str(), "1" | "true" | "on" | "yes"),
-        None => false,
-    }
-}
-
-/// `LOCUS_TERMINAL_DEBUG_GRID` で terminal cell metric の debug overlay を出すか。
+/// fail-closed な真偽値環境変数の共通 parser。
 ///
 /// - 未設定 / 空 / 不明値 / `0` / `false` / `off` / `no` → false (既定)
 /// - `1` / `true` / `on` / `yes` → true
 ///
-/// 既定挙動を変えないため fail-closed 側にしている (`confirm_send` と同じ規則)。
-pub fn parse_terminal_debug_grid_env(value: Option<&str>) -> bool {
+/// `LOCUS_CONFIRM_SEND` (Insert+Send 確認 checkbox の opt-in)、
+/// `LOCUS_TERMINAL_DEBUG_GRID` (terminal cell metric の debug overlay)、
+/// `LOCUS_TERMINAL_PROBE_METRICS` (Slint 隠し Text probe の opt-in) など、
+/// 「明示的に有効化されたときだけ既定挙動を変える」フラグで使う。
+/// `LOCUS_TERMINAL_PROBE_METRICS` は macOS で probe (`preferred-width` /
+/// `preferred-height`) が SF Mono / Menlo 系の幅を過大・行高を過小に返し
+/// cell と glyph がズレる #292 / #289 を避けるため、既定 false で比率
+/// fallback を信用する設計になっている。
+pub fn parse_bool_env(value: Option<&str>) -> bool {
     match value.map(|s| s.trim().to_ascii_lowercase()) {
         Some(v) => matches!(v.as_str(), "1" | "true" | "on" | "yes"),
         None => false,
@@ -236,50 +266,33 @@ pub fn parse_prompt_max_chars_env(value: Option<&str>) -> usize {
 mod tests {
     use super::*;
 
-    #[test]
-    fn default_metrics_are_reasonable() {
-        let cfg = UiConfig {
+    fn fixture(font_size: f32) -> UiConfig {
+        UiConfig {
             font_family: "test".into(),
             terminal_font_family: "test-mono".into(),
-            terminal_font_size: 12.0,
-            diff_font_size: 12.0,
+            terminal_font_size: font_size,
+            diff_font_size: font_size,
             terminal_cell_w_override: None,
             terminal_cell_h_override: None,
+            terminal_probe_metrics: false,
             bracketed_paste: true,
             prompt_max_chars: 32_000,
             confirm_send: false,
             terminal_debug_grid: false,
-        };
+        }
+    }
+
+    #[test]
+    fn default_metrics_are_reasonable() {
+        let cfg = fixture(12.0);
         assert!(cfg.terminal_cell_w() >= 6.0);
         assert!(cfg.terminal_cell_h() >= 14.0);
     }
 
     #[test]
     fn cell_metrics_scale_with_font_size() {
-        let small = UiConfig {
-            font_family: "x".into(),
-            terminal_font_family: "x-mono".into(),
-            terminal_font_size: 10.0,
-            diff_font_size: 10.0,
-            terminal_cell_w_override: None,
-            terminal_cell_h_override: None,
-            bracketed_paste: true,
-            prompt_max_chars: 32_000,
-            confirm_send: false,
-            terminal_debug_grid: false,
-        };
-        let big = UiConfig {
-            font_family: "x".into(),
-            terminal_font_family: "x-mono".into(),
-            terminal_font_size: 20.0,
-            diff_font_size: 20.0,
-            terminal_cell_w_override: None,
-            terminal_cell_h_override: None,
-            bracketed_paste: true,
-            prompt_max_chars: 32_000,
-            confirm_send: false,
-            terminal_debug_grid: false,
-        };
+        let small = fixture(10.0);
+        let big = fixture(20.0);
         assert!(big.terminal_cell_w() > small.terminal_cell_w());
         assert!(big.terminal_cell_h() > small.terminal_cell_h());
     }
@@ -302,27 +315,6 @@ mod tests {
     fn bracketed_paste_explicit_on() {
         for v in ["1", "true", "True", "on", "yes"] {
             assert!(parse_bracketed_paste_env(Some(v)));
-        }
-    }
-
-    #[test]
-    fn confirm_send_default_off() {
-        assert!(!parse_confirm_send_env(None));
-        assert!(!parse_confirm_send_env(Some("")));
-        assert!(!parse_confirm_send_env(Some("garbage")));
-    }
-
-    #[test]
-    fn confirm_send_explicit_on() {
-        for v in ["1", "true", "True", "on", "yes", "ON"] {
-            assert!(parse_confirm_send_env(Some(v)));
-        }
-    }
-
-    #[test]
-    fn confirm_send_explicit_off() {
-        for v in ["0", "false", "off", "no"] {
-            assert!(!parse_confirm_send_env(Some(v)));
         }
     }
 
@@ -362,18 +354,10 @@ mod tests {
 
     #[test]
     fn manual_terminal_cell_metrics_override_probe_values() {
-        let cfg = UiConfig {
-            font_family: "x".into(),
-            terminal_font_family: "x-mono".into(),
-            terminal_font_size: 13.0,
-            diff_font_size: 12.0,
-            terminal_cell_w_override: Some(9.5),
-            terminal_cell_h_override: Some(18.5),
-            bracketed_paste: true,
-            prompt_max_chars: 32_000,
-            confirm_send: false,
-            terminal_debug_grid: false,
-        };
+        let mut cfg = fixture(13.0);
+        cfg.terminal_cell_w_override = Some(9.5);
+        cfg.terminal_cell_h_override = Some(18.5);
+        cfg.terminal_probe_metrics = true; // probe 有効でも override が最優先
         assert_eq!(cfg.terminal_cell_w(), 9.5);
         assert_eq!(cfg.terminal_cell_h(), 18.5);
         assert_eq!(cfg.terminal_cell_w_from_measurement(7.0), 9.5);
@@ -381,42 +365,76 @@ mod tests {
     }
 
     #[test]
-    fn terminal_debug_grid_default_off() {
-        assert!(!parse_terminal_debug_grid_env(None));
-        assert!(!parse_terminal_debug_grid_env(Some("")));
-        assert!(!parse_terminal_debug_grid_env(Some("garbage")));
+    fn bool_env_default_off() {
+        assert!(!parse_bool_env(None));
+        assert!(!parse_bool_env(Some("")));
+        assert!(!parse_bool_env(Some("garbage")));
     }
 
     #[test]
-    fn terminal_debug_grid_explicit_on() {
+    fn bool_env_explicit_on() {
         for v in ["1", "true", "True", "on", "yes", "ON", "  YES  "] {
-            assert!(parse_terminal_debug_grid_env(Some(v)));
+            assert!(parse_bool_env(Some(v)));
         }
     }
 
     #[test]
-    fn terminal_debug_grid_explicit_off() {
+    fn bool_env_explicit_off() {
         for v in ["0", "false", "off", "no", "False"] {
-            assert!(!parse_terminal_debug_grid_env(Some(v)));
+            assert!(!parse_bool_env(Some(v)));
         }
     }
 
     #[test]
-    fn measured_terminal_cell_metrics_win_without_manual_override() {
-        let cfg = UiConfig {
-            font_family: "x".into(),
-            terminal_font_family: "x-mono".into(),
-            terminal_font_size: 13.0,
-            diff_font_size: 12.0,
-            terminal_cell_w_override: None,
-            terminal_cell_h_override: None,
-            bracketed_paste: true,
-            prompt_max_chars: 32_000,
-            confirm_send: false,
-            terminal_debug_grid: false,
-        };
+    fn default_ignores_probe_metrics_and_uses_ratio_fallback() {
+        // 既定 (probe 無効) では実測値が「妥当そう」でも採用しない。これは macOS で
+        // probe 値が glyph と grid をズラす #292 / #289 の再現を回避するため。
+        let cfg = fixture(13.0);
+        assert!(!cfg.terminal_probe_metrics);
+
+        // 同じ font_size で probe が advance を過大 (10.9) 行高を過小 (13.0) に
+        // 返した実機ログ (#292 baseline) を入れても fallback ratio で解決される。
+        assert_eq!(
+            cfg.terminal_cell_w_from_measurement(10.9),
+            cfg.terminal_cell_w()
+        );
+        assert_eq!(
+            cfg.terminal_cell_h_from_measurement(13.0),
+            cfg.terminal_cell_h()
+        );
+        // 一見妥当そうな値も既定では信用しない
+        assert_eq!(
+            cfg.terminal_cell_w_from_measurement(7.25),
+            cfg.terminal_cell_w()
+        );
+        assert_eq!(
+            cfg.terminal_cell_h_from_measurement(18.5),
+            cfg.terminal_cell_h()
+        );
+        // pathological も従来同様 fallback
+        assert_eq!(
+            cfg.terminal_cell_w_from_measurement(0.0),
+            cfg.terminal_cell_w()
+        );
+        assert_eq!(
+            cfg.terminal_cell_h_from_measurement(f32::NAN),
+            cfg.terminal_cell_h()
+        );
+        assert_eq!(cfg.terminal_cell_w_source(10.9), "fallback");
+        assert_eq!(cfg.terminal_cell_h_source(13.0), "fallback");
+    }
+
+    #[test]
+    fn opt_in_probe_metrics_use_measured_values() {
+        // `LOCUS_TERMINAL_PROBE_METRICS=true` 相当: 旧挙動を opt-in できる。
+        let mut cfg = fixture(13.0);
+        cfg.terminal_probe_metrics = true;
+
         assert_eq!(cfg.terminal_cell_w_from_measurement(7.25), 7.25);
         assert_eq!(cfg.terminal_cell_h_from_measurement(15.75), 15.75);
+        assert_eq!(cfg.terminal_cell_w_source(7.25), "probe");
+        assert_eq!(cfg.terminal_cell_h_source(15.75), "probe");
+        // 異常値 (0 / NaN) は probe 有効でも fallback に倒す
         assert_eq!(
             cfg.terminal_cell_w_from_measurement(0.0),
             cfg.terminal_cell_w()
@@ -426,4 +444,20 @@ mod tests {
             cfg.terminal_cell_h()
         );
     }
+
+    #[test]
+    fn manual_override_beats_probe_opt_in() {
+        // override + probe 有効 でも override が最優先。診断時に
+        // `LOCUS_TERMINAL_CELL_W/H` を強制値として使う運用を保証する。
+        let mut cfg = fixture(13.0);
+        cfg.terminal_cell_w_override = Some(8.0);
+        cfg.terminal_cell_h_override = Some(19.0);
+        cfg.terminal_probe_metrics = true;
+
+        assert_eq!(cfg.terminal_cell_w_from_measurement(10.9), 8.0);
+        assert_eq!(cfg.terminal_cell_h_from_measurement(13.0), 19.0);
+        assert_eq!(cfg.terminal_cell_w_source(10.9), "override");
+        assert_eq!(cfg.terminal_cell_h_source(13.0), "override");
+    }
+
 }
