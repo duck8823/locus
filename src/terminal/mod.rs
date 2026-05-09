@@ -9,7 +9,7 @@
 use std::cell::{Cell, RefCell};
 use std::io::{Read, Write};
 use std::rc::Rc;
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -18,7 +18,7 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::{Config, Term, TermDamage};
 use alacritty_terminal::vte::ansi::{Processor, StdSyncHandler};
-use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui_state::{build_row, empty_row};
@@ -432,6 +432,9 @@ fn start_render_timer(
 ) -> slint::Timer {
     let timer = slint::Timer::default();
     let deferred_since: Cell<Option<Instant>> = Cell::new(None);
+    let trace_all_render_ticks = std::env::var("LOCUS_DIAG_TRACE_RENDER_TICKS")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
     timer.start(
         slint::TimerMode::Repeated,
         Duration::from_millis(16),
@@ -518,7 +521,8 @@ fn start_render_timer(
                     drop(term_guard);
 
                     let elapsed = tick_start.elapsed();
-                    if budget_hit || elapsed >= RENDER_SLOW_TICK_THRESHOLD {
+                    if trace_all_render_ticks || budget_hit || elapsed >= RENDER_SLOW_TICK_THRESHOLD
+                    {
                         tracing::debug!(
                             chunks,
                             bytes,
@@ -773,9 +777,9 @@ fn sanitize_for_pty(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_grid_size, decide_idle_action, decide_render_action, drain_with_budget,
-        encode_paste_bytes, sanitize_for_pty, translate_key, IdleTickAction, PaintDecision,
-        RenderBudget, MIN_COLS, MIN_ROWS,
+        IdleTickAction, MIN_COLS, MIN_ROWS, PaintDecision, RenderBudget, compute_grid_size,
+        decide_idle_action, decide_render_action, drain_with_budget, encode_paste_bytes,
+        sanitize_for_pty, translate_key,
     };
     use std::sync::mpsc::sync_channel;
     use std::time::{Duration, Instant};

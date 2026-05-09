@@ -7,9 +7,9 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, Model, SharedString};
 
 slint::include_modules!();
 
@@ -154,6 +154,51 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.run()?;
     drop(pane);
     Ok(())
+}
+
+fn schedule_diagnostic_file_switch(ui: &DiffViewerWindow, delay: Duration, attempts_left: u8) {
+    let ui_weak = ui.as_weak();
+    slint::Timer::single_shot(delay, move || {
+        let Some(ui) = ui_weak.upgrade() else { return };
+        let files = ui.get_files();
+        let count = files.row_count();
+        if count <= 1 {
+            if attempts_left > 0 {
+                schedule_diagnostic_file_switch(
+                    &ui,
+                    Duration::from_millis(250),
+                    attempts_left - 1,
+                );
+            } else {
+                tracing::debug!(files = count, "diagnostic file switch skipped");
+            }
+            return;
+        }
+
+        let current = ui.get_selected_file_index().max(0);
+        let next = if (current as usize) + 1 < count {
+            current + 1
+        } else {
+            0
+        };
+        tracing::debug!(
+            from = current,
+            to = next,
+            files = count,
+            "diagnostic file switch requested"
+        );
+        ui.invoke_file_switch_requested(next);
+    });
+}
+
+fn schedule_diagnostic_interactions(ui: &DiffViewerWindow) {
+    let Some(delay_ms) = std::env::var("LOCUS_DIAG_FILE_SWITCH_AFTER_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+    else {
+        return;
+    };
+    schedule_diagnostic_file_switch(ui, Duration::from_millis(delay_ms), 20);
 }
 
 fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -500,6 +545,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         let repo = repo.clone();
         ui.on_file_switch_requested(move |new_idx| {
             let Some(ui) = ui_weak.upgrade() else { return };
+            let started = Instant::now();
             let old_idx = ui.get_selected_file_index() as usize;
             let cur_scroll = ui.get_diff_scroll_y();
             state.borrow_mut().scroll_positions.insert(old_idx, cur_scroll);
@@ -518,6 +564,14 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             save_pr_session(&owner, &repo, &state.borrow(), &ui);
 
             ui.invoke_file_switched(new_idx);
+            tracing::debug!(
+                old_idx,
+                new_idx,
+                saved_scroll = cur_scroll,
+                restored_scroll = restore,
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "file switch requested"
+            );
         });
     }
 
@@ -960,6 +1014,8 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             },
         );
     }
+
+    schedule_diagnostic_interactions(&ui);
 
     ui.run()?;
     drop(position_save_timer);

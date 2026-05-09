@@ -47,7 +47,7 @@
 #                             リサイズして再現スクショを撮る (#290 等の min-size
 #                             目視診断向け)
 #   --interaction NAME        起動後に注入する操作。複数回指定可。対応 NAME:
-#                             terminal-type / terminal-scroll
+#                             terminal-type / terminal-scroll / file-switch-next
 #                             terminal-scroll は Python Quartz
 #                             (pyobjc-framework-Quartz) がある macOS で有効
 #   --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)
@@ -91,7 +91,7 @@ options:
   --window-size WxH         macOS で起動後に front window を WIDTHxHEIGHT に
                             リサイズ (例: 1280x720)
   --interaction NAME        起動後に注入する操作。複数回指定可。
-                            NAME: terminal-type | terminal-scroll
+                            NAME: terminal-type | terminal-scroll | file-switch-next
                             terminal-scroll requires Python Quartz
                             (pyobjc-framework-Quartz) on macOS; otherwise skipped.
   --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)
@@ -566,14 +566,15 @@ emit_event() {
 inject_terminal_type() {
     local idx="$1"
     local start_ms
-    start_ms="$(unix_ms)"
 
     if [ -z "${APP_PID:-}" ] || ! kill -0 "$APP_PID" 2>/dev/null; then
+        start_ms="$(unix_ms)"
         emit_event "skipped" "terminal-type" "$idx" \
             "start_unix_ms=$start_ms" "reason=app_not_running"
         return
     fi
     if [ "${HAS_OSASCRIPT:-0}" -ne 1 ]; then
+        start_ms="$(unix_ms)"
         emit_event "skipped" "terminal-type" "$idx" \
             "start_unix_ms=$start_ms" "reason=no_osascript"
         return
@@ -583,15 +584,26 @@ inject_terminal_type() {
     # 出す。注入文字列そのものは ここの interaction_events にだけ書き、app.log
     # には keystroke の結果として bytes_len のみが流れる。
     local payload="locus-diagnostic-input"
+
+    if ! osascript \
+        -e "tell application \"System Events\"" \
+        -e "    tell (first application process whose unix id is $APP_PID)" \
+        -e "        set frontmost to true" \
+        -e "    end tell" \
+        -e "end tell" >/dev/null 2>&1; then
+        start_ms="$(unix_ms)"
+        emit_event "failed" "terminal-type" "$idx" \
+            "start_unix_ms=$start_ms" "reason=osascript_focus_failed"
+        return
+    fi
+    sleep 0.2
+
+    start_ms="$(unix_ms)"
     emit_event "start" "terminal-type" "$idx" \
         "start_unix_ms=$start_ms" "detail=type '$payload' + return"
 
     if osascript \
         -e "tell application \"System Events\"" \
-        -e "    tell (first application process whose unix id is $APP_PID)" \
-        -e "        set frontmost to true" \
-        -e "    end tell" \
-        -e "    delay 0.2" \
         -e "    keystroke \"$payload\"" \
         -e "    key code 36" \
         -e "end tell" >/dev/null 2>&1; then
@@ -609,14 +621,15 @@ inject_terminal_type() {
 inject_terminal_scroll() {
     local idx="$1"
     local start_ms
-    start_ms="$(unix_ms)"
 
     if [ -z "${APP_PID:-}" ] || ! kill -0 "$APP_PID" 2>/dev/null; then
+        start_ms="$(unix_ms)"
         emit_event "skipped" "terminal-scroll" "$idx" \
             "start_unix_ms=$start_ms" "reason=app_not_running"
         return
     fi
     if [ -z "${HAS_PYTHON3_BIN:-}" ]; then
+        start_ms="$(unix_ms)"
         emit_event "skipped" "terminal-scroll" "$idx" \
             "start_unix_ms=$start_ms" "reason=no_python3"
         return
@@ -631,6 +644,7 @@ inject_terminal_scroll() {
         sleep 0.2
     fi
 
+    start_ms="$(unix_ms)"
     emit_event "start" "terminal-scroll" "$idx" \
         "start_unix_ms=$start_ms" "detail=post 6 scroll wheel events (line, dy=-3)"
 
@@ -668,6 +682,29 @@ PY
     esac
 }
 
+inject_file_switch_next() {
+    local idx="$1"
+    local start_ms
+    start_ms="$(unix_ms)"
+
+    if [ "$MODE" != "github" ]; then
+        emit_event "skipped" "file-switch-next" "$idx" \
+            "start_unix_ms=$start_ms" "reason=requires_github_mode"
+        return
+    fi
+    if [ -z "${APP_PID:-}" ] || ! kill -0 "$APP_PID" 2>/dev/null; then
+        emit_event "skipped" "file-switch-next" "$idx" \
+            "start_unix_ms=$start_ms" "reason=app_not_running"
+        return
+    fi
+
+    emit_event "start" "file-switch-next" "$idx" \
+        "start_unix_ms=$start_ms" "detail=app-side diagnostic timer requests next file"
+    emit_event "done" "file-switch-next" "$idx" \
+        "start_unix_ms=$start_ms" "end_unix_ms=$(unix_ms)" \
+        "detail=armed via LOCUS_DIAG_FILE_SWITCH_AFTER_MS"
+}
+
 run_interactions() {
     [ "${#INTERACTIONS[@]}" -gt 0 ] || return
     local i=0 name
@@ -675,6 +712,7 @@ run_interactions() {
         case "$name" in
             terminal-type)   inject_terminal_type "$i" ;;
             terminal-scroll) inject_terminal_scroll "$i" ;;
+            file-switch-next) inject_file_switch_next "$i" ;;
             *)
                 # 未対応 NAME は parse 段階で die しているため到達しないが
                 # 防衛的に残す。
@@ -737,6 +775,7 @@ def parse_ts(ts):
 
 forwarded = []
 render_hits = []
+file_switch_hits = []
 if app_log and os.path.exists(app_log):
     with open(app_log, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
@@ -750,6 +789,8 @@ if app_log and os.path.exists(app_log):
                 forwarded.append(ums)
             if "terminal render tick" in line or "terminal render idle flush" in line:
                 render_hits.append(ums)
+            if "file switch requested" in line:
+                file_switch_hits.append(ums)
 
 def first_after(items, threshold):
     for ums in items:
@@ -816,6 +857,11 @@ for a in agg.values():
         if hit is not None:
             a["latency_ms"] = hit - start
             a["match_keyword"] = "terminal render tick|terminal render idle flush"
+    elif a["name"] == "file-switch-next":
+        hit = first_after(file_switch_hits, start)
+        if hit is not None:
+            a["latency_ms"] = hit - start
+            a["match_keyword"] = "file switch requested"
 
 ordered = [agg[k] for k in sorted(agg.keys())]
 events_total = len(ordered)
@@ -970,7 +1016,7 @@ while [ "$#" -gt 0 ]; do
             ;;
         --interaction)
             shift
-            [ "$#" -gt 0 ] || die "--interaction requires a value (terminal-type | terminal-scroll)"
+            [ "$#" -gt 0 ] || die "--interaction requires a value (terminal-type | terminal-scroll | file-switch-next)"
             INTERACTIONS+=("$1")
             shift
             ;;
@@ -1005,8 +1051,8 @@ esac
 if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
     for _name in "${INTERACTIONS[@]}"; do
         case "$_name" in
-            terminal-type|terminal-scroll) ;;
-            *) die "--interaction must be one of: terminal-type, terminal-scroll (got: $_name)" ;;
+            terminal-type|terminal-scroll|file-switch-next) ;;
+            *) die "--interaction must be one of: terminal-type, terminal-scroll, file-switch-next (got: $_name)" ;;
         esac
     done
     unset _name
@@ -1142,6 +1188,19 @@ fi
 [ -n "$CELL_H" ]              && ENV_VARS+=("LOCUS_TERMINAL_CELL_H=$CELL_H")
 [ -n "$FONT_FAMILY" ]         && ENV_VARS+=("LOCUS_TERMINAL_FONT_FAMILY=$FONT_FAMILY")
 [ -n "$TERMINAL_FONT_SIZE" ]  && ENV_VARS+=("LOCUS_TERMINAL_FONT_SIZE=$TERMINAL_FONT_SIZE")
+if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
+    # interaction latency を app.log と突き合わせられるよう、高速 render tick も
+    # 診断時だけ出す。通常 run では従来通り slow/budget-hit のみ。
+    ENV_VARS+=("LOCUS_DIAG_TRACE_RENDER_TICKS=true")
+fi
+for _interaction in "${INTERACTIONS[@]}"; do
+    if [ "$_interaction" = "file-switch-next" ]; then
+        # app 側 single-shot timer が file-switch-requested callback を発火する。
+        # script 側 event start よりわずかに後に出るよう +250ms しておく。
+        ENV_VARS+=("LOCUS_DIAG_FILE_SWITCH_AFTER_MS=$((INTERACTION_DELAY * 1000 + 250))")
+    fi
+done
+unset _interaction
 
 case "$MODE" in
     terminal) CMD_ARGS=("$BIN" "$AGENT_CMD") ;;
@@ -1288,6 +1347,8 @@ esac
         "terminal input forwarded" \
         "terminal render tick" \
         "terminal render idle flush" \
+        "file switch requested" \
+        "diagnostic file switch" \
         "window session saved" \
         "pr session saved" \
         "pr switch fetch completed" \
@@ -1306,7 +1367,7 @@ esac
     printf '\n'
     printf '== matched lines ==\n'
     if [ -f "$APP_LOG" ]; then
-        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal render tick|terminal render idle flush|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
+        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
             "$APP_LOG" 2>/dev/null \
             | head -n 200 \
             || printf '  (no matching debug lines found)\n'

@@ -129,14 +129,21 @@ scripts/diagnose_ui.sh terminal \
   --interaction-delay 1 \
   --duration 4
 
+# diff-viewer file switch interaction (requires github mode)
+scripts/diagnose_ui.sh github duck8823/locus#236 \
+  --interaction file-switch-next \
+  --interaction-delay 2 \
+  --duration 6
+
 # reuse a previous build (skip cargo build)
 scripts/diagnose_ui.sh terminal --no-build --out-dir target/locus-diagnostics/run-A
 ```
 
 `terminal-type` uses macOS System Events via `osascript`. `terminal-scroll`
-uses Quartz through Python (`pyobjc-framework-Quartz`); when those tools are
-missing or not permitted, the harness records a skipped/failed interaction in
-the artifacts instead of failing the whole run.
+uses Quartz through Python (`pyobjc-framework-Quartz`). `file-switch-next`
+arms an app-side diagnostic timer in `github` mode. When the required tools,
+mode, or permissions are missing, the harness records a skipped/failed
+interaction in the artifacts instead of failing the whole run.
 
 Every run drops these files into `--out-dir` (default `target/locus-diagnostics/<timestamp>/`):
 
