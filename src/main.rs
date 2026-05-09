@@ -567,6 +567,8 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     {
         let state = state.clone();
         let ui_weak = ui.as_weak();
+        let owner = owner.clone();
+        let repo = repo.clone();
         ui.on_add_to_draft(move |note: SharedString| {
             let Some(ui) = ui_weak.upgrade() else { return };
             let mut st = state.borrow_mut();
@@ -580,6 +582,8 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 Some(note_trimmed.to_string())
             };
             st.draft.push(DraftEntry::new(anchor, note_opt));
+            // ドラフトが変わったので per-PR session を更新する (#231)
+            save_pr_session(&owner, &repo, pr_number, &st, &ui);
             drop(st);
             refresh_draft_panel(&ui, &state);
         });
@@ -589,9 +593,14 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     {
         let state = state.clone();
         let ui_weak = ui.as_weak();
+        let owner = owner.clone();
+        let repo = repo.clone();
         ui.on_remove_draft_entry(move |index: i32| {
             let Some(ui) = ui_weak.upgrade() else { return };
-            state.borrow_mut().draft.remove(index as usize);
+            let mut st = state.borrow_mut();
+            st.draft.remove(index as usize);
+            save_pr_session(&owner, &repo, pr_number, &st, &ui);
+            drop(st);
             refresh_draft_panel(&ui, &state);
         });
     }
@@ -623,10 +632,13 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
 
     // file-switch-requested (#230): file row click から呼ばれる。
     // 現在の diff-scroll-y を 旧 file index で保存し、selected-file-index を
-    // 切り替えた後に新 index に対する保存値を復元する。
+    // 切り替えた後に新 index に対する保存値を復元する。さらに #231 の per-PR
+    // 永続化として selected_file_index を session.json にも反映する。
     {
         let state = state.clone();
         let ui_weak = ui.as_weak();
+        let owner = owner.clone();
+        let repo = repo.clone();
         ui.on_file_switch_requested(move |new_idx| {
             let Some(ui) = ui_weak.upgrade() else { return };
             let old_idx = ui.get_selected_file_index() as usize;
@@ -642,6 +654,9 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 .copied()
                 .unwrap_or(0.0);
             ui.set_diff_scroll_y(restore);
+
+            // per-PR session に selected_file_index を反映
+            save_pr_session(&owner, &repo, pr_number, &state.borrow(), &ui);
 
             ui.invoke_file_switched(new_idx);
         });
@@ -955,7 +970,31 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                     st.snapshot = snapshot;
                     // snapshot 切替で旧 file index の scroll cache を引きずらない
                     st.scroll_positions.clear();
+
+                    // #231 per-PR 復元: session.json に保存されていた draft /
+                    // selected_file_index を読み戻す。snapshot は再取得した
+                    // ばかりなので anchor の file_id / line がずれていてもまずは
+                    // そのまま復元する (format_prompt 側で snippet が取れない
+                    // ものは最良 effort で出る)。
+                    let key = session::SessionState::pr_key(
+                        &owner_clone, &repo_clone, pr_number,
+                    );
+                    if let Some(saved) = session::load()
+                        && let Some(per_pr) = saved.per_pr.get(&key)
+                    {
+                        for entry in &per_pr.draft {
+                            st.draft.push(entry.clone());
+                        }
+                        if let Some(idx) = per_pr.selected_file_index
+                            && (idx as usize) < st.snapshot.files.len()
+                        {
+                            ui.set_selected_file_index(idx);
+                        }
+                    }
                 });
+                if let Some(ui) = weak_for_task.upgrade() {
+                    with_app_state(|state| refresh_draft_panel(&ui, state));
+                }
             });
         });
     }
@@ -1058,18 +1097,30 @@ fn wire_terminal_resize(
 }
 
 /// 現在のウィンドウサイズと位置を logical px にして session.json へ書き出す。
+/// 既存の per_pr などは preserve したいので、session::mutate で部分更新する。
 /// 失敗時は session::save 内部で warn ログのみ。
 fn save_window_session(ui: &DiffViewerWindow) {
     let physical = ui.window().size();
     let pos = ui.window().position();
     let scale = ui.window().scale_factor().max(f32::EPSILON);
-    let state = session::SessionState {
-        window_width: Some(physical.width as f32 / scale),
-        window_height: Some(physical.height as f32 / scale),
-        window_x: Some(pos.x as f32 / scale),
-        window_y: Some(pos.y as f32 / scale),
+    session::mutate(|state| {
+        state.window_width = Some(physical.width as f32 / scale);
+        state.window_height = Some(physical.height as f32 / scale);
+        state.window_x = Some(pos.x as f32 / scale);
+        state.window_y = Some(pos.y as f32 / scale);
+    });
+}
+
+/// PR 単位の draft / file index を session.json の per_pr table に書き出す。
+fn save_pr_session(owner: &str, repo: &str, pr_number: u64, state: &DiffAppState, ui: &DiffViewerWindow) {
+    let key = session::SessionState::pr_key(owner, repo, pr_number);
+    let pr_state = session::PerPrState {
+        selected_file_index: Some(ui.get_selected_file_index()),
+        draft: state.draft.entries().to_vec(),
     };
-    session::save(&state);
+    session::mutate(|s| {
+        s.per_pr.insert(key, pr_state);
+    });
 }
 
 fn apply_snapshot_to_ui(

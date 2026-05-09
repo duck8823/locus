@@ -2,7 +2,7 @@
 ///
 /// GitHub ではリネームがあっても同じ file として扱いたいので、path ではなく
 /// 別の識別を持たせる余地を残す。v0.1 では単純に path ベースで発行する想定。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct FileId(pub String);
 
 impl FileId {

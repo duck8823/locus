@@ -8,10 +8,29 @@
 //! アプリは続行する (起動時に corrupt JSON / permission denied / disk full
 //! などで止めない方針)。
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
+
+use crate::review::draft::DraftEntry;
+
+/// PR 単位の永続化状態。
+///
+/// 同じ owner/repo#pr を再度開いたとき、draft entries を復元する。snapshot
+/// は再取得するので、anchor の file_id / line が現在の diff とずれている場合
+/// は そのまま表示される (label は描画できる、snippet は format_prompt が
+/// 旧 anchor を参照したときに `(missing)` 等になる)。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct PerPrState {
+    /// 直近に選択していた file index。0 始まり。
+    #[serde(default)]
+    pub selected_file_index: Option<i32>,
+    /// 蓄積中の draft entries。
+    #[serde(default)]
+    pub draft: Vec<DraftEntry>,
+}
 
 /// ローカル永続化される session 状態。schema が将来増えたら `#[serde(default)]`
 /// で後方互換を取る (古い session.json で新フィールドは default に倒れる)。
@@ -29,6 +48,16 @@ pub struct SessionState {
     /// 最後に閉じた時のウィンドウ Y 位置 (logical px、screen 原点)。
     #[serde(default)]
     pub window_y: Option<f32>,
+    /// PR 単位の状態。key は "owner/repo#pr" 形式の文字列。
+    #[serde(default)]
+    pub per_pr: HashMap<String, PerPrState>,
+}
+
+impl SessionState {
+    /// "owner/repo#pr" key を作る。
+    pub fn pr_key(owner: &str, repo: &str, pr: u64) -> String {
+        format!("{owner}/{repo}#{pr}")
+    }
 }
 
 /// `directories` crate で OS 固有の config 領域を解決する。
@@ -66,21 +95,45 @@ pub fn load() -> Option<SessionState> {
     }
 }
 
+use std::sync::Mutex;
+
+/// プロセス内 cache。disk write を「値が変化したときだけ」に絞るのと、
+/// `mutate` で 「現在の state を partial update して save」するときの
+/// ベースとして使う。プロセス起動直後は None。
+static LAST_SAVED: Mutex<Option<SessionState>> = Mutex::new(None);
+
+/// 現在の cached state を取り出す。cache が空なら disk から load、それも
+/// 失敗すれば SessionState::default()。
+fn current_or_default() -> SessionState {
+    if let Ok(guard) = LAST_SAVED.lock()
+        && let Some(prev) = guard.as_ref()
+    {
+        return prev.clone();
+    }
+    load().unwrap_or_default()
+}
+
+/// 現在の state を closure で書き換えて save する。window / per_pr など
+/// 部分的に変えたい side からの単一エントリポイント。
+pub fn mutate(updater: impl FnOnce(&mut SessionState)) {
+    let mut state = current_or_default();
+    updater(&mut state);
+    save(&state);
+}
+
 /// セッションを書き出す。失敗時は warn ログのみで panic しない。
 ///
 /// ライブリサイズ中の連続呼び出しでも実 I/O は最小限に抑えるため、
 /// 直前に書いた SessionState と同じなら早期 return する (in-process cache)。
 /// プロセス再起動の境界では cache が空なので必ず最初の 1 回は書く。
 pub fn save(state: &SessionState) {
-    use std::sync::Mutex;
-
-    static LAST_SAVED: Mutex<Option<SessionState>> = Mutex::new(None);
-
-    if let Ok(guard) = LAST_SAVED.lock()
-        && let Some(prev) = guard.as_ref()
-        && prev == state
     {
-        return;
+        if let Ok(guard) = LAST_SAVED.lock()
+            && let Some(prev) = guard.as_ref()
+            && prev == state
+        {
+            return;
+        }
     }
 
     let Some(path) = session_path() else {
@@ -127,10 +180,51 @@ mod tests {
             window_height: Some(960.0),
             window_x: Some(120.0),
             window_y: Some(48.0),
+            per_pr: HashMap::new(),
         };
         let json = serde_json::to_string(&original).unwrap();
         let decoded: SessionState = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded, original);
+    }
+
+    #[test]
+    fn pr_key_format_is_stable() {
+        assert_eq!(
+            SessionState::pr_key("duck8823", "locus", 282),
+            "duck8823/locus#282"
+        );
+    }
+
+    #[test]
+    fn per_pr_round_trip_with_draft_entry() {
+        use crate::review::draft::DraftEntry;
+        use crate::review::selection::{Granularity, SelectionAnchor, Side};
+        use crate::review::snapshot::FileId;
+
+        let mut original = SessionState::default();
+        let key = SessionState::pr_key("o", "r", 1);
+        original.per_pr.insert(
+            key.clone(),
+            PerPrState {
+                selected_file_index: Some(2),
+                draft: vec![DraftEntry::new(
+                    SelectionAnchor {
+                        file_id: FileId::new("a.rs"),
+                        file_path: "a.rs".into(),
+                        granularity: Granularity::Line {
+                            line: 42,
+                            side: Side::After,
+                        },
+                    },
+                    Some("note".into()),
+                )],
+            },
+        );
+
+        let json = serde_json::to_string(&original).unwrap();
+        let decoded: SessionState = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.per_pr.get(&key).unwrap().selected_file_index, Some(2));
+        assert_eq!(decoded.per_pr.get(&key).unwrap().draft.len(), 1);
     }
 
     #[test]

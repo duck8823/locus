@@ -1,7 +1,7 @@
 use super::selection::SelectionAnchor;
 
 /// PromptDraft の 1 エントリ。選択 + 任意の note。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DraftEntry {
     pub anchor: SelectionAnchor,
     pub note: Option<String>,
