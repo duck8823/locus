@@ -518,6 +518,15 @@ unix_ms() {
     fi
 }
 
+sleep_ms() {
+    local ms="$1"
+    case "$ms" in
+        ''|*[!0-9]*) return ;;
+    esac
+    [ "$ms" -gt 0 ] || return
+    sleep "$((ms / 1000)).$(printf '%03d' "$((ms % 1000))")"
+}
+
 # JSONL に 1 行追記する。固定フィールド (event/name/index) と任意の
 # key=value ペアを取る。数値キー (start_unix_ms / end_unix_ms / latency_ms)
 # はそのまま number として出力し、それ以外は string として escape する。
@@ -691,7 +700,11 @@ PY
 inject_file_switch_next() {
     local idx="$1"
     local start_ms
-    start_ms="$(unix_ms)"
+    if [ -n "${RUN_START_MS:-}" ] && [ -n "${FILE_SWITCH_TRIGGER_OFFSET_MS:-}" ]; then
+        start_ms="$((RUN_START_MS + FILE_SWITCH_TRIGGER_OFFSET_MS))"
+    else
+        start_ms="$(unix_ms)"
+    fi
 
     if [ "$MODE" != "github" ]; then
         emit_event "skipped" "file-switch-next" "$idx" \
@@ -1206,6 +1219,8 @@ WINDOW_ID=""
 WINDOW_ID_STATUS="skipped"
 BUILD_STATUS="skipped"
 BIN="target/debug/locus"
+RUN_START_MS=""
+FILE_SWITCH_TRIGGER_OFFSET_MS=""
 
 # tool availability
 HAS_PYTHON3_BIN="$(command -v python3 || true)"
@@ -1296,8 +1311,9 @@ fi
 for _interaction in "${INTERACTIONS[@]}"; do
     if [ "$_interaction" = "file-switch-next" ]; then
         # app 側 single-shot timer が file-switch-requested callback を発火する。
-        # script 側 event start よりわずかに後に出るよう +250ms しておく。
-        ENV_VARS+=("LOCUS_DIAG_FILE_SWITCH_AFTER_MS=$((INTERACTION_DELAY * 1000 + 250))")
+        # script 側 event start はこの timer の予定発火時刻に合わせる。
+        FILE_SWITCH_TRIGGER_OFFSET_MS=$((INTERACTION_DELAY * 1000))
+        ENV_VARS+=("LOCUS_DIAG_FILE_SWITCH_AFTER_MS=$FILE_SWITCH_TRIGGER_OFFSET_MS")
     fi
 done
 unset _interaction
@@ -1343,6 +1359,7 @@ log "out-dir: $OUT_DIR"
 env "${ENV_VARS[@]}" "${CMD_ARGS[@]}" > "$APP_LOG" 2>&1 &
 APP_PID=$!
 APP_TERMINATION="running"
+RUN_START_MS="$(unix_ms)"
 
 log "launched pid=$APP_PID"
 
@@ -1352,12 +1369,15 @@ log "launched pid=$APP_PID"
 if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
     : > "$INTERACTION_EVENTS"
     log "sleeping ${INTERACTION_DELAY}s before interactions: ${INTERACTIONS[*]}"
-    sleep "$INTERACTION_DELAY"
+    sleep_ms "$((INTERACTION_DELAY * 1000))"
     run_interactions
-    REMAINING_DURATION=$((DURATION - INTERACTION_DELAY))
-    if [ "$REMAINING_DURATION" -gt 0 ]; then
-        log "sleeping remaining ${REMAINING_DURATION}s after interactions"
-        sleep "$REMAINING_DURATION"
+    NOW_MS="$(unix_ms)"
+    REMAINING_MS=$((RUN_START_MS + (DURATION * 1000) - NOW_MS))
+    if [ "$REMAINING_MS" -gt 0 ]; then
+        log "sleeping remaining ${REMAINING_MS}ms after interactions"
+        sleep_ms "$REMAINING_MS"
+    else
+        log "duration already elapsed after interactions"
     fi
 else
     log "sleeping ${DURATION}s"
