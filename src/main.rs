@@ -353,14 +353,20 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.set_preview_max_chars(ui_cfg.prompt_max_chars.min(i32::MAX as usize) as i32);
     ui.set_require_send_confirm(ui_cfg.confirm_send);
 
-    // セッション復元 (#231): 前回保存した window size があれば適用する。
-    if let Some(saved) = session::load()
-        && let (Some(w), Some(h)) = (saved.window_width, saved.window_height)
-        && w > 0.0
-        && h > 0.0
-    {
-        ui.window()
-            .set_size(slint::WindowSize::Logical(slint::LogicalSize::new(w, h)));
+    // セッション復元 (#231): 前回保存した window size / position があれば適用する。
+    if let Some(saved) = session::load() {
+        if let (Some(w), Some(h)) = (saved.window_width, saved.window_height)
+            && w > 0.0
+            && h > 0.0
+        {
+            ui.window()
+                .set_size(slint::WindowSize::Logical(slint::LogicalSize::new(w, h)));
+        }
+        if let (Some(x), Some(y)) = (saved.window_x, saved.window_y) {
+            ui.window().set_position(slint::WindowPosition::Logical(
+                slint::LogicalPosition::new(x, y),
+            ));
+        }
     }
     apply_snapshot_to_ui(&ui, &placeholder_snapshot, &[]);
     ui.set_current_pr_number(pr_number as i32);
@@ -970,7 +976,28 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // セッション位置の定期保存 (#231 Codex MUST 対応):
+    // ウィンドウを移動しただけでは on_close_requested / on_terminal_resized
+    // は発火せず position が stale になるため、1 秒周期で save_window_session
+    // を呼ぶ。session::save() 側の LAST_SAVED キャッシュで実際の disk write は
+    // 値が変化したときのみ。timer は drop されると停止するので、ui.run() の
+    // ライフタイムで保持する。
+    let position_save_timer = slint::Timer::default();
+    {
+        let ui_weak = ui.as_weak();
+        position_save_timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_secs(1),
+            move || {
+                if let Some(ui) = ui_weak.upgrade() {
+                    save_window_session(&ui);
+                }
+            },
+        );
+    }
+
     ui.run()?;
+    drop(position_save_timer);
     drop(terminal_pane);
     Ok(())
 }
@@ -1030,14 +1057,17 @@ fn wire_terminal_resize(
     });
 }
 
-/// 現在のウィンドウサイズを logical px にして session.json へ書き出す。
+/// 現在のウィンドウサイズと位置を logical px にして session.json へ書き出す。
 /// 失敗時は session::save 内部で warn ログのみ。
 fn save_window_session(ui: &DiffViewerWindow) {
     let physical = ui.window().size();
+    let pos = ui.window().position();
     let scale = ui.window().scale_factor().max(f32::EPSILON);
     let state = session::SessionState {
         window_width: Some(physical.width as f32 / scale),
         window_height: Some(physical.height as f32 / scale),
+        window_x: Some(pos.x as f32 / scale),
+        window_y: Some(pos.y as f32 / scale),
     };
     session::save(&state);
 }
