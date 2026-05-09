@@ -61,9 +61,11 @@ GitHub アクセス用 token は次の優先順位で解決されます:
 |---|---|---|
 | `LOCUS_LOCALE` | system / `LANG` | `ja` / `en`。未設定時は `LANG` を見て、未対応値や未設定時は `ja` にフォールバック。 |
 | `LOCUS_AGENT_CMD` | `claude` | 内蔵 terminal pane で起動するコマンド。 |
-| `LOCUS_FONT_FAMILY` | OS 別 (macOS: `Menlo, Hiragino Sans, Consolas, monospace`) | terminal + diff のフォントファミリ。既定で CJK fallback を含むため日本語 / 中国語 / 韓国語の glyph が箱化しない。 |
+| `LOCUS_FONT_FAMILY` | OS 別 (macOS: `Menlo, Hiragino Sans, Apple Symbols, Apple Color Emoji, Consolas, monospace`) | diff / chrome 側のフォントファミリ。`LOCUS_TERMINAL_FONT_FAMILY` が未設定の場合は terminal にも適用される。 |
+| `LOCUS_TERMINAL_FONT_FAMILY` | OS 別 (macOS: `SF Mono, Menlo, Monaco, Osaka-Mono, Hiragino Sans, Apple Symbols, Apple Color Emoji, monospace`) | terminal grid 専用のフォント fallback。等幅候補を優先し、terminal glyph や cell metrics が崩れる場合の切り分けに使う。 |
 | `LOCUS_FONT_SIZE` | (未設定) | terminal/diff 両方のフォントサイズを一括指定。 |
 | `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | terminal pane のフォントサイズ (logical px)。 |
+| `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | Slint font probe / 比率 fallback | terminal cell の幅/高さを logical px で手動上書きする。glyph と cell metric のズレを診断・強制同期する場合に使う。 |
 | `LOCUS_DIFF_FONT_SIZE` | `12.0` | diff pane のフォントサイズ (logical px)。 |
 | `LOCUS_BRACKETED_PASTE` | `true` | `false`/`0`/`off`/`no` で paste 境界 sequence (`\x1b[200~ ... \x1b[201~`) を使わずに raw 送信。 |
 | `LOCUS_PROMPT_MAX_CHARS` | `32000` | preview 文字数上限。超過時は警告 + override チェックボックス。 |
