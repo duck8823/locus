@@ -222,16 +222,30 @@ fn spawn_core(
 }
 
 /// UI から受け取った key text を PTY に流し込むハンドラ。
+///
+/// 入力遅延診断 (#310) のために `bytes_len` と PTY write の `elapsed_us` を
+/// debug log で残すが、入力テキスト自体はパスワード等が混じり得るため絶対に
+/// log に乗せない。
 fn make_key_handler(writer: Arc<Mutex<Box<dyn Write + Send>>>) -> impl Fn(SharedString) + 'static {
     move |text: SharedString| {
         let bytes = translate_key(text.as_str());
         if bytes.is_empty() {
             return;
         }
+        let bytes_len = bytes.len();
+        let started = Instant::now();
+        let mut forwarded = false;
         if let Ok(mut w) = writer.lock() {
             let _ = w.write_all(&bytes);
             let _ = w.flush();
+            forwarded = true;
         }
+        tracing::debug!(
+            bytes_len,
+            forwarded,
+            elapsed_us = started.elapsed().as_micros() as u64,
+            "terminal input forwarded"
+        );
     }
 }
 
