@@ -6,9 +6,17 @@
 
 #[derive(Debug, Clone)]
 pub struct UiConfig {
+    /// Diff / chrome 側で使う既定フォント。
     pub font_family: String,
+    /// Terminal grid 専用フォント。`LOCUS_TERMINAL_FONT_FAMILY` があれば
+    /// `LOCUS_FONT_FAMILY` より優先する。
+    pub terminal_font_family: String,
     pub terminal_font_size: f32,
     pub diff_font_size: f32,
+    /// Terminal cell の手動 override。Slint の font metric probe が実機で
+    /// 崩れる場合に `LOCUS_TERMINAL_CELL_W/H` で grid と glyph を強制同期する。
+    pub terminal_cell_w_override: Option<f32>,
+    pub terminal_cell_h_override: Option<f32>,
     /// PromptDraft を PTY に流し込む際に bracketed paste mode で囲うかどうか。
     /// 非対応 shell / agent CLI では `\x1b[200~` 等が文字としてそのまま表示
     /// されるため、`LOCUS_BRACKETED_PASTE=false` で raw 送信に切り替えられる。
@@ -24,8 +32,14 @@ pub struct UiConfig {
 
 impl UiConfig {
     pub fn from_env() -> Self {
-        let font_family = std::env::var("LOCUS_FONT_FAMILY")
-            .unwrap_or_else(|_| default_font_family().to_string());
+        let font_family_env = std::env::var("LOCUS_FONT_FAMILY").ok();
+        let font_family = font_family_env
+            .clone()
+            .unwrap_or_else(|| default_font_family().to_string());
+        let terminal_font_family = std::env::var("LOCUS_TERMINAL_FONT_FAMILY")
+            .ok()
+            .or(font_family_env)
+            .unwrap_or_else(|| default_terminal_font_family().to_string());
         let general = std::env::var("LOCUS_FONT_SIZE")
             .ok()
             .and_then(|s| s.parse::<f32>().ok());
@@ -41,16 +55,21 @@ impl UiConfig {
             .unwrap_or(12.0);
         let bracketed_paste =
             parse_bracketed_paste_env(std::env::var("LOCUS_BRACKETED_PASTE").ok().as_deref());
-        let prompt_max_chars = parse_prompt_max_chars_env(
-            std::env::var("LOCUS_PROMPT_MAX_CHARS").ok().as_deref(),
-        );
-        let confirm_send = parse_confirm_send_env(
-            std::env::var("LOCUS_CONFIRM_SEND").ok().as_deref(),
-        );
+        let prompt_max_chars =
+            parse_prompt_max_chars_env(std::env::var("LOCUS_PROMPT_MAX_CHARS").ok().as_deref());
+        let confirm_send =
+            parse_confirm_send_env(std::env::var("LOCUS_CONFIRM_SEND").ok().as_deref());
+        let terminal_cell_w_override =
+            parse_positive_f32_env(std::env::var("LOCUS_TERMINAL_CELL_W").ok().as_deref());
+        let terminal_cell_h_override =
+            parse_positive_f32_env(std::env::var("LOCUS_TERMINAL_CELL_H").ok().as_deref());
         Self {
             font_family,
+            terminal_font_family,
             terminal_font_size,
             diff_font_size,
+            terminal_cell_w_override,
+            terminal_cell_h_override,
             bracketed_paste,
             prompt_max_chars,
             confirm_send,
@@ -65,33 +84,81 @@ impl UiConfig {
     /// 使われる。実 glyph metric は `terminal-resized` callback 経由で
     /// `measured-terminal-cell-w` / `measured-terminal-cell-h` から取得する。
     pub fn terminal_cell_w(&self) -> f32 {
-        (self.terminal_font_size * 0.6).round().max(4.0)
+        self.terminal_cell_w_override
+            .unwrap_or_else(|| (self.terminal_font_size * 0.6).round().max(4.0))
     }
 
     pub fn terminal_cell_h(&self) -> f32 {
-        (self.terminal_font_size * 1.45).round().max(8.0)
+        self.terminal_cell_h_override
+            .unwrap_or_else(|| (self.terminal_font_size * 1.45).round().max(8.0))
+    }
+
+    /// Slint の probe から得た cell metric を実際に採用する値へ解決する。
+    ///
+    /// 手動 override がある場合は実測値より優先する。override が無い場合は
+    /// 正の有限な実測値を使い、未測定 / 異常値なら従来の比率 fallback を使う。
+    pub fn terminal_cell_w_from_measurement(&self, measured: f32) -> f32 {
+        if let Some(cell_w) = self.terminal_cell_w_override {
+            cell_w
+        } else if measured.is_finite() && measured > 0.0 {
+            measured
+        } else {
+            self.terminal_cell_w()
+        }
+    }
+
+    pub fn terminal_cell_h_from_measurement(&self, measured: f32) -> f32 {
+        if let Some(cell_h) = self.terminal_cell_h_override {
+            cell_h
+        } else if measured.is_finite() && measured > 0.0 {
+            measured
+        } else {
+            self.terminal_cell_h()
+        }
     }
 }
 
-/// OS 別の monospace + CJK fallback font family list。Slint Text の
+/// OS 別の monospace + CJK/symbol/emoji fallback font family list。Slint Text の
 /// `font-family` は CSS 風のカンマ区切り fallback を解決するため、
 /// 先頭の monospace に CJK glyph がなくても次の候補に倒れる。
 ///
-/// terminal pane と diff viewer は `LOCUS_FONT_FAMILY` で同じリストを共有
-/// する (env 未設定時の既定)。LOCUS_FONT_FAMILY が明示指定されていれば
-/// 全面的に上書きする。
+/// diff / chrome 側の既定。terminal pane は grid 幅を安定させるため
+/// `default_terminal_font_family()` を別に持つ。`LOCUS_FONT_FAMILY` が明示
+/// 指定されていれば terminal 側にも引き継がれるが、
+/// `LOCUS_TERMINAL_FONT_FAMILY` があればそちらを優先する。
 const fn default_font_family() -> &'static str {
     #[cfg(target_os = "macos")]
     {
-        "Menlo, Hiragino Sans, Consolas, monospace"
+        "Menlo, Hiragino Sans, Apple Symbols, Apple Color Emoji, Consolas, monospace"
     }
     #[cfg(target_os = "windows")]
     {
-        "Consolas, Yu Gothic, monospace"
+        "Consolas, Yu Gothic, Segoe UI Symbol, Segoe UI Emoji, monospace"
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
-        "DejaVu Sans Mono, Noto Sans CJK JP, monospace"
+        "DejaVu Sans Mono, Noto Sans CJK JP, Noto Sans Symbols 2, Noto Color Emoji, monospace"
+    }
+}
+
+/// Terminal grid 専用の monospace 寄り fallback。
+///
+/// `default_font_family()` は diff/chrome の可読性を優先して CJK UI フォントを
+/// 含むが、terminal grid で proportional fallback が先に選ばれると cell 幅と
+/// glyph advance がズレる。Terminal だけは monospace 候補を前段に分離し、
+/// CJK / symbol / emoji は最後の fallback として扱う。
+const fn default_terminal_font_family() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "SF Mono, Menlo, Monaco, Osaka-Mono, Hiragino Sans, Apple Symbols, Apple Color Emoji, monospace"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "Cascadia Mono, Consolas, MS Gothic, Yu Gothic UI, Segoe UI Symbol, Segoe UI Emoji, monospace"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        "DejaVu Sans Mono, Noto Sans Mono CJK JP, Noto Sans Symbols 2, Noto Color Emoji, Noto Sans CJK JP, monospace"
     }
 }
 
@@ -109,7 +176,10 @@ const fn default_font_family() -> &'static str {
 pub fn parse_bracketed_paste_env(value: Option<&str>) -> bool {
     match value.map(str::trim) {
         None | Some("") => true,
-        Some(v) => !matches!(v.to_ascii_lowercase().as_str(), "0" | "false" | "off" | "no"),
+        Some(v) => !matches!(
+            v.to_ascii_lowercase().as_str(),
+            "0" | "false" | "off" | "no"
+        ),
     }
 }
 
@@ -122,6 +192,13 @@ pub fn parse_confirm_send_env(value: Option<&str>) -> bool {
         Some(v) => matches!(v.as_str(), "1" | "true" | "on" | "yes"),
         None => false,
     }
+}
+
+/// 正の有限な f32 だけを受理する環境変数 parser。
+pub fn parse_positive_f32_env(value: Option<&str>) -> Option<f32> {
+    value
+        .and_then(|v| v.trim().parse::<f32>().ok())
+        .filter(|v| v.is_finite() && *v > 0.0)
 }
 
 /// `LOCUS_PROMPT_MAX_CHARS` を usize にパースする。
@@ -143,8 +220,11 @@ mod tests {
     fn default_metrics_are_reasonable() {
         let cfg = UiConfig {
             font_family: "test".into(),
+            terminal_font_family: "test-mono".into(),
             terminal_font_size: 12.0,
             diff_font_size: 12.0,
+            terminal_cell_w_override: None,
+            terminal_cell_h_override: None,
             bracketed_paste: true,
             prompt_max_chars: 32_000,
             confirm_send: false,
@@ -157,16 +237,22 @@ mod tests {
     fn cell_metrics_scale_with_font_size() {
         let small = UiConfig {
             font_family: "x".into(),
+            terminal_font_family: "x-mono".into(),
             terminal_font_size: 10.0,
             diff_font_size: 10.0,
+            terminal_cell_w_override: None,
+            terminal_cell_h_override: None,
             bracketed_paste: true,
             prompt_max_chars: 32_000,
             confirm_send: false,
         };
         let big = UiConfig {
             font_family: "x".into(),
+            terminal_font_family: "x-mono".into(),
             terminal_font_size: 20.0,
             diff_font_size: 20.0,
+            terminal_cell_w_override: None,
+            terminal_cell_h_override: None,
             bracketed_paste: true,
             prompt_max_chars: 32_000,
             confirm_send: false,
@@ -236,5 +322,62 @@ mod tests {
         // fail-open: paste 機能を不用意に殺さないため未知値は true
         assert!(parse_bracketed_paste_env(Some("garbage")));
         assert!(parse_bracketed_paste_env(Some("auto"))); // 旧 auto モードも fail-open
+    }
+
+    #[test]
+    fn positive_f32_env_accepts_only_positive_finite_values() {
+        assert_eq!(parse_positive_f32_env(Some("8.5")), Some(8.5));
+        assert_eq!(parse_positive_f32_env(Some("  16  ")), Some(16.0));
+        assert_eq!(parse_positive_f32_env(None), None);
+        assert_eq!(parse_positive_f32_env(Some("")), None);
+        assert_eq!(parse_positive_f32_env(Some("0")), None);
+        assert_eq!(parse_positive_f32_env(Some("-1")), None);
+        assert_eq!(parse_positive_f32_env(Some("NaN")), None);
+        assert_eq!(parse_positive_f32_env(Some("inf")), None);
+        assert_eq!(parse_positive_f32_env(Some("garbage")), None);
+    }
+
+    #[test]
+    fn manual_terminal_cell_metrics_override_probe_values() {
+        let cfg = UiConfig {
+            font_family: "x".into(),
+            terminal_font_family: "x-mono".into(),
+            terminal_font_size: 13.0,
+            diff_font_size: 12.0,
+            terminal_cell_w_override: Some(9.5),
+            terminal_cell_h_override: Some(18.5),
+            bracketed_paste: true,
+            prompt_max_chars: 32_000,
+            confirm_send: false,
+        };
+        assert_eq!(cfg.terminal_cell_w(), 9.5);
+        assert_eq!(cfg.terminal_cell_h(), 18.5);
+        assert_eq!(cfg.terminal_cell_w_from_measurement(7.0), 9.5);
+        assert_eq!(cfg.terminal_cell_h_from_measurement(15.0), 18.5);
+    }
+
+    #[test]
+    fn measured_terminal_cell_metrics_win_without_manual_override() {
+        let cfg = UiConfig {
+            font_family: "x".into(),
+            terminal_font_family: "x-mono".into(),
+            terminal_font_size: 13.0,
+            diff_font_size: 12.0,
+            terminal_cell_w_override: None,
+            terminal_cell_h_override: None,
+            bracketed_paste: true,
+            prompt_max_chars: 32_000,
+            confirm_send: false,
+        };
+        assert_eq!(cfg.terminal_cell_w_from_measurement(7.25), 7.25);
+        assert_eq!(cfg.terminal_cell_h_from_measurement(15.75), 15.75);
+        assert_eq!(
+            cfg.terminal_cell_w_from_measurement(0.0),
+            cfg.terminal_cell_w()
+        );
+        assert_eq!(
+            cfg.terminal_cell_h_from_measurement(f32::NAN),
+            cfg.terminal_cell_h()
+        );
     }
 }

@@ -102,16 +102,22 @@ fn init_logging() {
 fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     let ui_cfg = config::UiConfig::from_env();
     let ui = AppWindow::new()?;
-    ui.set_font_family(SharedString::from(ui_cfg.font_family.as_str()));
+    ui.set_font_family(SharedString::from(ui_cfg.terminal_font_family.as_str()));
     ui.set_font_size(ui_cfg.terminal_font_size);
     ui.set_cell_w(ui_cfg.terminal_cell_w());
     ui.set_cell_h(ui_cfg.terminal_cell_h());
+    tracing::debug!(
+        terminal_font_family = %ui_cfg.terminal_font_family,
+        terminal_font_size = ui_cfg.terminal_font_size,
+        terminal_cell_w = ui_cfg.terminal_cell_w(),
+        terminal_cell_h = ui_cfg.terminal_cell_h(),
+        "terminal typography configured"
+    );
     let pane = Rc::new(terminal::launch(&ui, command, ui_cfg.bracketed_paste)?);
     {
         let pane = pane.clone();
         let ui_weak = ui.as_weak();
-        let fallback_cell_w = ui_cfg.terminal_cell_w();
-        let fallback_cell_h = ui_cfg.terminal_cell_h();
+        let ui_cfg = ui_cfg.clone();
         ui.on_resized(move |w_logical: f32, h_logical: f32| {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
@@ -121,14 +127,8 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
             if w_logical <= 0.0 || h_logical <= 0.0 {
                 return;
             }
-            let mut cell_w = ui.get_measured_cell_w();
-            let mut cell_h = ui.get_measured_cell_h();
-            if cell_w <= 0.0 {
-                cell_w = fallback_cell_w;
-            }
-            if cell_h <= 0.0 {
-                cell_h = fallback_cell_h;
-            }
+            let cell_w = ui_cfg.terminal_cell_w_from_measurement(ui.get_measured_cell_w());
+            let cell_h = ui_cfg.terminal_cell_h_from_measurement(ui.get_measured_cell_h());
             ui.set_cell_w(cell_w);
             ui.set_cell_h(cell_h);
             let (cols, rows) = terminal::compute_grid_size(w_logical, h_logical, cell_w, cell_h);
@@ -186,12 +186,21 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     let ui_cfg = config::UiConfig::from_env();
     let ui = DiffViewerWindow::new()?;
     ui.set_font_family(SharedString::from(ui_cfg.font_family.as_str()));
+    ui.set_terminal_font_family(SharedString::from(ui_cfg.terminal_font_family.as_str()));
     ui.set_terminal_font_size(ui_cfg.terminal_font_size);
     ui.set_diff_font_size(ui_cfg.diff_font_size);
     ui.set_terminal_cell_w(ui_cfg.terminal_cell_w());
     ui.set_terminal_cell_h(ui_cfg.terminal_cell_h());
     ui.set_preview_max_chars(ui_cfg.prompt_max_chars.min(i32::MAX as usize) as i32);
     ui.set_require_send_confirm(ui_cfg.confirm_send);
+    tracing::debug!(
+        font_family = %ui_cfg.font_family,
+        terminal_font_family = %ui_cfg.terminal_font_family,
+        terminal_font_size = ui_cfg.terminal_font_size,
+        terminal_cell_w = ui_cfg.terminal_cell_w(),
+        terminal_cell_h = ui_cfg.terminal_cell_h(),
+        "diff viewer typography configured"
+    );
 
     // セッション復元 (#231): 前回保存した window size / position があれば適用する。
     if let Some(saved) = session::load() {
@@ -918,8 +927,7 @@ fn wire_terminal_resize(
     fallback: &config::UiConfig,
 ) {
     let ui_weak = ui.as_weak();
-    let fallback_cell_w = fallback.terminal_cell_w();
-    let fallback_cell_h = fallback.terminal_cell_h();
+    let fallback = fallback.clone();
     ui.on_terminal_resized(move |w_logical: f32, h_logical: f32| {
         let Some(ui) = ui_weak.upgrade() else {
             return;
@@ -930,14 +938,10 @@ fn wire_terminal_resize(
             return;
         }
         // 実 glyph metric が未測定 (= 0) の間は従来の比率近似を使う。
-        let mut cell_w = ui.get_measured_terminal_cell_w();
-        let mut cell_h = ui.get_measured_terminal_cell_h();
-        if cell_w <= 0.0 {
-            cell_w = fallback_cell_w;
-        }
-        if cell_h <= 0.0 {
-            cell_h = fallback_cell_h;
-        }
+        // `LOCUS_TERMINAL_CELL_W/H` が指定されている場合は、実測値より
+        // 手動 override を優先して grid と glyph のズレを切り分けられる。
+        let cell_w = fallback.terminal_cell_w_from_measurement(ui.get_measured_terminal_cell_w());
+        let cell_h = fallback.terminal_cell_h_from_measurement(ui.get_measured_terminal_cell_h());
         ui.set_terminal_cell_w(cell_w);
         ui.set_terminal_cell_h(cell_h);
         let (cols, rows) = terminal::compute_grid_size(w_logical, h_logical, cell_w, cell_h);

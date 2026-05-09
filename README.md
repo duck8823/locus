@@ -61,9 +61,11 @@ For GitHub access, locus reads tokens in this order:
 |---|---|---|
 | `LOCUS_LOCALE` | system / `LANG` | `ja` or `en`. Reads `LANG` when unset; falls back to `ja` for unsupported values. |
 | `LOCUS_AGENT_CMD` | `claude` | Command launched in the embedded terminal pane. |
-| `LOCUS_FONT_FAMILY` | OS-specific (macOS: `Menlo, Hiragino Sans, Consolas, monospace`) | Font family for terminal + diff. The default already includes a CJK fallback so Japanese / Chinese / Korean glyphs render. |
+| `LOCUS_FONT_FAMILY` | OS-specific (macOS: `Menlo, Hiragino Sans, Apple Symbols, Apple Color Emoji, Consolas, monospace`) | Font family for diff / chrome. If `LOCUS_TERMINAL_FONT_FAMILY` is unset, this also overrides terminal fonts. |
+| `LOCUS_TERMINAL_FONT_FAMILY` | OS-specific (macOS: `SF Mono, Menlo, Monaco, Osaka-Mono, Hiragino Sans, Apple Symbols, Apple Color Emoji, monospace`) | Terminal-grid-only font fallback chain. Prefer monospace candidates first; useful when terminal glyphs or cell metrics look broken. |
 | `LOCUS_FONT_SIZE` | (unset) | Single override for both terminal and diff font sizes. |
 | `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | Terminal pane font size in logical pixels. |
+| `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | Slint font probe / fallback ratio | Manual terminal cell width/height override in logical pixels. Use for diagnosing glyph/cell metric mismatch. |
 | `LOCUS_DIFF_FONT_SIZE` | `12.0` | Diff pane font size in logical pixels. |
 | `LOCUS_BRACKETED_PASTE` | `true` | `false`/`0`/`off`/`no` to send raw bytes when the agent CLI does not understand `\x1b[200~ ... \x1b[201~`. |
 | `LOCUS_PROMPT_MAX_CHARS` | `32000` | Preview is gated above this character count; an override checkbox allows sending anyway. |
