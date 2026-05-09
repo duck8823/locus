@@ -73,7 +73,7 @@ GitHub アクセス用 token は次の優先順位で解決されます:
 | `GITHUB_TOKEN` / `GH_TOKEN` | (未設定) | GitHub PAT。 |
 | `LOCUS_NO_GH_AUTH` | `false` | `gh auth token` フォールバックを無効化。 |
 | `GH_AUTH_TIMEOUT` | `3` | `gh auth token` サブプロセスの timeout 秒数。 |
-| `LOCUS_LOG` | `warn` | tracing フィルタ (`error` / `warn` / `info` / `debug` / `trace`)。 |
+| `LOCUS_LOG` | `warn` | tracing フィルタ (`error` / `warn` / `info` / `debug` / `trace`)。`debug` では preview 再生成 / terminal resize / session 保存 / PR・issue fetch の elapsed_ms も出力される。 |
 
 ## キーバインド
 

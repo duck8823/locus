@@ -5,6 +5,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Instant;
 
 use slint::{Model, ModelRc, SharedString, VecModel};
 
@@ -74,6 +75,8 @@ pub(crate) fn refresh_history_panel(ui: &DiffViewerWindow, state: &Rc<RefCell<Di
 }
 
 pub(crate) fn refresh_preview(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppState>>) {
+    let debug_enabled = tracing::enabled!(tracing::Level::DEBUG);
+    let started = debug_enabled.then(Instant::now);
     let st = state.borrow();
     let entries: Vec<FileSourceEntry<'_>> = st
         .snapshot
@@ -86,10 +89,22 @@ pub(crate) fn refresh_preview(ui: &DiffViewerWindow, state: &Rc<RefCell<DiffAppS
             after_content: f.after_content.as_deref(),
         })
         .collect();
+    let draft_entries = st.draft.len();
+    let file_count = entries.len();
     let text = format_prompt(&st.draft, &entries);
+    let preview_chars = debug_enabled.then(|| text.chars().count());
     ui.set_preview_text(SharedString::from(text));
     // preview-length は Slint 側で root.preview-text.character-count から
     // 自動計算されるので Rust から set する必要はない。
+    if let (Some(started), Some(preview_chars)) = (started, preview_chars) {
+        tracing::debug!(
+            draft_entries,
+            file_count,
+            preview_chars,
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "preview refreshed"
+        );
+    }
 }
 
 pub(crate) fn append_history(

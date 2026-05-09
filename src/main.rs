@@ -7,6 +7,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Instant;
 
 use slint::{ComponentHandle, SharedString};
 
@@ -592,8 +593,11 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             };
             let weak_for_task = ui.as_weak();
             runtime.spawn(async move {
+                let started = Instant::now();
+                let snapshot_started = Instant::now();
                 let snapshot_res =
                     fetch_pr_snapshot(&client, &owner, &repo, new_number).await;
+                let snapshot_elapsed_ms = snapshot_started.elapsed().as_millis() as u64;
                 let snapshot = match snapshot_res {
                     Ok(s) => s,
                     Err(e) => {
@@ -621,10 +625,23 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 // linked issues は join_all で並列 fetch
                 let body = snapshot.body.clone().unwrap_or_default();
                 let numbers = extract_linked_issue_numbers(&body);
+                let linked_started = Instant::now();
                 let linked = fetch_linked_issues_parallel(
                     &client, &owner, &repo, &numbers,
                 )
                 .await;
+                let linked_elapsed_ms = linked_started.elapsed().as_millis() as u64;
+                let file_count = snapshot.files.len();
+                let linked_count = linked.len();
+                tracing::debug!(
+                    pr = new_number,
+                    file_count,
+                    linked_count,
+                    snapshot_elapsed_ms,
+                    linked_elapsed_ms,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "pr switch fetch completed"
+                );
                 let _ = slint::invoke_from_event_loop(move || {
                     let Some(ui) = weak_for_task.upgrade() else { return };
                     let stale = with_app_state(|state| {
@@ -743,6 +760,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         let client_clone = client_arc.clone();
         let weak_for_task = ui.as_weak();
         runtime_handle.spawn(async move {
+            let hydrate_started = Instant::now();
             // PR snapshot と PR list を join! で並列実行
             let snapshot_fut =
                 fetch_pr_snapshot(&client_clone, &owner_clone, &repo_clone, pr_number);
@@ -752,11 +770,30 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 &repo_clone,
                 PrListFilter::Open,
             );
+            let join_started = Instant::now();
             let (snapshot_res, list_res) = tokio::join!(snapshot_fut, list_fut);
+            let join_elapsed_ms = join_started.elapsed().as_millis() as u64;
 
             // PR list は snapshot 完了を待たずに先に hydrate する
             {
                 let weak = weak_for_task.clone();
+                let list_count = match &list_res {
+                    Ok(summaries) => summaries.len(),
+                    Err(_) => 0,
+                };
+                let snapshot_file_count = match &snapshot_res {
+                    Ok(s) => s.files.len(),
+                    Err(_) => 0,
+                };
+                tracing::debug!(
+                    pr = pr_number,
+                    list_count,
+                    snapshot_file_count,
+                    snapshot_ok = snapshot_res.is_ok(),
+                    list_ok = list_res.is_ok(),
+                    elapsed_ms = join_elapsed_ms,
+                    "initial hydrate snapshot+list fetched"
+                );
                 let _ = slint::invoke_from_event_loop(move || {
                     let stale = with_app_state(|state| state.borrow().is_stale_list(list_gen))
                         .unwrap_or(true);
@@ -808,6 +845,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             // linked issues を並列 fetch
             let body = snapshot.body.clone().unwrap_or_default();
             let numbers = extract_linked_issue_numbers(&body);
+            let linked_started = Instant::now();
             let linked = fetch_linked_issues_parallel(
                 &client_clone,
                 &owner_clone,
@@ -815,6 +853,14 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
                 &numbers,
             )
             .await;
+            tracing::debug!(
+                pr = pr_number,
+                file_count = snapshot.files.len(),
+                linked_count = linked.len(),
+                linked_elapsed_ms = linked_started.elapsed().as_millis() as u64,
+                elapsed_ms = hydrate_started.elapsed().as_millis() as u64,
+                "initial hydrate completed"
+            );
 
             let _ = slint::invoke_from_event_loop(move || {
                 let stale = with_app_state(|state| {
@@ -922,6 +968,7 @@ fn wire_terminal_resize(
     let ui_weak = ui.as_weak();
     let fallback = fallback.clone();
     ui.on_terminal_resized(move |w_logical: f32, h_logical: f32| {
+        let started = Instant::now();
         let Some(ui) = ui_weak.upgrade() else {
             return;
         };
@@ -943,6 +990,16 @@ fn wire_terminal_resize(
                 let (cols_now, rows_now) = pane.current_size();
                 ui.set_terminal_cols(cols_now as i32);
                 ui.set_terminal_rows_count(rows_now as i32);
+                tracing::debug!(
+                    pane_w = w_logical,
+                    pane_h = h_logical,
+                    cell_w,
+                    cell_h,
+                    cols = cols_now,
+                    rows = rows_now,
+                    elapsed_ms = started.elapsed().as_millis() as u64,
+                    "terminal resized"
+                );
             }
             Err(e) => {
                 tracing::warn!(%cols, %rows, error = %e, "terminal resize failed");
@@ -959,15 +1016,24 @@ fn wire_terminal_resize(
 /// 既存の per_pr などは preserve したいので、session::mutate で部分更新する。
 /// 失敗時は session::save 内部で warn ログのみ。
 fn save_window_session(ui: &DiffViewerWindow) {
+    let started = Instant::now();
     let physical = ui.window().size();
     let pos = ui.window().position();
     let scale = ui.window().scale_factor().max(f32::EPSILON);
+    let logical_w = physical.width as f32 / scale;
+    let logical_h = physical.height as f32 / scale;
     session::mutate(|state| {
-        state.window_width = Some(physical.width as f32 / scale);
-        state.window_height = Some(physical.height as f32 / scale);
+        state.window_width = Some(logical_w);
+        state.window_height = Some(logical_h);
         state.window_x = Some(pos.x as f32 / scale);
         state.window_y = Some(pos.y as f32 / scale);
     });
+    tracing::debug!(
+        window_w = logical_w,
+        window_h = logical_h,
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "window session saved"
+    );
 }
 
 /// PR 単位の draft / file index を session.json の per_pr table に書き出す。
@@ -975,18 +1041,28 @@ fn save_window_session(ui: &DiffViewerWindow) {
 /// PR 番号は UI の current-pr-number を読む (PR 切替後も正しい key に書く)。
 /// owner/repo は同じ window の中では不変なので closure capture でよい。
 fn save_pr_session(owner: &str, repo: &str, state: &DiffAppState, ui: &DiffViewerWindow) {
+    let started = Instant::now();
     let pr_number = ui.get_current_pr_number();
     if pr_number <= 0 {
         return;
     }
     let key = session::SessionState::pr_key(owner, repo, pr_number as u64);
+    let selected_file_index = ui.get_selected_file_index();
+    let draft_count = state.draft.len();
     let pr_state = session::PerPrState {
-        selected_file_index: Some(ui.get_selected_file_index()),
+        selected_file_index: Some(selected_file_index),
         draft: state.draft.entries().to_vec(),
     };
     session::mutate(|s| {
         s.per_pr.insert(key, pr_state);
     });
+    tracing::debug!(
+        pr_number,
+        selected_file_index,
+        draft_count,
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "pr session saved"
+    );
 }
 
 /// linked issue 番号一覧を受け取り、各 issue を tokio::spawn 系で並列 fetch
@@ -1000,6 +1076,8 @@ async fn fetch_linked_issues_parallel(
 ) -> Vec<LinkedIssueDisplay> {
     use futures::stream::{FuturesUnordered, StreamExt};
 
+    let started = Instant::now();
+    let requested = numbers.len();
     let mut futs: FuturesUnordered<_> = numbers
         .iter()
         .copied()
@@ -1039,6 +1117,14 @@ async fn fetch_linked_issues_parallel(
         LinkedIssueDisplay::Found(r) => r.number,
         LinkedIssueDisplay::Failed { number, .. } => *number,
     });
+
+    tracing::debug!(
+        requested,
+        returned = out.len(),
+        error_count,
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "linked issues fetched"
+    );
 
     // 1 件以上失敗していたら要約 toast を 1 つだけ出す。
     // (各 issue chip は別途 error 表示されるため、toast は重複させない)

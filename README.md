@@ -73,7 +73,7 @@ For GitHub access, locus reads tokens in this order:
 | `GITHUB_TOKEN` / `GH_TOKEN` | (unset) | GitHub PAT for the diff viewer. |
 | `LOCUS_NO_GH_AUTH` | `false` | Disable the `gh auth token` fallback. |
 | `GH_AUTH_TIMEOUT` | `3` | Seconds before the `gh auth token` subprocess is killed. |
-| `LOCUS_LOG` | `warn` | Tracing filter (`error` / `warn` / `info` / `debug` / `trace`). |
+| `LOCUS_LOG` | `warn` | Tracing filter (`error` / `warn` / `info` / `debug` / `trace`). At `debug`, perf traces (preview refresh, terminal resize, session save, PR/issue fetch elapsed_ms) are also emitted. |
 
 ## Keybindings
 
