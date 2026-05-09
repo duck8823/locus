@@ -24,6 +24,10 @@ export component AppWindow inherits Window {
     in property <int> cursor-row: 0;
     in property <string> font-family: "Menlo, Consolas, monospace";
     in property <length> font-size: 13px;
+    // LOCUS_TERMINAL_DEBUG_GRID=true で各 cell 境界に薄い grid line を出して
+    // glyph と grid のズレを実機で視覚 trace するための debug overlay。
+    // 既定 false。レイアウトは変えない。
+    in property <bool> terminal-debug-grid: false;
 
     // 隠し Text。フォントの実 advance 幅 / 行高を Slint の text shaping
     // 経由で取得する。font-family / font-size を変えると preferred-* も
@@ -93,7 +97,6 @@ export component AppWindow inherits Window {
                     background: cell.bg;
                     visible: cell.span > 0;
                     clip: true;
-
                     Text {
                         width: parent.width;
                         height: parent.height;
@@ -104,6 +107,34 @@ export component AppWindow inherits Window {
                         horizontal-alignment: left;
                         vertical-alignment: center;
                     }
+                }
+            }
+
+            // Debug grid overlay: TerminalCell の span に依存せず、実 cell 境界
+            // そのものを描画する。wide glyph / ZWJ emoji は複数 cell を 1 つの
+            // Text にまとめるため、cell Rectangle の border では内部境界が
+            // 見えない。独立 overlay にして glyph-vs-cell のズレを追跡しやすくする。
+            if root.terminal-debug-grid: Rectangle {
+                x: 0;
+                y: 0;
+                width: root.cols * root.cell-w;
+                height: root.visible-rows * root.cell-h;
+                background: transparent;
+
+                for col in root.cols + 1: Rectangle {
+                    x: col * root.cell-w;
+                    y: 0;
+                    width: 1px;
+                    height: parent.height;
+                    background: #ff00ff80;
+                }
+
+                for row in root.visible-rows + 1: Rectangle {
+                    x: 0;
+                    y: row * root.cell-h;
+                    width: parent.width;
+                    height: 1px;
+                    background: #ff00ff80;
                 }
             }
 
@@ -223,6 +254,10 @@ export component DiffViewerWindow inherits Window {
     in property <int> terminal-cursor-row: 0;
     in property <bool> terminal-available: false;
     in property <string> terminal-status: @tr("not started");
+    // LOCUS_TERMINAL_DEBUG_GRID=true で terminal pane の各 cell 境界に薄い
+    // grid line を出す debug overlay。glyph と cell metric のズレを実機で視覚 trace する。
+    // 既定 false / レイアウトは変えない。
+    in property <bool> terminal-debug-grid: false;
 
     in property <string> font-family: "Menlo, Consolas, monospace";
     in property <length> terminal-font-size: 11px;
@@ -1070,7 +1105,6 @@ export component DiffViewerWindow inherits Window {
                                     background: cell.bg;
                                     visible: cell.span > 0;
                                     clip: true;
-
                                     Text {
                                         width: parent.width;
                                         height: parent.height;
@@ -1081,6 +1115,34 @@ export component DiffViewerWindow inherits Window {
                                         horizontal-alignment: left;
                                         vertical-alignment: center;
                                     }
+                                }
+                            }
+
+                            // Debug grid overlay: TerminalCell の span に依存せず、実 cell
+                            // 境界そのものを描画する。wide glyph / ZWJ emoji は複数 cell を
+                            // 1 つの Text にまとめるため、cell Rectangle の border では
+                            // 内部境界が見えない。
+                            if root.terminal-debug-grid: Rectangle {
+                                x: 0;
+                                y: 0;
+                                width: root.terminal-cols * root.terminal-cell-w;
+                                height: root.terminal-rows-count * root.terminal-cell-h;
+                                background: transparent;
+
+                                for col in root.terminal-cols + 1: Rectangle {
+                                    x: col * root.terminal-cell-w;
+                                    y: 0;
+                                    width: 1px;
+                                    height: parent.height;
+                                    background: #ff00ff80;
+                                }
+
+                                for row in root.terminal-rows-count + 1: Rectangle {
+                                    x: 0;
+                                    y: row * root.terminal-cell-h;
+                                    width: parent.width;
+                                    height: 1px;
+                                    background: #ff00ff80;
                                 }
                             }
 

@@ -66,6 +66,7 @@ GitHub アクセス用 token は次の優先順位で解決されます:
 | `LOCUS_FONT_SIZE` | (未設定) | terminal/diff 両方のフォントサイズを一括指定。 |
 | `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | terminal pane のフォントサイズ (logical px)。 |
 | `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | Slint font probe / 比率 fallback | terminal cell の幅/高さを logical px で手動上書きする。glyph と cell metric のズレを診断・強制同期する場合に使う。 |
+| `LOCUS_TERMINAL_DEBUG_GRID` | `false` | `1`/`true`/`on`/`yes` で terminal の各 cell 境界に薄い grid line を描画して cell と glyph のズレを実機で視覚 trace するための debug overlay。レイアウトは変わらない。 |
 | `LOCUS_DIFF_FONT_SIZE` | `12.0` | diff pane のフォントサイズ (logical px)。 |
 | `LOCUS_BRACKETED_PASTE` | `true` | `false`/`0`/`off`/`no` で paste 境界 sequence (`\x1b[200~ ... \x1b[201~`) を使わずに raw 送信。 |
 | `LOCUS_PROMPT_MAX_CHARS` | `32000` | preview 文字数上限。超過時は警告 + override チェックボックス。 |

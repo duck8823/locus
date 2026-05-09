@@ -95,11 +95,13 @@ fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.set_font_size(ui_cfg.terminal_font_size);
     ui.set_cell_w(ui_cfg.terminal_cell_w());
     ui.set_cell_h(ui_cfg.terminal_cell_h());
+    ui.set_terminal_debug_grid(ui_cfg.terminal_debug_grid);
     tracing::debug!(
         terminal_font_family = %ui_cfg.terminal_font_family,
         terminal_font_size = ui_cfg.terminal_font_size,
         terminal_cell_w = ui_cfg.terminal_cell_w(),
         terminal_cell_h = ui_cfg.terminal_cell_h(),
+        terminal_debug_grid = ui_cfg.terminal_debug_grid,
         "terminal typography configured"
     );
     let pane = Rc::new(terminal::launch(&ui, command, ui_cfg.bracketed_paste)?);
@@ -180,6 +182,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     ui.set_diff_font_size(ui_cfg.diff_font_size);
     ui.set_terminal_cell_w(ui_cfg.terminal_cell_w());
     ui.set_terminal_cell_h(ui_cfg.terminal_cell_h());
+    ui.set_terminal_debug_grid(ui_cfg.terminal_debug_grid);
     ui.set_preview_max_chars(ui_cfg.prompt_max_chars.min(i32::MAX as usize) as i32);
     ui.set_require_send_confirm(ui_cfg.confirm_send);
     tracing::debug!(
@@ -188,6 +191,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         terminal_font_size = ui_cfg.terminal_font_size,
         terminal_cell_w = ui_cfg.terminal_cell_w(),
         terminal_cell_h = ui_cfg.terminal_cell_h(),
+        terminal_debug_grid = ui_cfg.terminal_debug_grid,
         "diff viewer typography configured"
     );
 
