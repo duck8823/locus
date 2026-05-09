@@ -126,6 +126,14 @@ fn translate_ja(key: &str) -> Option<&'static str> {
         "(edited preview)" => "(編集済みプレビュー)",
         "+{} more" => "+{} 件",
         "(failed to fetch)" => "(取得失敗)",
+        "(loading…)" => "(読み込み中…)",
+        // runtime error / toast messages
+        "Terminal pane failed to start" => "ターミナルペインの起動に失敗しました",
+        "{}: {}" => "{}: {}",
+        "Failed to fetch PR #{}" => "PR #{} の取得に失敗しました",
+        "Failed to load PR #{}" => "PR #{} の読み込みに失敗しました",
+        "Failed to load PR list" => "PR 一覧の取得に失敗しました",
+        "Failed to fetch {} linked issue(s)" => "{} 件の関連 issue の取得に失敗しました",
         // terminal status
         "{} (running)" => "{} (起動中)",
         "{}: failed to start ({})" => "{}: 起動失敗 ({})",
@@ -170,6 +178,31 @@ mod tests {
         assert_eq!(
             translate_ja("{}: not found in PATH (set LOCUS_AGENT_CMD)"),
             Some("{}: PATH に見つかりません (LOCUS_AGENT_CMD を設定してください)")
+        );
+    }
+
+    #[test]
+    fn translate_ja_covers_runtime_error_keys() {
+        assert_eq!(translate_ja("(loading…)"), Some("(読み込み中…)"));
+        assert_eq!(
+            translate_ja("Terminal pane failed to start"),
+            Some("ターミナルペインの起動に失敗しました")
+        );
+        assert_eq!(
+            translate_ja("Failed to fetch PR #{}"),
+            Some("PR #{} の取得に失敗しました")
+        );
+        assert_eq!(
+            translate_ja("Failed to load PR #{}"),
+            Some("PR #{} の読み込みに失敗しました")
+        );
+        assert_eq!(
+            translate_ja("Failed to load PR list"),
+            Some("PR 一覧の取得に失敗しました")
+        );
+        assert_eq!(
+            translate_ja("Failed to fetch {} linked issue(s)"),
+            Some("{} 件の関連 issue の取得に失敗しました")
         );
     }
 
