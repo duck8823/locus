@@ -6,4 +6,5 @@
 pub(crate) mod snapshot;
 pub(crate) mod refresh;
 pub(crate) mod state;
+pub(crate) mod toast;
 pub(crate) mod util;

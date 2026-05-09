@@ -19,7 +19,7 @@ thread_local! {
     };
 }
 
-fn with_app_state<R>(f: impl FnOnce(&Rc<RefCell<DiffAppState>>) -> R) -> Option<R> {
+pub(crate) fn with_app_state<R>(f: impl FnOnce(&Rc<RefCell<DiffAppState>>) -> R) -> Option<R> {
     DIFF_APP_STATE.with(|cell| cell.borrow().as_ref().map(f))
 }
 
@@ -45,6 +45,7 @@ use app::diff_viewer::refresh::{
     refresh_preview, refresh_toasts,
 };
 use app::diff_viewer::state::{DiffAppState, ToastKind};
+use app::diff_viewer::toast::{schedule_toast_auto_dismiss, set_active_window, show_toast};
 use app::diff_viewer::util::resolve_line_number;
 
 use github::issue_context::{
@@ -243,7 +244,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         scroll_positions: std::collections::HashMap::new(),
     }));
     DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state.clone()));
-    ACTIVE_DIFF_WINDOW.with(|cell| *cell.borrow_mut() = Some(ui.as_weak()));
+    set_active_window(&ui);
 
     // dismiss-toast コールバック
     {
@@ -997,45 +998,6 @@ fn save_pr_session(owner: &str, repo: &str, state: &DiffAppState, ui: &DiffViewe
     session::mutate(|s| {
         s.per_pr.insert(key, pr_state);
     });
-}
-
-/// 5 秒後に該当 toast を自動で dismiss する。
-///
-/// `slint::Timer::single_shot` は内部で self-manage されるため、Timer 自体を
-/// 持ち回ったり leak したりする必要がない。
-fn schedule_toast_auto_dismiss(toast_id: i32) {
-    use std::time::Duration;
-    slint::Timer::single_shot(Duration::from_secs(5), move || {
-        with_app_state(|state| {
-            state.borrow_mut().dismiss_toast(toast_id);
-            if let Some(ui) =
-                ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade()))
-            {
-                refresh_toasts(&ui, state);
-            }
-        });
-    });
-}
-
-/// UI イベントループ上で toast を push し、auto-dismiss スケジュールを行う。
-/// 各エラー経路のヘルパとして使う。
-fn show_toast(kind: ToastKind, title: String, message: String) {
-    with_app_state(|state| {
-        let id = state.borrow_mut().push_toast(kind, title, message);
-        if let Some(ui) =
-            ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade()))
-        {
-            refresh_toasts(&ui, state);
-        }
-        schedule_toast_auto_dismiss(id);
-    });
-}
-
-thread_local! {
-    /// auto-dismiss timer から UI を取り出すための弱参照。run_diff_viewer 起動時に登録。
-    static ACTIVE_DIFF_WINDOW: RefCell<Option<slint::Weak<DiffViewerWindow>>> = const {
-        RefCell::new(None)
-    };
 }
 
 /// linked issue 番号一覧を受け取り、各 issue を tokio::spawn 系で並列 fetch

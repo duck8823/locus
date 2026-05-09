@@ -2,8 +2,8 @@
 //! 純粋ヘルパ群 (#224 step 3)。
 //!
 //! いずれも `&DiffViewerWindow` または slice 引数だけを受け取り、
-//! DIFF_APP_STATE thread_local には触れない。状態を持つ refresh_* / show_toast
-//! は別 step で扱う。
+//! DIFF_APP_STATE thread_local には触れない。状態を持つ UI 更新や副作用は
+//! `refresh` / `toast` module に分離している。
 
 use slint::{ModelRc, SharedString, VecModel};
 
