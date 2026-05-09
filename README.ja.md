@@ -17,6 +17,12 @@
 
 Locus は macOS 向け **ローカルネイティブ** PR review ツールです (Rust + Slint)。GitHub PR の diff viewer に、AI agent CLI (Claude Code / Codex / Gemini) を動かす terminal pane を同居させた構成で動きます。現在は v0.0.x の patch sprint で、`v0.1: core review loop` マイルストーンに向けて安定化中です。
 
+![locus diff viewer](docs/screenshots/diff-viewer.png)
+
+左に diff pane、下に agent CLI を抱えた terminal pane、右に下書き / 履歴のサイドパネル。引数なしの `cargo run` では terminal pane のみで起動します:
+
+![locus terminal pane](docs/screenshots/terminal-pane.png)
+
 旧 Next.js 版は [`legacy/nextjs`](https://github.com/duck8823/locus/tree/legacy/nextjs) ブランチに保全されています。
 
 ## クイックスタート
