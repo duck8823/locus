@@ -8,21 +8,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-thread_local! {
-    /// 同期 callback / 非同期 spawn 完了後の invoke_from_event_loop closure
-    /// から共通でアクセスする DiffAppState。Slint イベントループは UI スレッド
-    /// 上で動くため thread_local で十分。Rc<RefCell<>> を closure に capture
-    /// すると非 Send になり spawn できないので、thread_local 経由で
-    /// 取り出す形にして closure を Send に保つ。
-    static DIFF_APP_STATE: RefCell<Option<Rc<RefCell<DiffAppState>>>> = const {
-        RefCell::new(None)
-    };
-}
-
-pub(crate) fn with_app_state<R>(f: impl FnOnce(&Rc<RefCell<DiffAppState>>) -> R) -> Option<R> {
-    DIFF_APP_STATE.with(|cell| cell.borrow().as_ref().map(f))
-}
-
 use slint::{ComponentHandle, SharedString};
 
 slint::include_modules!();
@@ -44,7 +29,7 @@ use app::diff_viewer::refresh::{
     append_history, refresh_current_anchor_label, refresh_draft_panel, refresh_history_panel,
     refresh_preview, refresh_toasts,
 };
-use app::diff_viewer::state::{DiffAppState, ToastKind};
+use app::diff_viewer::state::{set_app_state, with_app_state, DiffAppState, ToastKind};
 use app::diff_viewer::toast::{schedule_toast_auto_dismiss, set_active_window, show_toast};
 use app::diff_viewer::util::resolve_line_number;
 
@@ -243,7 +228,7 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
         next_toast_id: 0,
         scroll_positions: std::collections::HashMap::new(),
     }));
-    DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state.clone()));
+    set_app_state(state.clone());
     set_active_window(&ui);
 
     // dismiss-toast コールバック

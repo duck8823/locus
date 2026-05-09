@@ -5,7 +5,7 @@
 //! 起動時に `set_active_window` で登録する。
 //!
 //! `show_toast` / `schedule_toast_auto_dismiss` は Slint UI スレッド上で呼ばれる
-//! 想定で、`crate::with_app_state` 経由で `DIFF_APP_STATE` を借用し、
+//! 想定で、`state::with_app_state` 経由で `DIFF_APP_STATE` を借用し、
 //! `refresh::refresh_toasts` で UI を再描画する。
 
 use std::cell::RefCell;
@@ -14,7 +14,7 @@ use std::time::Duration;
 use slint::{ComponentHandle, Weak};
 
 use super::refresh::refresh_toasts;
-use super::state::ToastKind;
+use super::state::{with_app_state, ToastKind};
 use crate::DiffViewerWindow;
 
 thread_local! {
@@ -36,7 +36,7 @@ pub(crate) fn set_active_window(ui: &DiffViewerWindow) {
 /// 持ち回ったり leak したりする必要がない。
 pub(crate) fn schedule_toast_auto_dismiss(toast_id: i32) {
     slint::Timer::single_shot(Duration::from_secs(5), move || {
-        crate::with_app_state(|state| {
+        with_app_state(|state| {
             state.borrow_mut().dismiss_toast(toast_id);
             if let Some(ui) =
                 ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade()))
@@ -50,7 +50,7 @@ pub(crate) fn schedule_toast_auto_dismiss(toast_id: i32) {
 /// UI イベントループ上で toast を push し、auto-dismiss スケジュールを行う。
 /// 各エラー経路のヘルパとして使う。
 pub(crate) fn show_toast(kind: ToastKind, title: String, message: String) {
-    crate::with_app_state(|state| {
+    with_app_state(|state| {
         let id = state.borrow_mut().push_toast(kind, title, message);
         if let Some(ui) = ACTIVE_DIFF_WINDOW.with(|w| w.borrow().as_ref().and_then(|w| w.upgrade()))
         {

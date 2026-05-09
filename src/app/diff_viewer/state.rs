@@ -9,10 +9,35 @@
 //! 一旦 `pub(crate)` で公開し、main.rs / app::diff_viewer 配下の helper から
 //! のみアクセスする想定。
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::github::pull_request::{PullRequestFile, PullRequestSnapshot};
 use crate::review::draft::{PromptDraft, SendMode};
 use crate::review::selection::{Granularity, SelectionAnchor, Side};
 use crate::review::snapshot::FileId;
+
+thread_local! {
+    /// 同期 callback / 非同期 spawn 完了後の invoke_from_event_loop closure
+    /// から共通でアクセスする DiffAppState。Slint イベントループは UI スレッド
+    /// 上で動くため thread_local で十分。Rc<RefCell<>> を closure に capture
+    /// すると非 Send になり spawn できないので、thread_local 経由で
+    /// 取り出す形にして closure を Send に保つ。
+    static DIFF_APP_STATE: RefCell<Option<Rc<RefCell<DiffAppState>>>> = const {
+        RefCell::new(None)
+    };
+}
+
+/// `run_diff_viewer` 起動時に共有 state を thread_local へ登録する。
+/// UI スレッド上で 1 度だけ呼ばれる前提。
+pub(crate) fn set_app_state(state: Rc<RefCell<DiffAppState>>) {
+    DIFF_APP_STATE.with(|cell| *cell.borrow_mut() = Some(state));
+}
+
+/// 登録済みの共有 state へクロージャでアクセスする。未登録なら `None`。
+pub(crate) fn with_app_state<R>(f: impl FnOnce(&Rc<RefCell<DiffAppState>>) -> R) -> Option<R> {
+    DIFF_APP_STATE.with(|cell| cell.borrow().as_ref().map(f))
+}
 
 /// 送信履歴の 1 エントリ。セッション内にのみ保持される。
 #[derive(Debug, Clone)]
