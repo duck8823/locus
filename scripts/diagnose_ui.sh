@@ -661,14 +661,71 @@ inject_terminal_scroll() {
 
     start_ms="$(unix_ms)"
     emit_event "start" "terminal-scroll" "$idx" \
-        "start_unix_ms=$start_ms" "detail=post 6 scroll wheel events (line, dy=-3)"
+        "start_unix_ms=$start_ms" "detail=move pointer to terminal area; post 6 scroll wheel events (line, dy=-3)"
 
-    "$HAS_PYTHON3_BIN" - >/dev/null 2>&1 <<'PY'
+    APP_PID="$APP_PID" MODE="$MODE" "$HAS_PYTHON3_BIN" - >/dev/null 2>&1 <<'PY'
+import os
 import sys, time
 try:
     import Quartz
 except ImportError:
     sys.exit(11)
+
+try:
+    pid = int(os.environ.get("APP_PID", "0"))
+except ValueError:
+    sys.exit(12)
+if pid <= 0:
+    sys.exit(12)
+
+options = (
+    Quartz.kCGWindowListOptionOnScreenOnly
+    | Quartz.kCGWindowListExcludeDesktopElements
+)
+windows = Quartz.CGWindowListCopyWindowInfo(options, Quartz.kCGNullWindowID) or []
+candidates = []
+for w in windows:
+    if w.get("kCGWindowOwnerPID") != pid:
+        continue
+    if w.get("kCGWindowLayer", 0) != 0:
+        continue
+    bounds = w.get("kCGWindowBounds") or {}
+    width = float(bounds.get("Width", 0) or 0)
+    height = float(bounds.get("Height", 0) or 0)
+    if width <= 0 or height <= 0:
+        continue
+    x = float(bounds.get("X", 0) or 0)
+    y = float(bounds.get("Y", 0) or 0)
+    candidates.append((width * height, x, y, width, height))
+if not candidates:
+    sys.exit(13)
+
+_, x, y, width, height = sorted(candidates, reverse=True)[0]
+mode = os.environ.get("MODE") or "terminal"
+if mode == "github":
+    # Diff viewer: terminal pane is the bottom part of the left content area.
+    content_width = max(1.0, width - 320.0)
+    target = (x + min(content_width, width) * 0.5, y + max(24.0, height - 129.0))
+else:
+    # Terminal-only window: the terminal fills the window.
+    target = (x + width * 0.5, y + height * 0.5)
+
+move = Quartz.CGEventCreateMouseEvent(
+    None, Quartz.kCGEventMouseMoved, target, Quartz.kCGMouseButtonLeft
+)
+if move is None:
+    sys.exit(21)
+Quartz.CGEventPost(Quartz.kCGHIDEventTap, move)
+time.sleep(0.05)
+for event_type in (Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp):
+    click = Quartz.CGEventCreateMouseEvent(
+        None, event_type, target, Quartz.kCGMouseButtonLeft
+    )
+    if click is None:
+        sys.exit(22)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, click)
+    time.sleep(0.03)
+
 for _ in range(6):
     e = Quartz.CGEventCreateScrollWheelEvent(
         None, Quartz.kCGScrollEventUnitLine, 1, -3
@@ -689,6 +746,14 @@ PY
         11)
             emit_event "skipped" "terminal-scroll" "$idx" \
                 "start_unix_ms=$start_ms" "reason=no_quartz"
+            ;;
+        12)
+            emit_event "skipped" "terminal-scroll" "$idx" \
+                "start_unix_ms=$start_ms" "reason=no_pid_for_scroll"
+            ;;
+        13)
+            emit_event "skipped" "terminal-scroll" "$idx" \
+                "start_unix_ms=$start_ms" "reason=no_window_for_scroll"
             ;;
         *)
             emit_event "failed" "terminal-scroll" "$idx" \
