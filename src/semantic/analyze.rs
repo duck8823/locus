@@ -10,6 +10,7 @@ use crate::review::snapshot::{Revision, SourceSnapshot};
 use super::adapter::{ParserAdapter, ParserDiffResult};
 use super::fallback::FallbackLineParserAdapter;
 use super::go::GoParserAdapter;
+use super::ir::ChangeType;
 
 /// 1 ファイルぶんの semantic 解析を行う。
 ///
@@ -26,7 +27,9 @@ pub fn analyze_pull_request_file(file: &PullRequestFile) -> ParserDiffResult {
 
     let language = detect_language(&file.file_path);
     if matches!(language.as_deref(), Some("go")) {
-        return run_adapter(&GoParserAdapter::new(), file, "go");
+        let mut result = run_adapter(&GoParserAdapter::new(), file, "go");
+        append_file_rename_item_if_needed(file, "go", &mut result);
+        return result;
     }
 
     let lang = language.as_deref().unwrap_or("unknown");
@@ -60,9 +63,27 @@ fn run_adapter<A: ParserAdapter>(
 }
 
 fn previous_path(file: &PullRequestFile) -> &str {
-    // 現状の PullRequestFile には previous path を直接持たないため、
-    // before/after で同じ path を使う。後続 issue で rename 完全対応する。
-    file.file_path.as_str()
+    file.previous_file_path.as_deref().unwrap_or(&file.file_path)
+}
+
+fn append_file_rename_item_if_needed(
+    file: &PullRequestFile,
+    language: &str,
+    result: &mut ParserDiffResult,
+) {
+    if file.status != FileStatus::Renamed
+        || file.previous_file_path.as_deref() == Some(file.file_path.as_str())
+        || file.previous_file_path.is_none()
+    {
+        return;
+    }
+
+    let fallback = run_adapter(&FallbackLineParserAdapter::new(), file, language);
+    for item in fallback.items {
+        if item.change_type == ChangeType::Renamed {
+            result.items.push(item);
+        }
+    }
 }
 
 fn detect_language(path: &str) -> Option<String> {
@@ -109,9 +130,29 @@ mod tests {
         PullRequestFile {
             file_id: FileId::new(path),
             file_path: path.into(),
+            previous_file_path: None,
             status,
             before_content: before.map(str::to_string),
             after_content: after.map(str::to_string),
+            patch: None,
+            is_binary: false,
+            unsupported: None,
+        }
+    }
+
+    fn renamed_pr_file(
+        before_path: &str,
+        after_path: &str,
+        before: &str,
+        after: &str,
+    ) -> PullRequestFile {
+        PullRequestFile {
+            file_id: FileId::new(after_path),
+            file_path: after_path.into(),
+            previous_file_path: Some(before_path.into()),
+            status: FileStatus::Renamed,
+            before_content: Some(before.into()),
+            after_content: Some(after.into()),
             patch: None,
             is_binary: false,
             unsupported: None,
@@ -189,5 +230,27 @@ mod tests {
         for item in &r.items {
             assert_eq!(item.change_type, ChangeType::Added);
         }
+    }
+
+    #[test]
+    fn non_go_renamed_file_uses_previous_path_for_fallback() {
+        let file = renamed_pr_file("old.md", "new.md", "same\n", "same\n");
+        let r = analyze_pull_request_file(&file);
+        assert_eq!(r.adapter_name, FallbackLineParserAdapter::NAME);
+        assert_eq!(r.items.len(), 1);
+        assert_eq!(r.items[0].change_type, ChangeType::Renamed);
+        assert_eq!(r.items[0].display_name, "new.md");
+    }
+
+    #[test]
+    fn go_rename_only_file_emits_file_level_rename_item() {
+        let content = "package main\nfunc A() {}\n";
+        let file = renamed_pr_file("old.go", "new.go", content, content);
+        let r = analyze_pull_request_file(&file);
+        assert_eq!(r.adapter_name, GoParserAdapter::NAME);
+        assert_eq!(r.items.len(), 1);
+        assert_eq!(r.items[0].change_type, ChangeType::Renamed);
+        assert_eq!(r.items[0].kind, SymbolKind::Module);
+        assert_eq!(r.items[0].display_name, "new.go");
     }
 }
