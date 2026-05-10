@@ -8,6 +8,7 @@ pub mod diff_view;
 pub mod draft_view;
 
 use std::rc::Rc;
+use std::sync::OnceLock;
 
 use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::Dimensions;
@@ -29,6 +30,7 @@ pub fn empty_row(cols: usize) -> TerminalRow {
             fg: FG,
             bg: BG,
             span: 1,
+            font_family: SharedString::from(""),
         });
     }
     TerminalRow {
@@ -114,6 +116,7 @@ fn spacer_cell() -> TerminalCell {
         fg: FG,
         bg: BG,
         span: 0,
+        font_family: SharedString::from(""),
     }
 }
 
@@ -123,6 +126,194 @@ fn cell_to_terminal_cell(cell: &Cell, span: i32, ch: &str) -> TerminalCell {
         fg: color::cell_fg(cell),
         bg: color::cell_bg(cell),
         span,
+        font_family: SharedString::from(font_family_for_glyph(ch)),
+    }
+}
+
+/// Glyph 文字列の分類結果。emoji / 装飾 symbol / その他 (CJK・ASCII 等) に分け、
+/// per-cell font-family を選ぶ。Slint Text の font-family は実質単一 family と
+/// して扱われがちで、カンマ区切り fallback の per-glyph 解決が崩れる事象 (#277)
+/// があるため、必要な cell だけ専用 family を渡す。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GlyphCategory {
+    /// 既定 font-family にフォールバックする (CJK / ASCII / spacer)。
+    Default,
+    /// emoji (絵文字 / ZWJ chain / Variation Selector-16 / Regional Indicator)。
+    Emoji,
+    /// 装飾的な記号・矢印 (例: ↯ U+21AF)。
+    Symbol,
+}
+
+fn classify_glyph(s: &str) -> GlyphCategory {
+    if s.is_empty() {
+        return GlyphCategory::Default;
+    }
+    let mut emoji = false;
+    let mut symbol = false;
+    for ch in s.chars() {
+        let c = ch as u32;
+        // ZWJ / VS16 / Regional Indicator が含まれていれば確定で emoji。
+        if c == 0x200D || c == 0xFE0F || (0x1F1E6..=0x1F1FF).contains(&c) {
+            return GlyphCategory::Emoji;
+        }
+        if is_default_emoji_codepoint(c) {
+            emoji = true;
+        } else if is_decorative_symbol_codepoint(c) {
+            symbol = true;
+        }
+    }
+    if emoji {
+        GlyphCategory::Emoji
+    } else if symbol {
+        GlyphCategory::Symbol
+    } else {
+        GlyphCategory::Default
+    }
+}
+
+/// 既定で emoji presentation になる codepoint かどうかの近似判定。
+/// Unicode の `Emoji_Presentation` プロパティを完全には参照しないが、
+/// terminal pane で頻出する 🚀 や 1F000 系・主要 BMP emoji を拾う。
+fn is_default_emoji_codepoint(c: u32) -> bool {
+    // SMP の emoji 系ブロック。1FB00 以降には legacy computing symbols など
+    // monospace terminal で通常フォントのまま扱いたいものもあるため含めない。
+    if (0x1F000..=0x1FAFF).contains(&c) {
+        return true;
+    }
+    // BMP 上で `Emoji_Presentation=Yes` の代表的 codepoint。網羅ではないが
+    // よく出るもの (✅ ⭐ ⌚ など) を拾う。それ以外の dingbats / misc symbols は
+    // VS16 が無ければ symbol 扱いで十分 (Apple Symbols / Segoe UI Symbol で描ける)。
+    matches!(
+        c,
+        0x231A | 0x231B
+            | 0x23E9..=0x23EC
+            | 0x23F0
+            | 0x23F3
+            | 0x25FD
+            | 0x25FE
+            | 0x2614
+            | 0x2615
+            | 0x2648..=0x2653
+            | 0x267F
+            | 0x2693
+            | 0x26A1
+            | 0x26AA
+            | 0x26AB
+            | 0x26BD
+            | 0x26BE
+            | 0x26C4
+            | 0x26C5
+            | 0x26CE
+            | 0x26D4
+            | 0x26EA
+            | 0x26F2
+            | 0x26F3
+            | 0x26F5
+            | 0x26FA
+            | 0x26FD
+            | 0x2705
+            | 0x270A
+            | 0x270B
+            | 0x2728
+            | 0x274C
+            | 0x274E
+            | 0x2753..=0x2755
+            | 0x2757
+            | 0x2795..=0x2797
+            | 0x27B0
+            | 0x27BF
+            | 0x2B1B
+            | 0x2B1C
+            | 0x2B50
+            | 0x2B55
+    )
+}
+
+/// 装飾的な symbol / arrow 系 BMP ブロック。↯ (U+21AF) を含む Arrows、
+/// Geometric Shapes、Misc Symbols & Arrows などを拾う。Box Drawing / Block
+/// Elements は terminal UI で罫線として頻出し、monospace font に任せた方が
+/// grid が崩れにくいためここでは専用 symbol font に切り替えない。
+fn is_decorative_symbol_codepoint(c: u32) -> bool {
+    matches!(
+        c,
+        0x2190..=0x21FF // Arrows (↯ U+21AF)
+            | 0x2200..=0x22FF // Mathematical Operators
+            | 0x2300..=0x23FF // Misc Technical
+            | 0x25A0..=0x25FF // Geometric Shapes
+            | 0x2600..=0x26FF // Misc Symbols
+            | 0x2700..=0x27BF // Dingbats
+            | 0x2900..=0x297F // Supplemental Arrows-B
+            | 0x2980..=0x29FF // Misc Math Symbols-B
+            | 0x2A00..=0x2AFF // Supplemental Math Operators
+            | 0x2B00..=0x2BFF // Misc Symbols and Arrows
+    )
+}
+
+/// emoji 用 font family。`LOCUS_TERMINAL_EMOJI_FONT_FAMILY` で OS 既定を上書き
+/// できる (例: Linux で `Twemoji Mozilla` を強制したい場合など)。
+fn emoji_font_family() -> &'static str {
+    static CACHE: OnceLock<String> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            std::env::var("LOCUS_TERMINAL_EMOJI_FONT_FAMILY")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| default_emoji_font_family().to_string())
+        })
+        .as_str()
+}
+
+/// 装飾 symbol / arrow 用 font family。`LOCUS_TERMINAL_SYMBOL_FONT_FAMILY` で
+/// OS 既定を上書き可能。
+fn symbol_font_family() -> &'static str {
+    static CACHE: OnceLock<String> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            std::env::var("LOCUS_TERMINAL_SYMBOL_FONT_FAMILY")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| default_symbol_font_family().to_string())
+        })
+        .as_str()
+}
+
+const fn default_emoji_font_family() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "Apple Color Emoji"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "Segoe UI Emoji"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        "Noto Color Emoji"
+    }
+}
+
+const fn default_symbol_font_family() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "Apple Symbols"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "Segoe UI Symbol"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        "Noto Sans Symbols 2"
+    }
+}
+
+fn font_family_for_glyph(s: &str) -> &'static str {
+    match classify_glyph(s) {
+        GlyphCategory::Emoji => emoji_font_family(),
+        GlyphCategory::Symbol => symbol_font_family(),
+        GlyphCategory::Default => "",
     }
 }
 
@@ -145,4 +336,99 @@ fn base_span(cell: &Cell) -> i32 {
 #[allow(dead_code)]
 pub fn term_screen_lines<T: EventListener>(term: &Term<T>) -> usize {
     term.grid().screen_lines()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn arrow_decorative_symbol_classified_as_symbol() {
+        // ↯ (U+21AF) は Apple Symbols / Segoe UI Symbol で描ける装飾的 arrow。
+        // Slint の Text font-family fallback だけだと □ になる事象 (#277) を
+        // 避けるため、symbol カテゴリに振り分ける。
+        assert_eq!(classify_glyph("↯"), GlyphCategory::Symbol);
+        assert_eq!(font_family_for_glyph("↯"), default_symbol_font_family());
+    }
+
+    #[test]
+    fn rocket_emoji_classified_as_emoji() {
+        // 🚀 (U+1F680) は SMP の emoji ブロックなので emoji 確定。
+        assert_eq!(classify_glyph("🚀"), GlyphCategory::Emoji);
+        assert_eq!(font_family_for_glyph("🚀"), default_emoji_font_family());
+    }
+
+    #[test]
+    fn zwj_emoji_chain_classified_as_emoji() {
+        // 👨‍👩‍👧 = U+1F468 ZWJ U+1F469 ZWJ U+1F467
+        let zwj = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+        assert_eq!(classify_glyph(zwj), GlyphCategory::Emoji);
+        assert_eq!(font_family_for_glyph(zwj), default_emoji_font_family());
+    }
+
+    #[test]
+    fn variation_selector_16_forces_emoji_presentation() {
+        // VS16 が付いた dingbat / misc symbol は emoji 扱い。
+        let snowman_with_vs16 = "\u{2603}\u{FE0F}";
+        assert_eq!(classify_glyph(snowman_with_vs16), GlyphCategory::Emoji);
+    }
+
+    #[test]
+    fn regional_indicator_classified_as_emoji() {
+        // 🇯🇵 = U+1F1EF U+1F1F5 (regional indicators)
+        let flag = "\u{1F1EF}\u{1F1F5}";
+        assert_eq!(classify_glyph(flag), GlyphCategory::Emoji);
+    }
+
+    #[test]
+    fn ascii_classified_as_default() {
+        assert_eq!(classify_glyph("A"), GlyphCategory::Default);
+        assert_eq!(classify_glyph("hello"), GlyphCategory::Default);
+        assert_eq!(font_family_for_glyph("A"), "");
+    }
+
+    #[test]
+    fn cjk_classified_as_default() {
+        // CJK は既存 monospace + CJK fallback chain (例: Hiragino Sans) で
+        // そのまま描けるので Default に倒し、専用 family を渡さない。
+        assert_eq!(classify_glyph("あ"), GlyphCategory::Default);
+        assert_eq!(classify_glyph("漢"), GlyphCategory::Default);
+        assert_eq!(font_family_for_glyph("あ"), "");
+    }
+
+    #[test]
+    fn empty_glyph_classified_as_default() {
+        // span=0 spacer cell は空文字。font-family も空のままで spacer 整列を維持。
+        assert_eq!(classify_glyph(""), GlyphCategory::Default);
+        assert_eq!(font_family_for_glyph(""), "");
+    }
+
+    #[test]
+    fn space_classified_as_default() {
+        // ASCII space は通常 cell として扱う。symbol/emoji family を渡すと
+        // monospace 幅が崩れる可能性があるので Default に倒す。
+        assert_eq!(classify_glyph(" "), GlyphCategory::Default);
+    }
+
+    #[test]
+    fn box_drawing_stays_default_to_preserve_grid() {
+        // ─ U+2500, ┃ U+2503 などの罫線は terminal UI で頻出する。
+        // 専用 symbol font に倒すと monospace grid と見た目がずれやすいため、
+        // 通常 terminal font に任せる。
+        assert_eq!(classify_glyph("─"), GlyphCategory::Default);
+        assert_eq!(classify_glyph("┃"), GlyphCategory::Default);
+    }
+
+    #[test]
+    fn empty_row_cells_have_empty_font_family() {
+        // span=1 の通常 spacer cell の font-family は空文字 (既定 fallback)。
+        let row = empty_row(3);
+        let cells = row.cells;
+        assert_eq!(cells.row_count(), 3);
+        for i in 0..cells.row_count() {
+            let c = cells.row_data(i).unwrap();
+            assert_eq!(c.span, 1);
+            assert_eq!(c.font_family.as_str(), "");
+        }
+    }
 }

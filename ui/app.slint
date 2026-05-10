@@ -8,6 +8,11 @@ export struct TerminalCell {
     bg: color,
     // 描画上の幅 (cell-w 倍数)。1=通常, 2=wide char, 0=spacer (描画しない)
     span: int,
+    // emoji / 装飾 symbol 用の per-cell font-family。空文字なら呼び出し側の
+    // 既定 font-family にフォールバック。Slint Text の font-family は実質単一
+    // family しか効かないことがあり (#277)、emoji や ↯ などが □ になる事故を
+    // 避けるため、必要な cell だけ専用 family を渡せるようにしておく。
+    font-family: string,
 }
 
 export struct TerminalRow {
@@ -103,7 +108,7 @@ export component AppWindow inherits Window {
                         height: parent.height;
                         text: cell.ch;
                         color: cell.fg;
-                        font-family: root.font-family;
+                        font-family: cell.font-family != "" ? cell.font-family : root.font-family;
                         font-size: root.font-size;
                         horizontal-alignment: left;
                         vertical-alignment: center;
@@ -1168,7 +1173,7 @@ export component DiffViewerWindow inherits Window {
                                         height: parent.height;
                                         text: cell.ch;
                                         color: cell.fg;
-                                        font-family: root.terminal-font-family;
+                                        font-family: cell.font-family != "" ? cell.font-family : root.terminal-font-family;
                                         font-size: root.terminal-font-size;
                                         horizontal-alignment: left;
                                         vertical-alignment: center;
