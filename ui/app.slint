@@ -215,6 +215,17 @@ export struct DiffFileView {
     lines: [DiffLineView],
 }
 
+// 1 つの semantic 変更項目。tree-sitter-go spike (#207) では function /
+// method 単位で Added / Removed / Modified が並ぶ最小ビューを出す。
+export struct SemanticItemView {
+    file-path: string,
+    display-name: string,
+    container: string,
+    kind-label: string,
+    change-label: string,
+    change-kind: string, // "added" / "removed" / "modified" / "renamed"
+}
+
 export component DiffViewerWindow inherits Window {
     in property <string> pr-title;
     in property <string> head-sha;
@@ -230,6 +241,8 @@ export component DiffViewerWindow inherits Window {
     changed diff-scroll-y => {
         root.diff-scroll-diagnostic(0px, root.diff-scroll-y);
     }
+
+    in property <[SemanticItemView]> semantic-items;
 
     in property <string> current-anchor-label: @tr("(no selection)");
     in property <bool> has-selection: false;
@@ -1193,7 +1206,7 @@ export component DiffViewerWindow inherits Window {
                 }
             }
 
-            // Right: draft + history panel
+            // Right: semantic + draft + history panel
             Rectangle {
                 width: 300px;
                 background: #14141a;
@@ -1201,6 +1214,94 @@ export component DiffViewerWindow inherits Window {
                 VerticalBox {
                     spacing: 0px;
                     padding: 0px;
+
+                    // Semantic section (#207 spike)
+                    Rectangle {
+                        height: 32px;
+                        background: #1a1a22;
+                        HorizontalBox {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            alignment: start;
+                            Text {
+                                text: @tr("Semantic") + " (" + root.semantic-items.length + ")";
+                                color: #ffffff;
+                                font-size: 12px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 140px;
+                        background: #14141a;
+
+                        if root.semantic-items.length == 0: VerticalBox {
+                            alignment: center;
+                            Text {
+                                text: @tr("(no semantic changes)");
+                                color: #5a5a6a;
+                                font-size: 11px;
+                                horizontal-alignment: center;
+                            }
+                        }
+
+                        if root.semantic-items.length > 0: ListView {
+                            for item in root.semantic-items: Rectangle {
+                                height: 36px;
+                                background: #14141a;
+                                border-width: 1px;
+                                border-color: #1c1c24;
+
+                                VerticalBox {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    padding-top: 2px;
+                                    padding-bottom: 2px;
+                                    spacing: 1px;
+                                    HorizontalBox {
+                                        spacing: 6px;
+                                        alignment: start;
+                                        Text {
+                                            text: item.change-label;
+                                            color: item.change-kind == "added"
+                                                ? #7ac07a
+                                                : (item.change-kind == "removed"
+                                                    ? #e58585
+                                                    : (item.change-kind == "renamed"
+                                                        ? #c0a07a
+                                                        : #7a9ec0));
+                                            font-size: 10px;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            text: item.kind-label;
+                                            color: #8a8a95;
+                                            font-size: 10px;
+                                            vertical-alignment: center;
+                                        }
+                                        Text {
+                                            text: item.display-name;
+                                            color: #d0d0d5;
+                                            font-size: 11px;
+                                            font-family: root.font-family;
+                                            overflow: elide;
+                                            horizontal-stretch: 1;
+                                        }
+                                    }
+                                    Text {
+                                        text: item.file-path;
+                                        color: #5a5a65;
+                                        font-size: 9px;
+                                        font-family: root.font-family;
+                                        overflow: elide;
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     Rectangle {
                         height: 32px;

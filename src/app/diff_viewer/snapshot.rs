@@ -9,10 +9,11 @@ use slint::{ModelRc, SharedString, VecModel};
 
 use crate::github::issue_context::{IssueContextRecord, IssueState};
 use crate::github::pull_request::{
-    PrListState, PullRequestSnapshot, PullRequestSummary,
+    PrListState, PullRequestFile, PullRequestSnapshot, PullRequestSummary,
 };
+use crate::semantic::{ChangeType, SymbolKind, analyze_pull_request_file};
 use crate::ui_state::diff_view::build_diff_file_views;
-use crate::{DiffViewerWindow, IssueContextView, PullRequestListItemView};
+use crate::{DiffViewerWindow, IssueContextView, PullRequestListItemView, SemanticItemView};
 
 use super::util::{excerpt, short_sha};
 
@@ -46,6 +47,55 @@ pub(crate) fn apply_snapshot_to_ui(
     ui.set_files(ModelRc::from(model));
     ui.set_selected_file_index(0);
     ui.set_diff_scroll_y(0.0);
+    ui.set_semantic_items(build_semantic_items_model(&snapshot.files));
+}
+
+/// PR snapshot 全ファイルを semantic adapter に通し、UI 用の linear list を作る。
+/// Go 以外は file-level の fallback item が並ぶ。
+pub(crate) fn build_semantic_items_model(
+    files: &[PullRequestFile],
+) -> ModelRc<SemanticItemView> {
+    let model = VecModel::<SemanticItemView>::default();
+    for file in files {
+        let result = analyze_pull_request_file(file);
+        for item in result.items {
+            let kind_label = symbol_kind_label(item.kind);
+            let (change_label, change_kind) = change_type_labels(item.change_type);
+            model.push(SemanticItemView {
+                file_path: SharedString::from(file.file_path.as_str()),
+                display_name: SharedString::from(item.display_name.as_str()),
+                container: SharedString::from(item.container.as_deref().unwrap_or("")),
+                kind_label: SharedString::from(kind_label),
+                change_label: SharedString::from(change_label),
+                change_kind: SharedString::from(change_kind),
+            });
+        }
+    }
+    ModelRc::from(
+        std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = SemanticItemView>>,
+    )
+}
+
+fn symbol_kind_label(kind: SymbolKind) -> String {
+    let key = match kind {
+        SymbolKind::Function => "function",
+        SymbolKind::Method => "method",
+        SymbolKind::Class => "class",
+        SymbolKind::Module => "module",
+        SymbolKind::Unknown => "symbol",
+    };
+    crate::i18n::tr(key)
+}
+
+fn change_type_labels(change: ChangeType) -> (String, &'static str) {
+    let (key, raw) = match change {
+        ChangeType::Added => ("added", "added"),
+        ChangeType::Removed => ("removed", "removed"),
+        ChangeType::Modified => ("modified", "modified"),
+        ChangeType::Moved => ("moved", "moved"),
+        ChangeType::Renamed => ("renamed", "renamed"),
+    };
+    (crate::i18n::tr(key), raw)
 }
 
 /// PR 一覧 (PullRequestSummary) を Slint Model に詰め直す。

@@ -84,6 +84,13 @@ msgstr "エージェント:"
 msgid "not started"
 msgstr "未起動"
 
+# Semantic panel (#207 spike)
+msgid "Semantic"
+msgstr "セマンティック"
+
+msgid "(no semantic changes)"
+msgstr "(意味的変更なし)"
+
 # Draft / history panels
 msgid "Draft"
 msgstr "下書き"
