@@ -65,7 +65,8 @@ GitHub アクセス用 token は次の優先順位で解決されます:
 | `LOCUS_TERMINAL_FONT_FAMILY` | OS 別 (macOS: `SF Mono, Menlo, Monaco, Osaka-Mono, Hiragino Sans, Apple Symbols, Apple Color Emoji, monospace`) | terminal grid 専用のフォント fallback。等幅候補を優先し、terminal glyph や cell metrics が崩れる場合の切り分けに使う。 |
 | `LOCUS_TERMINAL_EMOJI_FONT_FAMILY` | OS 別 (macOS: `Apple Color Emoji`) | terminal 出力に emoji / ZWJ / VS16 glyph が含まれる cell だけに使う emoji 専用フォント。 |
 | `LOCUS_TERMINAL_SYMBOL_FONT_FAMILY` | OS 別 (macOS: `Apple Symbols`) | `↯` などの装飾 symbol / arrow を含む cell だけに使う symbol 専用フォント。通常の等幅 cell は変えない。 |
-| `LOCUS_TERMINAL_CJK_FONT_FAMILY` | OS 別 (macOS: `Hiragino Sans`) | 日本語・中国語・韓国語などの CJK / Kana / Hangul glyph を含む cell だけに使う CJK 専用フォント。 |
+| `LOCUS_TERMINAL_CJK_FONT_FAMILY` | OS 別 (macOS: `Hiragino Sans`) | 日本語・中国語などの CJK / Kana glyph を含む cell だけに使う CJK 専用フォント。 |
+| `LOCUS_TERMINAL_HANGUL_FONT_FAMILY` | OS 別 (macOS: `Apple SD Gothic Neo`, Windows: `Malgun Gothic`) | 韓国語 Hangul glyph を含む cell だけに使う Hangul 専用フォント。 |
 | `LOCUS_FONT_SIZE` | (未設定) | terminal/diff 両方のフォントサイズを一括指定。 |
 | `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | terminal pane のフォントサイズ (logical px)。 |
 | `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | 比率 fallback (`font_size * 0.6` / `font_size * 1.45`) | terminal cell の幅/高さを logical px で手動上書きする。probe / fallback のいずれよりも優先。glyph と cell metric のズレを診断・強制同期する場合に使う。 |
