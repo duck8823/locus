@@ -43,6 +43,14 @@
 #   --cell-h VALUE            LOCUS_TERMINAL_CELL_H override
 #   --font-family VALUE       LOCUS_TERMINAL_FONT_FAMILY override
 #   --terminal-font-size VAL  LOCUS_TERMINAL_FONT_SIZE override
+#   --profile PROFILE         cargo profile / binary to launch: debug or release
+#                             (default debug)
+#   --release                 shorthand for --profile release
+#   --slint-debug-performance VALUE
+#                             SLINT_DEBUG_PERFORMANCE override
+#                             (e.g. refresh_full_speed,console)
+#   --slint-backend VALUE     SLINT_BACKEND override
+#                             (e.g. winit-femtovg, winit-software)
 #   --window-size WxH         macOS で起動後に front window を WIDTHxHEIGHT に
 #                             リサイズして再現スクショを撮る (#290 等の min-size
 #                             目視診断向け)
@@ -88,6 +96,14 @@ options:
   --cell-h VALUE            LOCUS_TERMINAL_CELL_H override
   --font-family VALUE       LOCUS_TERMINAL_FONT_FAMILY override
   --terminal-font-size VAL  LOCUS_TERMINAL_FONT_SIZE override
+  --profile PROFILE         cargo profile / binary to launch: debug | release
+                            (default debug)
+  --release                 shorthand for --profile release
+  --slint-debug-performance VALUE
+                            SLINT_DEBUG_PERFORMANCE override
+                            (e.g. refresh_full_speed,console)
+  --slint-backend VALUE     SLINT_BACKEND override
+                            (e.g. winit-femtovg, winit-software)
   --window-size WxH         macOS で起動後に front window を WIDTHxHEIGHT に
                             リサイズ (例: 1280x720)
   --interaction NAME        起動後に注入する操作。複数回指定可。
@@ -129,6 +145,7 @@ write_report_json() {
         REPORT_DURATION="$DURATION" \
         REPORT_OUT_DIR="$OUT_DIR" \
         REPORT_BIN="$BIN" \
+        REPORT_PROFILE="$PROFILE" \
         REPORT_BUILD_STATUS="$BUILD_STATUS" \
         REPORT_NO_BUILD="$NO_BUILD" \
         REPORT_DEBUG_GRID="$DEBUG_GRID" \
@@ -137,6 +154,8 @@ write_report_json() {
         REPORT_CELL_H="$CELL_H" \
         REPORT_FONT_FAMILY="$FONT_FAMILY" \
         REPORT_TERMINAL_FONT_SIZE="$TERMINAL_FONT_SIZE" \
+        REPORT_SLINT_DEBUG_PERFORMANCE="$SLINT_DEBUG_PERFORMANCE_OVERRIDE" \
+        REPORT_SLINT_BACKEND="$SLINT_BACKEND_OVERRIDE" \
         REPORT_WINDOW_SIZE="$WINDOW_SIZE" \
         REPORT_WINDOW_WIDTH="$WINDOW_WIDTH" \
         REPORT_WINDOW_HEIGHT="$WINDOW_HEIGHT" \
@@ -208,6 +227,7 @@ data = {
     "build": {
         "skipped": env("REPORT_NO_BUILD") == "1",
         "status": env("REPORT_BUILD_STATUS"),
+        "profile": env("REPORT_PROFILE"),
     },
     "options": {
         "debug_grid": env("REPORT_DEBUG_GRID") == "1",
@@ -216,6 +236,8 @@ data = {
         "cell_h": env("REPORT_CELL_H") or None,
         "font_family": env("REPORT_FONT_FAMILY") or None,
         "terminal_font_size": env("REPORT_TERMINAL_FONT_SIZE") or None,
+        "slint_debug_performance": env("REPORT_SLINT_DEBUG_PERFORMANCE") or None,
+        "slint_backend": env("REPORT_SLINT_BACKEND") or None,
         "window_size": env("REPORT_WINDOW_SIZE") or None,
     },
     "command": loads_or_none(env("REPORT_CMD_JSON")) or [],
@@ -271,9 +293,10 @@ PY
         printf '  "duration_seconds": %s,\n' "$DURATION"
         printf '  "out_dir": %s,\n' "$(json_escape_fallback "$OUT_DIR")"
         printf '  "binary": %s,\n' "$(json_escape_fallback "$BIN")"
-        printf '  "build": { "skipped": %s, "status": %s },\n' \
+        printf '  "build": { "skipped": %s, "status": %s, "profile": %s },\n' \
             "$([ "$NO_BUILD" = 1 ] && echo true || echo false)" \
-            "$(json_escape_fallback "$BUILD_STATUS")"
+            "$(json_escape_fallback "$BUILD_STATUS")" \
+            "$(json_escape_fallback "$PROFILE")"
         printf '  "process": { "pid": %s, "exit_status": %s, "termination": %s },\n' \
             "${APP_PID:-null}" "${APP_EXIT:-null}" \
             "$(json_escape_fallback "${APP_TERMINATION:-}")"
@@ -316,7 +339,7 @@ write_filtered_env() {
     # whitelist とは独立に redacted marker として出す。
     env | sort | awk -F= '
         BEGIN {
-            safe = "^(LOCUS_|PATH$|LANG$|LC_|TERM$|SHELL$|HOME$|USER$|TMPDIR$|PWD$|CARGO_|RUST_|RUSTUP_|CI$|GITHUB_REPOSITORY$|GH_HOST$)"
+            safe = "^(LOCUS_|SLINT_|PATH$|LANG$|LC_|TERM$|SHELL$|HOME$|USER$|TMPDIR$|PWD$|CARGO_|RUST_|RUSTUP_|CI$|GITHUB_REPOSITORY$|GH_HOST$)"
             secret = "(TOKEN|SECRET|PASSWORD|PASS|KEY|COOKIE|CREDENTIAL|AUTH)"
         }
         {
@@ -1078,6 +1101,9 @@ CELL_W=""
 CELL_H=""
 FONT_FAMILY=""
 TERMINAL_FONT_SIZE=""
+PROFILE="${LOCUS_DIAG_PROFILE:-debug}"
+SLINT_DEBUG_PERFORMANCE_OVERRIDE="${SLINT_DEBUG_PERFORMANCE:-}"
+SLINT_BACKEND_OVERRIDE="${SLINT_BACKEND:-}"
 WINDOW_SIZE=""
 WINDOW_WIDTH=""
 WINDOW_HEIGHT=""
@@ -1173,6 +1199,28 @@ while [ "$#" -gt 0 ]; do
             TERMINAL_FONT_SIZE="$1"
             shift
             ;;
+        --profile)
+            shift
+            [ "$#" -gt 0 ] || die "--profile requires a value (debug | release)"
+            PROFILE="$1"
+            shift
+            ;;
+        --release)
+            PROFILE="release"
+            shift
+            ;;
+        --slint-debug-performance)
+            shift
+            [ "$#" -gt 0 ] || die "--slint-debug-performance requires a value"
+            SLINT_DEBUG_PERFORMANCE_OVERRIDE="$1"
+            shift
+            ;;
+        --slint-backend)
+            shift
+            [ "$#" -gt 0 ] || die "--slint-backend requires a value"
+            SLINT_BACKEND_OVERRIDE="$1"
+            shift
+            ;;
         --window-size)
             shift
             [ "$#" -gt 0 ] || die "--window-size requires a value (e.g. 1280x720)"
@@ -1211,6 +1259,11 @@ esac
 
 case "$INTERACTION_DELAY" in
     ''|*[!0-9]*) die "--interaction-delay must be a non-negative integer (got: $INTERACTION_DELAY)" ;;
+esac
+
+case "$PROFILE" in
+    debug|release) ;;
+    *) die "--profile must be one of: debug | release (got: $PROFILE)" ;;
 esac
 
 if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
@@ -1283,7 +1336,10 @@ WINDOW_RESIZE_STATUS="skipped_not_requested"
 WINDOW_ID=""
 WINDOW_ID_STATUS="skipped"
 BUILD_STATUS="skipped"
-BIN="target/debug/locus"
+case "$PROFILE" in
+    debug)   BIN="target/debug/locus" ;;
+    release) BIN="target/release/locus" ;;
+esac
 RUN_START_MS=""
 FILE_SWITCH_TRIGGER_OFFSET_MS=""
 
@@ -1309,6 +1365,9 @@ command -v cargo >/dev/null 2>&1 && HAS_CARGO=1
     printf '# cell_h: %s\n' "$CELL_H"
     printf '# font_family: %s\n' "$FONT_FAMILY"
     printf '# terminal_font_size: %s\n' "$TERMINAL_FONT_SIZE"
+    printf '# profile: %s\n' "$PROFILE"
+    printf '# slint_debug_performance: %s\n' "$SLINT_DEBUG_PERFORMANCE_OVERRIDE"
+    printf '# slint_backend: %s\n' "$SLINT_BACKEND_OVERRIDE"
     printf '# window_size: %s\n' "$WINDOW_SIZE"
     if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
         printf '# interactions: %s\n' "${INTERACTIONS[*]}"
@@ -1332,8 +1391,13 @@ if [ "$NO_BUILD" -eq 0 ]; then
         write_report_json "$REPORT_JSON"
         exit 1
     fi
-    log "running cargo build (logs → $BUILD_LOG)"
-    if cargo build > "$BUILD_LOG" 2>&1; then
+    log "running cargo build for profile=$PROFILE (logs → $BUILD_LOG)"
+    if [ "$PROFILE" = "release" ]; then
+        cargo build --release > "$BUILD_LOG" 2>&1
+    else
+        cargo build > "$BUILD_LOG" 2>&1
+    fi
+    if [ "$?" -eq 0 ]; then
         BUILD_STATUS="ok"
     else
         BUILD_STATUS="failed"
@@ -1368,6 +1432,8 @@ fi
 [ -n "$CELL_H" ]              && ENV_VARS+=("LOCUS_TERMINAL_CELL_H=$CELL_H")
 [ -n "$FONT_FAMILY" ]         && ENV_VARS+=("LOCUS_TERMINAL_FONT_FAMILY=$FONT_FAMILY")
 [ -n "$TERMINAL_FONT_SIZE" ]  && ENV_VARS+=("LOCUS_TERMINAL_FONT_SIZE=$TERMINAL_FONT_SIZE")
+[ -n "$SLINT_DEBUG_PERFORMANCE_OVERRIDE" ] && ENV_VARS+=("SLINT_DEBUG_PERFORMANCE=$SLINT_DEBUG_PERFORMANCE_OVERRIDE")
+[ -n "$SLINT_BACKEND_OVERRIDE" ] && ENV_VARS+=("SLINT_BACKEND=$SLINT_BACKEND_OVERRIDE")
 if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
     # interaction latency を app.log と突き合わせられるよう、高速 render tick も
     # 診断時だけ出す。通常 run では従来通り slow/budget-hit のみ。
@@ -1523,8 +1589,19 @@ esac
     printf 'locus diagnostic perf summary\n'
     printf '  app.log: %s\n' "$APP_LOG"
     printf '\n'
+    printf '== slint performance ==\n'
+    if [ -f "$APP_LOG" ]; then
+        grep -E -- 'Slint: Build config|average frames per second' "$APP_LOG" 2>/dev/null \
+            | head -n 200 \
+            || printf '  (no Slint performance lines found)\n'
+    else
+        printf '  (app.log missing)\n'
+    fi
+    printf '\n'
     printf '== keyword counts ==\n'
     for kw in \
+        "Slint: Build config" \
+        "average frames per second" \
         "typography configured" \
         "preview refreshed" \
         "terminal resized" \
@@ -1554,7 +1631,7 @@ esac
     printf '\n'
     printf '== matched lines ==\n'
     if [ -f "$APP_LOG" ]; then
-        grep -E -- 'typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal input forward failed|terminal scroll event|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
+        grep -E -- 'Slint: Build config|average frames per second|typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal input forward failed|terminal scroll event|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
             "$APP_LOG" 2>/dev/null \
             | head -n 200 \
             || printf '  (no matching debug lines found)\n'
