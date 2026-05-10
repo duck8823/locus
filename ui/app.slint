@@ -339,9 +339,11 @@ export component DiffViewerWindow inherits Window {
     title: @tr("locus — diff viewer");
     preferred-width: 1700px;
     preferred-height: 960px;
-    // 240(PR list) + 240(file list) + 540(diff) + 320(draft/history) = 1340 が
-    // 横方向の最小機能幅。ヘッダー圧縮を避けるため min-width を 1280px と
-    // やや厳しめに、min-height を 720px に設定する。
+    // 1280x720 の実機確認では固定 sidebars / bottom panes が中央 diff と
+    // terminal pane を圧迫していたため、全体の固定 chrome を少し詰める。
+    // root.width/root.height 連動の adaptive binding は Slint の layoutinfo
+    // loop warning になるため、固定値として最小サイズでも破綻しにくい
+    // バランスに寄せる。
     min-width: 1280px;
     min-height: 720px;
     background: #101014;
@@ -467,7 +469,9 @@ export component DiffViewerWindow inherits Window {
 
             // Header with PR context card (title + base/head + body excerpt + linked issues)
         Rectangle {
-            height: (root.pr-body-excerpt != "" || root.linked-issues.length > 0) ? 150px : 52px;
+            height: (root.pr-body-excerpt != "" || root.linked-issues.length > 0)
+                ? 150px
+                : 52px;
             background: #1a1a22;
             VerticalBox {
                 padding-left: 16px;
@@ -568,7 +572,7 @@ export component DiffViewerWindow inherits Window {
 
             // PR list sidebar (leftmost)
             Rectangle {
-                width: 240px;
+                width: 190px;
                 background: #14141a;
                 border-width: 1px;
                 border-color: #1a1a22;
@@ -691,7 +695,7 @@ export component DiffViewerWindow inherits Window {
 
             // File list sidebar
             Rectangle {
-                width: 240px;
+                width: 220px;
                 background: #14141a;
 
                 ListView {
@@ -853,7 +857,7 @@ export component DiffViewerWindow inherits Window {
 
                     // Selection controls strip
                     Rectangle {
-                        height: 80px;
+                        height: 72px;
                         background: #14141a;
                         border-width: 1px;
                         border-color: #24242c;
@@ -920,7 +924,7 @@ export component DiffViewerWindow inherits Window {
 
                     // Preview + send buttons strip
                     Rectangle {
-                        height: 180px;
+                        height: 160px;
                         background: #14141a;
                         border-width: 1px;
                         border-color: #24242c;
@@ -1088,7 +1092,7 @@ export component DiffViewerWindow inherits Window {
 
                     // Terminal pane (bottom)
                     terminal-pane := Rectangle {
-                        height: 258px;
+                        height: 220px;
                         background: #0b0b0b;
                         border-width: 1px;
                         border-color: #24242c;
@@ -1191,7 +1195,7 @@ export component DiffViewerWindow inherits Window {
 
             // Right: draft + history panel
             Rectangle {
-                width: 320px;
+                width: 300px;
                 background: #14141a;
 
                 VerticalBox {
