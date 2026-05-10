@@ -25,22 +25,18 @@ mod ui_state;
 
 use app::diagnostics::schedule_diagnostic_interactions;
 use app::diff_viewer::callbacks::wire_diff_viewer_callbacks;
-use app::diff_viewer::linked_issues::fetch_linked_issues_parallel;
+use app::diff_viewer::hydrate::spawn_initial_hydrate;
 use app::diff_viewer::refresh::{
     refresh_current_anchor_label, refresh_draft_panel, refresh_history_panel, refresh_preview,
     refresh_toasts,
 };
 use app::diff_viewer::session::save_window_session;
 use app::diff_viewer::snapshot::{apply_snapshot_to_ui, build_pr_list_model};
-use app::diff_viewer::state::{DiffAppState, ToastKind, set_app_state, with_app_state};
+use app::diff_viewer::state::{DiffAppState, ToastKind, set_app_state};
 use app::diff_viewer::terminal_resize::wire_terminal_resize;
-use app::diff_viewer::toast::{schedule_toast_auto_dismiss, set_active_window, show_toast};
+use app::diff_viewer::toast::{schedule_toast_auto_dismiss, set_active_window};
 
-use github::issue_context::extract_linked_issue_numbers;
-use github::pull_request::{
-    PrListFilter, PullRequestSnapshot, build_client, fetch_pr_snapshot, fetch_pull_requests,
-    parse_pr_spec,
-};
+use github::pull_request::{PullRequestSnapshot, build_client, parse_pr_spec};
 use review::draft::PromptDraft;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -320,151 +316,15 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
     // 完了後に UI を埋める。snapshot と list を別の世代で管理することで、
     // 起動 hydrate 中に user が filter を切り替えても snapshot 結果が
     // 破棄されない。
-    {
-        let (snap_gen, list_gen) = {
-            let mut st = state.borrow_mut();
-            (st.next_snapshot_generation(), st.next_list_generation())
-        };
-        let owner_clone = owner.clone();
-        let repo_clone = repo.clone();
-        let client_clone = client_arc.clone();
-        let weak_for_task = ui.as_weak();
-        runtime_handle.spawn(async move {
-            let hydrate_started = Instant::now();
-            // PR snapshot と PR list を join! で並列実行
-            let snapshot_fut =
-                fetch_pr_snapshot(&client_clone, &owner_clone, &repo_clone, pr_number);
-            let list_fut =
-                fetch_pull_requests(&client_clone, &owner_clone, &repo_clone, PrListFilter::Open);
-            let join_started = Instant::now();
-            let (snapshot_res, list_res) = tokio::join!(snapshot_fut, list_fut);
-            let join_elapsed_ms = join_started.elapsed().as_millis() as u64;
-
-            // PR list は snapshot 完了を待たずに先に hydrate する
-            {
-                let weak = weak_for_task.clone();
-                let list_count = match &list_res {
-                    Ok(summaries) => summaries.len(),
-                    Err(_) => 0,
-                };
-                let snapshot_file_count = match &snapshot_res {
-                    Ok(s) => s.files.len(),
-                    Err(_) => 0,
-                };
-                tracing::debug!(
-                    pr = pr_number,
-                    list_count,
-                    snapshot_file_count,
-                    snapshot_ok = snapshot_res.is_ok(),
-                    list_ok = list_res.is_ok(),
-                    elapsed_ms = join_elapsed_ms,
-                    "initial hydrate snapshot+list fetched"
-                );
-                let _ = slint::invoke_from_event_loop(move || {
-                    let stale = with_app_state(|state| state.borrow().is_stale_list(list_gen))
-                        .unwrap_or(true);
-                    if stale {
-                        return;
-                    }
-                    let Some(ui) = weak.upgrade() else { return };
-                    ui.set_pr_list_loading(false);
-                    match list_res {
-                        Ok(summaries) => {
-                            ui.set_pr_list(build_pr_list_model(&summaries));
-                        }
-                        Err(e) => {
-                            show_toast(
-                                ToastKind::Error,
-                                i18n::tr("Failed to load PR list"),
-                                e.to_string(),
-                            );
-                        }
-                    }
-                });
-            }
-
-            let snapshot = match snapshot_res {
-                Ok(s) => s,
-                Err(e) => {
-                    tracing::warn!(error = %e, "initial hydrate snapshot failed");
-                    let err_str = e.to_string();
-                    let weak = weak_for_task.clone();
-                    let pr_str = pr_number.to_string();
-                    let _ = slint::invoke_from_event_loop(move || {
-                        let Some(ui) = weak.upgrade() else { return };
-                        with_app_state(|state| {
-                            let id = state.borrow_mut().push_toast(
-                                ToastKind::Error,
-                                i18n::tr_args("Failed to load PR #{}", &[pr_str.as_str()]),
-                                err_str.clone(),
-                            );
-                            refresh_toasts(&ui, state);
-                            schedule_toast_auto_dismiss(id);
-                        });
-                    });
-                    return;
-                }
-            };
-            // linked issues を並列 fetch
-            let body = snapshot.body.clone().unwrap_or_default();
-            let numbers = extract_linked_issue_numbers(&body);
-            let linked_started = Instant::now();
-            let linked =
-                fetch_linked_issues_parallel(&client_clone, &owner_clone, &repo_clone, &numbers)
-                    .await;
-            tracing::debug!(
-                pr = pr_number,
-                file_count = snapshot.files.len(),
-                linked_count = linked.len(),
-                linked_elapsed_ms = linked_started.elapsed().as_millis() as u64,
-                elapsed_ms = hydrate_started.elapsed().as_millis() as u64,
-                "initial hydrate completed"
-            );
-
-            let _ = slint::invoke_from_event_loop(move || {
-                let stale = with_app_state(|state| state.borrow().is_stale_snapshot(snap_gen))
-                    .unwrap_or(true);
-                if stale {
-                    return;
-                }
-                let Some(ui) = weak_for_task.upgrade() else {
-                    return;
-                };
-                apply_snapshot_to_ui(&ui, &snapshot, &linked);
-                with_app_state(|state| {
-                    let mut st = state.borrow_mut();
-                    st.snapshot = snapshot;
-                    // snapshot 切替で旧 file index の scroll cache を引きずらない
-                    st.scroll_positions.clear();
-
-                    // #231 per-PR 復元: session.json に保存されていた draft /
-                    // selected_file_index を読み戻す。snapshot は再取得した
-                    // ばかりなので anchor の file_id / line がずれていてもまずは
-                    // そのまま復元する (format_prompt 側で snippet が取れない
-                    // ものは最良 effort で出る)。
-                    let key = session::SessionState::pr_key(&owner_clone, &repo_clone, pr_number);
-                    if let Some(saved) = session::load()
-                        && let Some(per_pr) = saved.per_pr.get(&key)
-                    {
-                        for entry in &per_pr.draft {
-                            st.draft.push(entry.clone());
-                        }
-                        if let Some(idx) = per_pr.selected_file_index
-                            && (idx as usize) < st.snapshot.files.len()
-                        {
-                            ui.set_selected_file_index(idx);
-                        }
-                    }
-                });
-                if let Some(ui) = weak_for_task.upgrade() {
-                    with_app_state(|state| {
-                        refresh_draft_panel(&ui, state);
-                        refresh_preview(&ui, state);
-                    });
-                }
-            });
-        });
-    }
+    spawn_initial_hydrate(
+        &ui,
+        &state,
+        &runtime_handle,
+        client_arc.clone(),
+        &owner,
+        &repo,
+        pr_number,
+    );
 
     // セッション保存 (#231):
     // - close 要求時 (X ボタン / 通常 close)
