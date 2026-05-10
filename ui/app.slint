@@ -227,6 +227,9 @@ export component DiffViewerWindow inherits Window {
     // ファイル毎の HashMap として保存し、file-switch-requested の中で
     // 切替前後に save / restore する。
     in-out property <length> diff-scroll-y;
+    changed diff-scroll-y => {
+        root.diff-scroll-diagnostic(0px, root.diff-scroll-y);
+    }
 
     in property <string> current-anchor-label: @tr("(no selection)");
     in property <bool> has-selection: false;
@@ -303,6 +306,7 @@ export component DiffViewerWindow inherits Window {
     callback terminal-key-pressed(string);
     callback terminal-resized(length, length);
     callback terminal-scroll-diagnostic(length, length);
+    callback diff-scroll-diagnostic(length, length);
 
     callback pr-clicked(int);
     callback pr-filter-changed(int);
@@ -792,6 +796,10 @@ export component DiffViewerWindow inherits Window {
                                                 line.new-line-no
                                             );
                                         }
+                                    }
+                                    scroll-event(event) => {
+                                        root.diff-scroll-diagnostic(event.delta-x, event.delta-y);
+                                        reject
                                     }
                                 }
 

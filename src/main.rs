@@ -87,6 +87,12 @@ fn init_logging() {
         .try_init();
 }
 
+fn diag_trace_ui_events_enabled() -> bool {
+    std::env::var("LOCUS_DIAG_TRACE_RENDER_TICKS")
+        .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "on" | "yes"))
+        .unwrap_or(false)
+}
+
 fn run_terminal(command: &str) -> Result<(), Box<dyn std::error::Error>> {
     let ui_cfg = config::UiConfig::from_env();
     let ui = AppWindow::new()?;
@@ -261,6 +267,15 @@ fn run_diff_viewer(spec: &str) -> Result<(), Box<dyn std::error::Error>> {
             let Some(ui) = ui_weak.upgrade() else { return };
             state.borrow_mut().dismiss_toast(id);
             refresh_toasts(&ui, &state);
+        });
+    }
+
+    {
+        let trace_diff_scroll_events = diag_trace_ui_events_enabled();
+        ui.on_diff_scroll_diagnostic(move |delta_x, delta_y| {
+            if trace_diff_scroll_events {
+                tracing::debug!(delta_x, delta_y, "diff scroll event");
+            }
         });
     }
 
