@@ -55,7 +55,8 @@
 #                             リサイズして再現スクショを撮る (#290 等の min-size
 #                             目視診断向け)
 #   --interaction NAME        起動後に注入する操作。複数回指定可。対応 NAME:
-#                             terminal-type / terminal-scroll / file-switch-next
+#                             terminal-type / terminal-scroll / diff-scroll /
+#                             file-switch-next
 #                             terminal-scroll は Python Quartz
 #                             (pyobjc-framework-Quartz) がある macOS で有効
 #   --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)
@@ -107,9 +108,11 @@ options:
   --window-size WxH         macOS で起動後に front window を WIDTHxHEIGHT に
                             リサイズ (例: 1280x720)
   --interaction NAME        起動後に注入する操作。複数回指定可。
-                            NAME: terminal-type | terminal-scroll | file-switch-next
+                            NAME: terminal-type | terminal-scroll | diff-scroll | file-switch-next
                             terminal-scroll requires Python Quartz
                             (pyobjc-framework-Quartz) on macOS; otherwise skipped.
+                            diff-scroll requires github mode and uses an
+                            app-side timer for stable viewport diagnostics.
                             file-switch-next は app-side single-shot のため
                             1 回のみ、かつ単独指定のみ可。
   --interaction-delay SEC   launch から interactions 開始までの待ち秒数 (default 1)。
@@ -785,6 +788,35 @@ PY
     esac
 }
 
+inject_diff_scroll() {
+    local idx="$1"
+    local start_ms
+
+    if [ "$MODE" != "github" ]; then
+        start_ms="$(unix_ms)"
+        emit_event "skipped" "diff-scroll" "$idx" \
+            "start_unix_ms=$start_ms" "reason=requires_github_mode"
+        return
+    fi
+    if [ -z "${APP_PID:-}" ] || ! kill -0 "$APP_PID" 2>/dev/null; then
+        start_ms="$(unix_ms)"
+        emit_event "skipped" "diff-scroll" "$idx" \
+            "start_unix_ms=$start_ms" "reason=app_not_running"
+        return
+    fi
+
+    if [ -n "${RUN_START_MS:-}" ] && [ -n "${DIFF_SCROLL_TRIGGER_OFFSET_MS:-}" ]; then
+        start_ms="$((RUN_START_MS + DIFF_SCROLL_TRIGGER_OFFSET_MS))"
+    else
+        start_ms="$(unix_ms)"
+    fi
+    emit_event "start" "diff-scroll" "$idx" \
+        "start_unix_ms=$start_ms" "detail=app-side diagnostic timer scrolls diff viewport"
+    emit_event "done" "diff-scroll" "$idx" \
+        "start_unix_ms=$start_ms" "end_unix_ms=$(unix_ms)" \
+        "detail=armed via LOCUS_DIAG_DIFF_SCROLL_AFTER_MS"
+}
+
 inject_file_switch_next() {
     local idx="$1"
     local start_ms
@@ -819,6 +851,7 @@ run_interactions() {
         case "$name" in
             terminal-type)   inject_terminal_type "$i" ;;
             terminal-scroll) inject_terminal_scroll "$i" ;;
+            diff-scroll)     inject_diff_scroll "$i" ;;
             file-switch-next) inject_file_switch_next "$i" ;;
             *)
                 # 未対応 NAME は parse 段階で die しているため到達しないが
@@ -883,6 +916,7 @@ def parse_ts(ts):
 forwarded = []
 render_hits = []
 scroll_hits = []
+diff_scroll_hits = []
 file_switch_hits = []
 if app_log and os.path.exists(app_log):
     with open(app_log, "r", encoding="utf-8", errors="replace") as f:
@@ -899,6 +933,8 @@ if app_log and os.path.exists(app_log):
                 render_hits.append(ums)
             if "terminal scroll event" in line:
                 scroll_hits.append(ums)
+            if "diff scroll event" in line:
+                diff_scroll_hits.append(ums)
             if "file switch requested" in line:
                 file_switch_hits.append(ums)
 
@@ -987,6 +1023,14 @@ for a in agg.values():
         else:
             a["observation_status"] = "unmatched"
             a["observation_reason"] = "no terminal scroll event log after injection"
+    elif a["name"] == "diff-scroll":
+        hit = first_after(diff_scroll_hits, start)
+        if hit is not None:
+            a["latency_ms"] = hit - start
+            a["match_keyword"] = "diff scroll event"
+        else:
+            a["observation_status"] = "unmatched"
+            a["observation_reason"] = "no diff scroll event log after injection"
     elif a["name"] == "file-switch-next":
         hit = first_after(file_switch_hits, start)
         if hit is not None:
@@ -1229,7 +1273,7 @@ while [ "$#" -gt 0 ]; do
             ;;
         --interaction)
             shift
-            [ "$#" -gt 0 ] || die "--interaction requires a value (terminal-type | terminal-scroll | file-switch-next)"
+            [ "$#" -gt 0 ] || die "--interaction requires a value (terminal-type | terminal-scroll | diff-scroll | file-switch-next)"
             INTERACTIONS+=("$1")
             shift
             ;;
@@ -1271,22 +1315,32 @@ if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
         die "--interaction-delay must be less than or equal to --duration when --interaction is used (delay=$INTERACTION_DELAY duration=$DURATION)"
     fi
     _file_switch_count=0
+    _diff_scroll_count=0
     for _name in "${INTERACTIONS[@]}"; do
         case "$_name" in
             terminal-type|terminal-scroll) ;;
+            diff-scroll)
+                _diff_scroll_count=$((_diff_scroll_count + 1))
+                if [ "$_diff_scroll_count" -gt 1 ]; then
+                    die "--interaction diff-scroll can be specified at most once (app-side single-shot diagnostic)"
+                fi
+                if [ "$MODE" != "github" ]; then
+                    die "--interaction diff-scroll requires github mode"
+                fi
+                ;;
             file-switch-next)
                 _file_switch_count=$((_file_switch_count + 1))
                 if [ "$_file_switch_count" -gt 1 ]; then
                     die "--interaction file-switch-next can be specified at most once (app-side single-shot diagnostic)"
                 fi
                 ;;
-            *) die "--interaction must be one of: terminal-type, terminal-scroll, file-switch-next (got: $_name)" ;;
+            *) die "--interaction must be one of: terminal-type, terminal-scroll, diff-scroll, file-switch-next (got: $_name)" ;;
         esac
     done
     if [ "$_file_switch_count" -eq 1 ] && [ "${#INTERACTIONS[@]}" -gt 1 ]; then
         die "--interaction file-switch-next must be used alone (app-side timer is armed from launch)"
     fi
-    unset _name _file_switch_count
+    unset _name _file_switch_count _diff_scroll_count
 fi
 
 if [ -n "$WINDOW_SIZE" ]; then
@@ -1342,6 +1396,7 @@ case "$PROFILE" in
 esac
 RUN_START_MS=""
 FILE_SWITCH_TRIGGER_OFFSET_MS=""
+DIFF_SCROLL_TRIGGER_OFFSET_MS=""
 
 # tool availability
 HAS_PYTHON3_BIN="$(command -v python3 || true)"
@@ -1444,6 +1499,12 @@ if [ "${#INTERACTIONS[@]}" -gt 0 ]; then
             # script 側 event start はこの timer の予定発火時刻に合わせる。
             FILE_SWITCH_TRIGGER_OFFSET_MS=$((INTERACTION_DELAY * 1000))
             ENV_VARS+=("LOCUS_DIAG_FILE_SWITCH_AFTER_MS=$FILE_SWITCH_TRIGGER_OFFSET_MS")
+        elif [ "$_interaction" = "diff-scroll" ]; then
+            # diff ListView の OS wheel event は環境差が大きいため、app 側
+            # single-shot timer でも viewport-y を動かして安定した診断 signal
+            # を出す。script 側 event start は timer の予定発火時刻に合わせる。
+            DIFF_SCROLL_TRIGGER_OFFSET_MS=$((INTERACTION_DELAY * 1000))
+            ENV_VARS+=("LOCUS_DIAG_DIFF_SCROLL_AFTER_MS=$DIFF_SCROLL_TRIGGER_OFFSET_MS")
         fi
     done
     unset _interaction
@@ -1609,6 +1670,7 @@ esac
         "terminal input forwarded" \
         "terminal input forward failed" \
         "terminal scroll event" \
+        "diff scroll event" \
         "terminal render tick" \
         "terminal render idle flush" \
         "file switch requested" \
@@ -1631,7 +1693,7 @@ esac
     printf '\n'
     printf '== matched lines ==\n'
     if [ -f "$APP_LOG" ]; then
-        grep -E -- 'Slint: Build config|average frames per second|typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal input forward failed|terminal scroll event|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
+        grep -E -- 'Slint: Build config|average frames per second|typography configured|preview refreshed|terminal resized|terminal resize failed|terminal input forwarded|terminal input forward failed|terminal scroll event|diff scroll event|terminal render tick|terminal render idle flush|file switch requested|diagnostic file switch|window session saved|pr session saved|pr switch fetch completed|linked issues fetched|initial hydrate snapshot\+list fetched|initial hydrate completed|initial hydrate snapshot failed' \
             "$APP_LOG" 2>/dev/null \
             | head -n 200 \
             || printf '  (no matching debug lines found)\n'
