@@ -10,7 +10,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
 
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, Model, SharedString};
 
 use super::linked_issues::fetch_linked_issues_parallel;
 use super::refresh::{
@@ -38,6 +38,50 @@ fn diag_trace_ui_events_enabled() -> bool {
     std::env::var("LOCUS_DIAG_TRACE_RENDER_TICKS")
         .map(|v| matches!(v.to_ascii_lowercase().as_str(), "true" | "1" | "on" | "yes"))
         .unwrap_or(false)
+}
+
+const DIFF_ROW_HEIGHT_PX: f32 = 18.0;
+
+/// source line number を現在の diff ListView row index に近似変換する。
+///
+/// `line_no` は source file の絶対行番号だが、diff viewer が描画しているのは
+/// hunk header + 変更行 + context 行だけである。そのため単純な
+/// `(line_no - 1) * row_height` ではなく、表示中の DiffLineView を走査して
+/// old/new line number が一致する row、なければ最も近い row を使う。
+fn diff_scroll_y_for_source_line(
+    ui: &DiffViewerWindow,
+    file_index: usize,
+    line_no: i32,
+) -> Option<f32> {
+    if line_no <= 0 {
+        return None;
+    }
+
+    let file = ui.get_files().row_data(file_index)?;
+    let mut best: Option<(usize, u32)> = None;
+    for row in 0..file.lines.row_count() {
+        let Some(diff_line) = file.lines.row_data(row) else {
+            continue;
+        };
+        if diff_line.is_hunk_header {
+            continue;
+        }
+
+        for raw in [diff_line.old_line_no.as_str(), diff_line.new_line_no.as_str()] {
+            let Ok(row_line) = raw.parse::<i32>() else {
+                continue;
+            };
+            let distance = row_line.abs_diff(line_no);
+            if distance == 0 {
+                return Some(row as f32 * DIFF_ROW_HEIGHT_PX);
+            }
+            if best.is_none_or(|(_, best_distance)| distance < best_distance) {
+                best = Some((row, distance));
+            }
+        }
+    }
+
+    best.map(|(row, _)| row as f32 * DIFF_ROW_HEIGHT_PX)
 }
 
 /// Diff viewer の Slint コールバックをまとめて配線する。
@@ -467,6 +511,60 @@ pub(crate) fn wire_diff_viewer_callbacks(
                     });
                 });
             });
+        });
+    }
+
+    // architecture-node-clicked (#208): mini-map のノードクリックから呼ばれる。
+    // file-index < 0 は外部 import / overflow なので no-op。それ以外は
+    // 現在の diff-scroll-y を旧 file index で保存し、selected-file-index を
+    // 切り替え、復元する。line-no > 0 のときは diff row の old/new line number
+    // から対象 source line に最も近い表示 row を探してスクロールする。
+    {
+        let state = state.clone();
+        let ui_weak = ui.as_weak();
+        let owner = owner.to_string();
+        let repo = repo.to_string();
+        ui.on_architecture_node_clicked(move |file_index: i32, line_no: i32| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            if file_index < 0 {
+                return;
+            }
+            let new_idx = file_index as usize;
+            let file_count = ui.get_files().row_count();
+            if new_idx >= file_count {
+                return;
+            }
+
+            let old_idx = ui.get_selected_file_index() as usize;
+            if old_idx != new_idx {
+                let cur_scroll = ui.get_diff_scroll_y();
+                state
+                    .borrow_mut()
+                    .scroll_positions
+                    .insert(old_idx, cur_scroll);
+                ui.set_selected_file_index(file_index);
+                let restore = state
+                    .borrow()
+                    .scroll_positions
+                    .get(&new_idx)
+                    .copied()
+                    .unwrap_or(0.0);
+                ui.set_diff_scroll_y(restore);
+                save_pr_session(&owner, &repo, &state.borrow(), &ui);
+                // 既存 on_file_switched closure が pending_range の解除と
+                // anchor label の refresh を担う。ここでは invoke するだけ。
+                ui.invoke_file_switched(file_index);
+            }
+
+            if line_no > 0
+                && let Some(target) = diff_scroll_y_for_source_line(&ui, new_idx, line_no)
+            {
+                ui.set_diff_scroll_y(target);
+                state
+                    .borrow_mut()
+                    .scroll_positions
+                    .insert(new_idx, target);
+            }
         });
     }
 

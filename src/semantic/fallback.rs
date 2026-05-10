@@ -85,6 +85,8 @@ impl ParserAdapter for FallbackLineParserAdapter {
             change_type,
             signature_summary: None,
             body_summary: None,
+            start_line: None,
+            end_line: None,
         };
         ParserDiffResult {
             adapter_name: Self::NAME.into(),

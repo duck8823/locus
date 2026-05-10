@@ -6,12 +6,14 @@
 
 pub mod adapter;
 pub mod analyze;
+pub mod architecture;
 pub mod fallback;
 pub mod go;
 pub mod ir;
 
 pub use adapter::{ParsedSnapshot, ParserAdapter, ParserDiffItem, ParserDiffResult};
 pub use analyze::analyze_pull_request_file;
+pub use architecture::{ArchitectureNode, ArchitectureNodeKind, build_architecture_nodes};
 pub use fallback::FallbackLineParserAdapter;
 pub use go::GoParserAdapter;
 pub use ir::{ChangeType, SemanticChange, SemanticChangeGroup, SymbolKind, UnsupportedFileAnalysis};

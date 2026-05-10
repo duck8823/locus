@@ -40,11 +40,21 @@ pub struct GoSymbol {
     pub container: Option<String>,
     pub signature: String,
     pub body_normalized: String,
+    /// 1-indexed 開始行。tree-sitter の `start_position().row` を +1 したもの。
+    pub start_line: u32,
+    /// 1-indexed 終了行。
+    pub end_line: u32,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct GoParseTree {
     pub symbols: Vec<GoSymbol>,
+    /// `package` 宣言。architecture mini-map で「自パッケージを import している
+    /// 他 PR ファイル」を解決するのに使う。`package main` のような単一識別子。
+    pub package_name: Option<String>,
+    /// import declarations の path (引用符を除去したもの)。
+    /// `_` blank import や `.` dot import の場合も path はそのまま入れる。
+    pub imports: Vec<String>,
 }
 
 fn go_language() -> Language {
@@ -62,9 +72,19 @@ fn extract_symbols(source: &str) -> GoParseTree {
     let root = tree.root_node();
     let bytes = source.as_bytes();
     let mut symbols = Vec::new();
+    let mut package_name: Option<String> = None;
+    let mut imports: Vec<String> = Vec::new();
     for i in 0..(root.child_count() as u32) {
         let Some(child) = root.child(i) else { continue };
         match child.kind() {
+            "package_clause" => {
+                if let Some(name) = extract_package_name(child, bytes) {
+                    package_name = Some(name);
+                }
+            }
+            "import_declaration" => {
+                collect_import_paths(child, bytes, &mut imports);
+            }
             "function_declaration" => {
                 if let Some(sym) = build_function_symbol(child, bytes) {
                     symbols.push(sym);
@@ -78,7 +98,69 @@ fn extract_symbols(source: &str) -> GoParseTree {
             _ => {}
         }
     }
-    GoParseTree { symbols }
+    GoParseTree {
+        symbols,
+        package_name,
+        imports,
+    }
+}
+
+fn extract_package_name(node: Node, src: &[u8]) -> Option<String> {
+    let count = node.child_count() as u32;
+    for i in 0..count {
+        let Some(child) = node.child(i) else { continue };
+        if child.kind() == "package_identifier" {
+            return child.utf8_text(src).ok().map(str::to_string);
+        }
+    }
+    None
+}
+
+fn collect_import_paths(node: Node, src: &[u8], out: &mut Vec<String>) {
+    let count = node.child_count() as u32;
+    for i in 0..count {
+        let Some(child) = node.child(i) else { continue };
+        match child.kind() {
+            "import_spec" => {
+                if let Some(p) = import_path_from_spec(child, src) {
+                    out.push(p);
+                }
+            }
+            "import_spec_list" => {
+                let inner_count = child.child_count() as u32;
+                for j in 0..inner_count {
+                    let Some(grand) = child.child(j) else {
+                        continue;
+                    };
+                    if grand.kind() == "import_spec"
+                        && let Some(p) = import_path_from_spec(grand, src)
+                    {
+                        out.push(p);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn import_path_from_spec(node: Node, src: &[u8]) -> Option<String> {
+    // `import_spec` は「(name)? interpreted_string_literal」。path は
+    // field name "path" で取れる。
+    let path_node = node.child_by_field_name("path")?;
+    let raw = path_node.utf8_text(src).ok()?;
+    Some(strip_string_quotes(raw))
+}
+
+fn strip_string_quotes(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if (trimmed.starts_with('"') && trimmed.ends_with('"') && trimmed.len() >= 2)
+        || (trimmed.starts_with('`') && trimmed.ends_with('`') && trimmed.len() >= 2)
+    {
+        trimmed[1..trimmed.len() - 1].to_string()
+    } else {
+        trimmed.to_string()
+    }
 }
 
 fn build_function_symbol(node: Node, src: &[u8]) -> Option<GoSymbol> {
@@ -86,6 +168,7 @@ fn build_function_symbol(node: Node, src: &[u8]) -> Option<GoSymbol> {
     let name = name_node.utf8_text(src).ok()?.to_string();
     let signature = signature_text(node, src);
     let body_normalized = body_normalized(node, src);
+    let (start_line, end_line) = node_line_range(node);
     Some(GoSymbol {
         stable_key: format!("function::{name}"),
         display_name: name,
@@ -93,6 +176,8 @@ fn build_function_symbol(node: Node, src: &[u8]) -> Option<GoSymbol> {
         container: None,
         signature,
         body_normalized,
+        start_line,
+        end_line,
     })
 }
 
@@ -125,6 +210,7 @@ fn build_method_symbol(node: Node, src: &[u8]) -> Option<GoSymbol> {
         container.clone().unwrap_or_else(|| "_".into()),
         name
     );
+    let (start_line, end_line) = node_line_range(node);
     Some(GoSymbol {
         stable_key,
         display_name,
@@ -132,7 +218,15 @@ fn build_method_symbol(node: Node, src: &[u8]) -> Option<GoSymbol> {
         container,
         signature,
         body_normalized,
+        start_line,
+        end_line,
     })
+}
+
+fn node_line_range(node: Node) -> (u32, u32) {
+    let start = (node.start_position().row as u32).saturating_add(1);
+    let end = (node.end_position().row as u32).saturating_add(1);
+    (start, end)
 }
 
 fn extract_receiver_summary(node: Node, src: &[u8]) -> (String, Option<String>) {
@@ -257,6 +351,8 @@ fn symbol_to_item(sym: &GoSymbol, change_type: ChangeType) -> ParserDiffItem {
         change_type,
         signature_summary: Some(sym.signature.clone()),
         body_summary: None,
+        start_line: Some(sym.start_line),
+        end_line: Some(sym.end_line),
     }
 }
 
@@ -505,6 +601,72 @@ mod tests {
         let r = adapter.diff(None, None);
         assert!(r.items.is_empty());
         assert!(r.adapter_name.is_empty());
+    }
+
+    #[test]
+    fn extracts_package_name() {
+        let p = parse("package fooutil\nfunc A() {}\n");
+        let tree = p.raw.as_ref().unwrap().downcast_ref::<GoParseTree>().unwrap();
+        assert_eq!(tree.package_name.as_deref(), Some("fooutil"));
+    }
+
+    #[test]
+    fn extracts_single_import() {
+        let p = parse(
+            "package main\n\
+             import \"fmt\"\n\
+             func F() {}\n",
+        );
+        let tree = p.raw.as_ref().unwrap().downcast_ref::<GoParseTree>().unwrap();
+        assert_eq!(tree.imports, vec!["fmt".to_string()]);
+    }
+
+    #[test]
+    fn extracts_grouped_imports_with_aliases_and_blank() {
+        let src = "package main\n\
+             import (\n\
+                 \"fmt\"\n\
+                 alias \"github.com/foo/bar\"\n\
+                 _ \"github.com/baz/qux\"\n\
+             )\n";
+        let p = parse(src);
+        let tree = p.raw.as_ref().unwrap().downcast_ref::<GoParseTree>().unwrap();
+        assert_eq!(
+            tree.imports,
+            vec![
+                "fmt".to_string(),
+                "github.com/foo/bar".to_string(),
+                "github.com/baz/qux".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn function_symbol_has_one_indexed_line_range() {
+        let src = "package main\n\
+             \n\
+             func Hello() {\n\
+                 // body\n\
+             }\n";
+        let p = parse(src);
+        let tree = p.raw.as_ref().unwrap().downcast_ref::<GoParseTree>().unwrap();
+        let sym = tree.symbols.first().expect("function symbol");
+        // `func Hello()` は 3 行目から始まる (1-indexed)。
+        assert_eq!(sym.start_line, 3);
+        assert!(sym.end_line >= sym.start_line);
+    }
+
+    #[test]
+    fn diff_item_carries_line_info() {
+        let adapter = GoParserAdapter::new();
+        let after = adapter.parse(&make_snapshot(
+            "a.go",
+            "package main\n\nfunc New() {}\n",
+        ));
+        let r = adapter.diff(None, Some(&after));
+        let item = r.items.first().expect("added item");
+        assert!(item.start_line.is_some());
+        assert!(item.end_line.is_some());
     }
 
     #[test]

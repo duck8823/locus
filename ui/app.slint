@@ -226,6 +226,23 @@ export struct SemanticItemView {
     change-kind: string, // "added" / "removed" / "modified" / "renamed"
 }
 
+// architecture mini-map (#208) の 1 ノード。Go の import グラフ 1 hop 上下流を
+// 縦並びに表示する小さな panel 用。
+//   kind-label: "Center" / "Upstream" / "Downstream" の i18n 済みラベル
+//   kind-key:   classification 用の安定キー ("center" / "upstream" / "downstream")
+//   label:      symbol 名 / 他ファイル path / import path
+//   detail:     focus ファイル path（補助情報）
+//   file-index: クリック時にジャンプする PR ファイル index。-1 で no-op。
+//   line-no:    symbol 開始行 (1-indexed)。0 で行ジャンプしない。
+export struct ArchitectureNodeView {
+    kind-label: string,
+    kind-key: string,
+    label: string,
+    detail: string,
+    file-index: int,
+    line-no: int,
+}
+
 export component DiffViewerWindow inherits Window {
     in property <string> pr-title;
     in property <string> head-sha;
@@ -243,6 +260,7 @@ export component DiffViewerWindow inherits Window {
     }
 
     in property <[SemanticItemView]> semantic-items;
+    in property <[ArchitectureNodeView]> architecture-nodes;
 
     in property <string> current-anchor-label: @tr("(no selection)");
     in property <bool> has-selection: false;
@@ -323,6 +341,12 @@ export component DiffViewerWindow inherits Window {
 
     callback pr-clicked(int);
     callback pr-filter-changed(int);
+
+    // architecture mini-map (#208) のノードクリック。Rust 側で
+    //   file-index < 0 → no-op
+    //   line-no > 0   → 該当行までスクロール（symbol jump）
+    // と扱う。
+    callback architecture-node-clicked(int /* file-index */, int /* line-no */);
 
     // 隠し Text。Slint の text shaping で実 advance 幅 / 行高を測定する。
     // 単一 "M" だと丸め誤差が出やすいので 10 文字並べて 10 で割る。
@@ -1214,6 +1238,95 @@ export component DiffViewerWindow inherits Window {
                 VerticalBox {
                     spacing: 0px;
                     padding: 0px;
+
+                    // Architecture mini-map section (#208)
+                    Rectangle {
+                        height: 32px;
+                        background: #1a1a22;
+                        HorizontalBox {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            alignment: start;
+                            Text {
+                                text: @tr("Architecture") + " (" + root.architecture-nodes.length + ")";
+                                color: #ffffff;
+                                font-size: 12px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 130px;
+                        background: #14141a;
+
+                        if root.architecture-nodes.length == 0: VerticalBox {
+                            alignment: center;
+                            Text {
+                                text: @tr("(no architecture data)");
+                                color: #5a5a6a;
+                                font-size: 11px;
+                                horizontal-alignment: center;
+                            }
+                        }
+
+                        if root.architecture-nodes.length > 0: ListView {
+                            for node in root.architecture-nodes: Rectangle {
+                                height: 30px;
+                                background: arch-touch.has-hover && node.file-index >= 0
+                                    ? #1e1e28
+                                    : #14141a;
+                                border-width: 1px;
+                                border-color: #1c1c24;
+
+                                arch-touch := TouchArea {
+                                    clicked => {
+                                        // file-index < 0 は外部 import / overflow
+                                        // ノードなので Rust 側で no-op として扱う。
+                                        root.architecture-node-clicked(node.file-index, node.line-no);
+                                    }
+                                    changed has-hover => {
+                                        if (self.has-hover && node.file-index >= 0) {
+                                            root.hovered-tooltip-text = node.label + "  ←  " + node.detail;
+                                        } else if (root.hovered-tooltip-text == node.label + "  ←  " + node.detail) {
+                                            root.hovered-tooltip-text = "";
+                                        }
+                                    }
+                                }
+
+                                HorizontalBox {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    padding-top: 2px;
+                                    padding-bottom: 2px;
+                                    spacing: 6px;
+                                    alignment: start;
+                                    Text {
+                                        text: node.kind-label;
+                                        color: node.kind-key == "center"
+                                            ? #c0a07a
+                                            : (node.kind-key == "upstream"
+                                                ? #7a9ec0
+                                                : #7ac0a0);
+                                        font-size: 10px;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                        width: 60px;
+                                    }
+                                    Text {
+                                        text: node.label;
+                                        color: node.file-index >= 0 ? #d0d0d5 : #8a8a95;
+                                        font-size: 11px;
+                                        font-family: root.font-family;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Semantic section (#207 spike)
                     Rectangle {
