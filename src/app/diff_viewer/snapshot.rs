@@ -11,9 +11,15 @@ use crate::github::issue_context::{IssueContextRecord, IssueState};
 use crate::github::pull_request::{
     PrListState, PullRequestFile, PullRequestSnapshot, PullRequestSummary,
 };
-use crate::semantic::{ChangeType, SymbolKind, analyze_pull_request_file};
+use crate::semantic::{
+    ArchitectureNodeKind, ChangeType, SymbolKind, analyze_pull_request_file,
+    build_architecture_nodes,
+};
 use crate::ui_state::diff_view::build_diff_file_views;
-use crate::{DiffViewerWindow, IssueContextView, PullRequestListItemView, SemanticItemView};
+use crate::{
+    ArchitectureNodeView, DiffViewerWindow, IssueContextView, PullRequestListItemView,
+    SemanticItemView,
+};
 
 use super::util::{excerpt, short_sha};
 
@@ -48,6 +54,41 @@ pub(crate) fn apply_snapshot_to_ui(
     ui.set_selected_file_index(0);
     ui.set_diff_scroll_y(0.0);
     ui.set_semantic_items(build_semantic_items_model(&snapshot.files));
+    ui.set_architecture_nodes(build_architecture_nodes_model(&snapshot.files));
+}
+
+/// Architecture mini-map (#208) のノード列を Slint Model に詰め直す。
+///
+/// `file_index` は usize → i32。PR_FILE 数は実用的な範囲で i32 に収まる
+/// 想定なので、unwrap_or(-1) と as i32 で外部 / 解決不可ノードを表現する。
+pub(crate) fn build_architecture_nodes_model(
+    files: &[PullRequestFile],
+) -> ModelRc<ArchitectureNodeView> {
+    let nodes = build_architecture_nodes(files);
+    let model = VecModel::<ArchitectureNodeView>::default();
+    for node in nodes {
+        let (kind_label, kind_key) = architecture_kind_labels(node.kind);
+        model.push(ArchitectureNodeView {
+            kind_label: SharedString::from(kind_label),
+            kind_key: SharedString::from(kind_key),
+            label: SharedString::from(node.label.as_str()),
+            detail: SharedString::from(node.detail.as_str()),
+            file_index: node.file_index.map(|i| i as i32).unwrap_or(-1),
+            line_no: node.line_no.map(|l| l as i32).unwrap_or(0),
+        });
+    }
+    ModelRc::from(
+        std::rc::Rc::new(model) as std::rc::Rc<dyn slint::Model<Data = ArchitectureNodeView>>,
+    )
+}
+
+fn architecture_kind_labels(kind: ArchitectureNodeKind) -> (String, &'static str) {
+    let (key, raw) = match kind {
+        ArchitectureNodeKind::Center => ("Center", "center"),
+        ArchitectureNodeKind::Upstream => ("Upstream", "upstream"),
+        ArchitectureNodeKind::Downstream => ("Downstream", "downstream"),
+    };
+    (crate::i18n::tr(key), raw)
 }
 
 /// PR snapshot 全ファイルを semantic adapter に通し、UI 用の linear list を作る。

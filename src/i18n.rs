@@ -112,6 +112,12 @@ fn translate_ja(key: &str) -> Option<&'static str> {
         // semantic panel (#207 spike)
         "Semantic" => "セマンティック",
         "(no semantic changes)" => "(意味的変更なし)",
+        // architecture mini-map (#208)
+        "Architecture" => "アーキテクチャ",
+        "(no architecture data)" => "(アーキテクチャ情報なし)",
+        "Center" => "中心",
+        "Upstream" => "上流",
+        "Downstream" => "下流",
         "function" => "関数",
         "method" => "メソッド",
         "class" => "クラス",

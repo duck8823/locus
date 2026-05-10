@@ -54,6 +54,12 @@ pub struct ParserDiffItem {
     pub change_type: super::ir::ChangeType,
     pub signature_summary: Option<String>,
     pub body_summary: Option<String>,
+    /// after 側 (Removed の場合は before 側) における symbol の開始行 (1-indexed)。
+    /// パーサが位置情報を持たない場合や file-level item の場合は None。
+    /// architecture mini-map で symbol jump 用に使う。
+    pub start_line: Option<u32>,
+    /// 同上の終了行 (1-indexed)。
+    pub end_line: Option<u32>,
 }
 
 /// 1 ファイル分の adapter 出力。

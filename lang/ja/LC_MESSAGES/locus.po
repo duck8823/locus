@@ -91,6 +91,22 @@ msgstr "セマンティック"
 msgid "(no semantic changes)"
 msgstr "(意味的変更なし)"
 
+# Architecture mini-map (#208)
+msgid "Architecture"
+msgstr "アーキテクチャ"
+
+msgid "(no architecture data)"
+msgstr "(アーキテクチャ情報なし)"
+
+msgid "Center"
+msgstr "中心"
+
+msgid "Upstream"
+msgstr "上流"
+
+msgid "Downstream"
+msgstr "下流"
+
 msgid "function"
 msgstr "関数"
 
