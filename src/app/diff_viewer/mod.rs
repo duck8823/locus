@@ -4,6 +4,7 @@
 //! 状態 / ヘルパは段階的にここへ移動する (#224 split)。
 
 pub(crate) mod callbacks;
+pub(crate) mod hydrate;
 pub(crate) mod linked_issues;
 pub(crate) mod refresh;
 pub(crate) mod session;
