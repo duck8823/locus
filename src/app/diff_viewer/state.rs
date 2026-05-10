@@ -230,6 +230,7 @@ mod tests {
             files: vec![PullRequestFile {
                 file_id: FileId::new("a.rs"),
                 file_path: "a.rs".into(),
+                previous_file_path: None,
                 status: FileStatus::Modified,
                 before_content: Some("a\nb\n".into()),
                 after_content: Some("a\nB\n".into()),

@@ -45,6 +45,9 @@ impl From<octocrab::Error> for GithubError {
 pub struct PullRequestFile {
     pub file_id: FileId,
     pub file_path: String,
+    /// rename 前の path。Renamed 以外、または GitHub が previous_filename を
+    /// 返さない場合は None。
+    pub previous_file_path: Option<String>,
     pub status: FileStatus,
     /// base 側の content。Added / 取得失敗 / binary 時は None。
     pub before_content: Option<String>,
@@ -426,9 +429,12 @@ pub async fn fetch_pr_snapshot(
             (into_text(before), into_text(after))
         };
 
+        let previous_file_path = (ctx.base_path != ctx.file_path).then_some(ctx.base_path);
+
         indexed[idx] = Some(PullRequestFile {
             file_id: ctx.file_id,
             file_path: ctx.file_path,
+            previous_file_path,
             status: ctx.status,
             before_content,
             after_content,

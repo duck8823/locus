@@ -123,6 +123,7 @@ mod tests {
         PullRequestFile {
             file_id: FileId::new("a.txt"),
             file_path: "a.txt".into(),
+            previous_file_path: None,
             status: FileStatus::Modified,
             before_content: Some("a\nb\nc\n".into()),
             after_content: Some("a\nB\nc\n".into()),
