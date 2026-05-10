@@ -130,14 +130,16 @@ fn cell_to_terminal_cell(cell: &Cell, span: i32, ch: &str) -> TerminalCell {
     }
 }
 
-/// Glyph 文字列の分類結果。emoji / 装飾 symbol / その他 (CJK・ASCII 等) に分け、
+/// Glyph 文字列の分類結果。emoji / 装飾 symbol / CJK / その他 (ASCII 等) に分け、
 /// per-cell font-family を選ぶ。Slint Text の font-family は実質単一 family と
 /// して扱われがちで、カンマ区切り fallback の per-glyph 解決が崩れる事象 (#277)
 /// があるため、必要な cell だけ専用 family を渡す。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GlyphCategory {
-    /// 既定 font-family にフォールバックする (CJK / ASCII / spacer)。
+    /// 既定 font-family にフォールバックする (ASCII / spacer)。
     Default,
+    /// CJK / Kana / Hangul などの East Asian glyph。
+    Cjk,
     /// emoji (絵文字 / ZWJ chain / Variation Selector-16 / Regional Indicator)。
     Emoji,
     /// 装飾的な記号・矢印 (例: ↯ U+21AF)。
@@ -150,6 +152,7 @@ fn classify_glyph(s: &str) -> GlyphCategory {
     }
     let mut emoji = false;
     let mut symbol = false;
+    let mut cjk = false;
     for ch in s.chars() {
         let c = ch as u32;
         // ZWJ / VS16 / Regional Indicator が含まれていれば確定で emoji。
@@ -160,12 +163,16 @@ fn classify_glyph(s: &str) -> GlyphCategory {
             emoji = true;
         } else if is_decorative_symbol_codepoint(c) {
             symbol = true;
+        } else if is_cjk_codepoint(c) {
+            cjk = true;
         }
     }
     if emoji {
         GlyphCategory::Emoji
     } else if symbol {
         GlyphCategory::Symbol
+    } else if cjk {
+        GlyphCategory::Cjk
     } else {
         GlyphCategory::Default
     }
@@ -249,6 +256,40 @@ fn is_decorative_symbol_codepoint(c: u32) -> bool {
     )
 }
 
+/// CJK / Kana / Hangul など East Asian glyph の近似判定。
+///
+/// alacritty 側の wide-cell 判定により多くの CJK glyph は span=2 になるため、
+/// Slint 側では cell ごとに CJK font を明示し、font-family fallback が効かず
+/// □ になるケース (#327) を避ける。Box Drawing (U+2500..=U+257F) は terminal
+/// grid を保つため含めない。
+fn is_cjk_codepoint(c: u32) -> bool {
+    matches!(
+        c,
+        0x1100..=0x11FF // Hangul Jamo
+            | 0x2E80..=0x2EFF // CJK Radicals Supplement
+            | 0x2F00..=0x2FDF // Kangxi Radicals
+            | 0x3000..=0x303F // CJK Symbols and Punctuation
+            | 0x3040..=0x309F // Hiragana
+            | 0x30A0..=0x30FF // Katakana
+            | 0x3100..=0x312F // Bopomofo
+            | 0x3130..=0x318F // Hangul Compatibility Jamo
+            | 0x3190..=0x319F // Kanbun
+            | 0x31A0..=0x31BF // Bopomofo Extended
+            | 0x31C0..=0x31EF // CJK Strokes
+            | 0x31F0..=0x31FF // Katakana Phonetic Extensions
+            | 0x3400..=0x4DBF // CJK Unified Ideographs Extension A
+            | 0x4E00..=0x9FFF // CJK Unified Ideographs
+            | 0xA960..=0xA97F // Hangul Jamo Extended-A
+            | 0xAC00..=0xD7AF // Hangul Syllables
+            | 0xD7B0..=0xD7FF // Hangul Jamo Extended-B
+            | 0xF900..=0xFAFF // CJK Compatibility Ideographs
+            | 0xFE10..=0xFE1F // Vertical Forms
+            | 0xFE30..=0xFE4F // CJK Compatibility Forms
+            | 0xFF00..=0xFFEF // Halfwidth and Fullwidth Forms
+            | 0x20000..=0x2FA1F // CJK Unified Ideographs Extensions B..compat
+    )
+}
+
 /// emoji 用 font family。`LOCUS_TERMINAL_EMOJI_FONT_FAMILY` で OS 既定を上書き
 /// できる (例: Linux で `Twemoji Mozilla` を強制したい場合など)。
 fn emoji_font_family() -> &'static str {
@@ -275,6 +316,21 @@ fn symbol_font_family() -> &'static str {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .unwrap_or_else(|| default_symbol_font_family().to_string())
+        })
+        .as_str()
+}
+
+/// CJK / Kana / Hangul 用 font family。`LOCUS_TERMINAL_CJK_FONT_FAMILY` で
+/// OS 既定を上書き可能。
+fn cjk_font_family() -> &'static str {
+    static CACHE: OnceLock<String> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            std::env::var("LOCUS_TERMINAL_CJK_FONT_FAMILY")
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| default_cjk_font_family().to_string())
         })
         .as_str()
 }
@@ -309,10 +365,26 @@ const fn default_symbol_font_family() -> &'static str {
     }
 }
 
+const fn default_cjk_font_family() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "Hiragino Sans"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "Yu Gothic UI"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        "Noto Sans CJK JP"
+    }
+}
+
 fn font_family_for_glyph(s: &str) -> &'static str {
     match classify_glyph(s) {
         GlyphCategory::Emoji => emoji_font_family(),
         GlyphCategory::Symbol => symbol_font_family(),
+        GlyphCategory::Cjk => cjk_font_family(),
         GlyphCategory::Default => "",
     }
 }
@@ -388,12 +460,20 @@ mod tests {
     }
 
     #[test]
-    fn cjk_classified_as_default() {
-        // CJK は既存 monospace + CJK fallback chain (例: Hiragino Sans) で
-        // そのまま描けるので Default に倒し、専用 family を渡さない。
-        assert_eq!(classify_glyph("あ"), GlyphCategory::Default);
-        assert_eq!(classify_glyph("漢"), GlyphCategory::Default);
-        assert_eq!(font_family_for_glyph("あ"), "");
+    fn cjk_classified_as_cjk() {
+        // CJK は既存 fallback chain 任せだと Slint 側で □ になる環境があるため、
+        // CJK cell ごとに専用 family を渡す。
+        assert_eq!(classify_glyph("あ"), GlyphCategory::Cjk);
+        assert_eq!(classify_glyph("漢"), GlyphCategory::Cjk);
+        assert_eq!(classify_glyph("한"), GlyphCategory::Cjk);
+        assert_eq!(font_family_for_glyph("あ"), default_cjk_font_family());
+    }
+
+    #[test]
+    fn cjk_punctuation_uses_cjk_font() {
+        assert_eq!(classify_glyph("。"), GlyphCategory::Cjk);
+        assert_eq!(classify_glyph("："), GlyphCategory::Cjk);
+        assert_eq!(font_family_for_glyph("。"), default_cjk_font_family());
     }
 
     #[test]

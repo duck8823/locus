@@ -64,7 +64,8 @@ For GitHub access, locus reads tokens in this order:
 | `LOCUS_FONT_FAMILY` | OS-specific (macOS: `Menlo, Hiragino Sans, Apple Symbols, Apple Color Emoji, Consolas, monospace`) | Font family for diff / chrome. If `LOCUS_TERMINAL_FONT_FAMILY` is unset, this also overrides terminal fonts. |
 | `LOCUS_TERMINAL_FONT_FAMILY` | OS-specific (macOS: `SF Mono, Menlo, Monaco, Osaka-Mono, Hiragino Sans, Apple Symbols, Apple Color Emoji, monospace`) | Terminal-grid-only font fallback chain. Prefer monospace candidates first; useful when terminal glyphs or cell metrics look broken. |
 | `LOCUS_TERMINAL_EMOJI_FONT_FAMILY` | OS-specific (macOS: `Apple Color Emoji`) | Per-cell emoji font used when terminal output contains emoji / ZWJ / VS16 glyphs. |
-| `LOCUS_TERMINAL_SYMBOL_FONT_FAMILY` | OS-specific (macOS: `Apple Symbols`) | Per-cell decorative symbol font used for arrows such as `↯` without changing normal monospace / CJK cells. |
+| `LOCUS_TERMINAL_SYMBOL_FONT_FAMILY` | OS-specific (macOS: `Apple Symbols`) | Per-cell decorative symbol font used for arrows such as `↯` without changing normal monospace cells. |
+| `LOCUS_TERMINAL_CJK_FONT_FAMILY` | OS-specific (macOS: `Hiragino Sans`) | Per-cell CJK / Kana / Hangul font used when terminal output contains Japanese, Chinese, or Korean glyphs. |
 | `LOCUS_FONT_SIZE` | (unset) | Single override for both terminal and diff font sizes. |
 | `LOCUS_TERMINAL_FONT_SIZE` | `13.0` | Terminal pane font size in logical pixels. |
 | `LOCUS_TERMINAL_CELL_W` / `LOCUS_TERMINAL_CELL_H` | fallback ratio (`font_size * 0.6` / `font_size * 1.45`) | Manual terminal cell width/height override in logical pixels. Always wins over both probe and fallback. Use for diagnosing glyph/cell metric mismatch. |
