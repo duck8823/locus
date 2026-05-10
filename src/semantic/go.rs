@@ -100,7 +100,7 @@ fn build_method_symbol(node: Node, src: &[u8]) -> Option<GoSymbol> {
     let name_node = node.child_by_field_name("name")?;
     let name = name_node.utf8_text(src).ok()?.to_string();
     let receiver = node.child_by_field_name("receiver");
-    let (recv_type, recv_name) = receiver
+    let (recv_type, _recv_name) = receiver
         .map(|r| extract_receiver_summary(r, src))
         .unwrap_or_default();
     let signature = signature_text(node, src);
@@ -110,13 +110,11 @@ fn build_method_symbol(node: Node, src: &[u8]) -> Option<GoSymbol> {
     } else {
         recv_type.clone()
     };
-    // stable_key には receiver の型と (あれば) 識別子名を入れる。
-    // 同じ型に対して別名 receiver で同名 method を書いても衝突しないように
-    // するための spike レベルの保険。
-    let stable_key = match &recv_name {
-        Some(rn) => format!("method::{recv_label}::{rn}::{name}"),
-        None => format!("method::{recv_label}::{name}"),
-    };
+    // Go の method identity は receiver の型 + method 名で決まる。
+    // receiver の識別子名 (`s`, `self` など) は実装都合で変わることが多く、
+    // stable_key に含めると receiver rename だけで Removed + Added になって
+    // しまうため含めない。
+    let stable_key = format!("method::{recv_label}::{name}");
     let container = if recv_type.is_empty() {
         None
     } else {
@@ -368,8 +366,8 @@ mod tests {
         let p = parse(src);
         let tree = p.raw.as_ref().unwrap().downcast_ref::<GoParseTree>().unwrap();
         let keys: Vec<&str> = tree.symbols.iter().map(|s| s.stable_key.as_str()).collect();
-        assert!(keys.contains(&"method::*S::s::Do"), "keys: {keys:?}");
-        assert!(keys.contains(&"method::S::s::DoVal"), "keys: {keys:?}");
+        assert!(keys.contains(&"method::*S::Do"), "keys: {keys:?}");
+        assert!(keys.contains(&"method::S::DoVal"), "keys: {keys:?}");
     }
 
     #[test]
@@ -419,7 +417,28 @@ mod tests {
         assert_eq!(r.items.len(), 1);
         assert_eq!(r.items[0].change_type, ChangeType::Modified);
         assert_eq!(r.items[0].kind, SymbolKind::Method);
-        assert_eq!(r.items[0].stable_key, "method::*S::s::Do");
+        assert_eq!(r.items[0].stable_key, "method::*S::Do");
+    }
+
+    #[test]
+    fn diff_receiver_name_rename_keeps_method_identity() {
+        let adapter = GoParserAdapter::new();
+        let before = adapter.parse(&make_snapshot(
+            "a.go",
+            "package main\n\
+             type S struct{}\n\
+             func (s *S) Do() int { return s.value() }\n",
+        ));
+        let after = adapter.parse(&make_snapshot(
+            "a.go",
+            "package main\n\
+             type S struct{}\n\
+             func (self *S) Do() int { return self.value() }\n",
+        ));
+        let r = adapter.diff(Some(&before), Some(&after));
+        assert_eq!(r.items.len(), 1);
+        assert_eq!(r.items[0].change_type, ChangeType::Modified);
+        assert_eq!(r.items[0].stable_key, "method::*S::Do");
     }
 
     #[test]

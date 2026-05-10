@@ -91,6 +91,36 @@ msgstr "セマンティック"
 msgid "(no semantic changes)"
 msgstr "(意味的変更なし)"
 
+msgid "function"
+msgstr "関数"
+
+msgid "method"
+msgstr "メソッド"
+
+msgid "class"
+msgstr "クラス"
+
+msgid "module"
+msgstr "モジュール"
+
+msgid "symbol"
+msgstr "シンボル"
+
+msgid "added"
+msgstr "追加"
+
+msgid "removed"
+msgstr "削除"
+
+msgid "modified"
+msgstr "変更"
+
+msgid "moved"
+msgstr "移動"
+
+msgid "renamed"
+msgstr "改名"
+
 # Draft / history panels
 msgid "Draft"
 msgstr "下書き"
